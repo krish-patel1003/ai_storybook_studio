@@ -1,19 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+"use client";
+
 import { useState } from "react";
 import { motion } from "motion/react";
 import { FileText, Link2, BookOpen, Check, Download, Copy } from "lucide-react";
 import { mockBook } from "@/lib/mock-book";
-import cover from "@/assets/cover.jpg";
-
-export const Route = createFileRoute("/export")({
-  head: () => ({
-    meta: [
-      { title: "Export — Storybook Studio" },
-      { name: "description", content: "Export your storybook as PDF, EPUB, or share it interactively." },
-    ],
-  }),
-  component: ExportPage,
-});
 
 const formats = [
   {
@@ -45,7 +35,7 @@ const formats = [
   },
 ];
 
-function ExportPage() {
+export default function ExportPage() {
   const [picked, setPicked] = useState("pdf");
   const checks = [
     "Cover illustrated",
@@ -59,7 +49,7 @@ function ExportPage() {
     <main className="mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[1fr_360px]">
       <section>
         <h1 className="font-display text-4xl font-black md:text-5xl">Publish your storybook</h1>
-        <p className="mt-2 text-muted-foreground">Pick a format. We'll handle layout, margins, and bleed.</p>
+        <p className="mt-2 text-muted-foreground">Pick a format. We&apos;ll handle layout, margins, and bleed.</p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {formats.map((f) => {
@@ -106,7 +96,11 @@ function ExportPage() {
             whileTap={{ scale: 0.96 }}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-6 py-3 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform"
           >
-            {picked === "link" ? <Copy className="h-5 w-5" strokeWidth={2.5} /> : <Download className="h-5 w-5" strokeWidth={2.5} />}
+            {picked === "link" ? (
+              <Copy className="h-5 w-5" strokeWidth={2.5} />
+            ) : (
+              <Download className="h-5 w-5" strokeWidth={2.5} />
+            )}
             {formats.find((f) => f.id === picked)!.cta}
           </motion.button>
           <button className="inline-flex items-center gap-1.5 rounded-full bg-background px-6 py-3 text-base font-extrabold chunky-border chunky-shadow-sm">
@@ -125,7 +119,7 @@ function ExportPage() {
             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
             className="mt-3 overflow-hidden rounded-2xl bg-background chunky-border chunky-shadow-sm"
           >
-            <img src={cover} alt="Book cover preview" className="h-auto w-full" />
+            <img src="/assets/cover.jpg" alt="Book cover preview" className="h-auto w-full" />
           </motion.div>
           <div className="mt-3">
             <div className="font-display text-lg font-black">{mockBook.title}</div>

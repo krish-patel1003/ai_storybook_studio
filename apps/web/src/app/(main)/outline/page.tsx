@@ -1,16 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import Link from "next/link";
 import { GripVertical, RefreshCw, Pencil, Plus, Lock, Sparkles } from "lucide-react";
 import { mockCharacters } from "@/lib/mock-book";
-
-export const Route = createFileRoute("/outline")({
-  head: () => ({
-    meta: [
-      { title: "Outline — Storybook Studio" },
-      { name: "description", content: "Page-by-page outline of your generated children's book." },
-    ],
-  }),
-  component: OutlinePage,
-});
 
 const outline = [
   "Pip wakes up in his cozy burrow as morning light arrives.",
@@ -22,20 +12,22 @@ const outline = [
   "He shares them. The bunny smiles bigger than the sun.",
   "Together they discover a hidden meadow full of wildflowers.",
   "The forest fills with friends as the day turns gold.",
-  "Tucked beneath the moon, Pip whispers, \"Tomorrow, again.\"",
+  'Tucked beneath the moon, Pip whispers, "Tomorrow, again."',
 ];
 
-function OutlinePage() {
+export default function OutlinePage() {
   return (
     <main className="mx-auto grid max-w-7xl gap-6 px-4 py-10 lg:grid-cols-[1fr_320px]">
       <section>
         <div className="flex items-end justify-between gap-4">
           <div>
             <h1 className="font-display text-4xl font-black md:text-5xl">Story outline</h1>
-            <p className="mt-1 text-muted-foreground">10 pages, ready to illustrate. Reorder, edit, or regenerate any beat.</p>
+            <p className="mt-1 text-muted-foreground">
+              10 pages, ready to illustrate. Reorder, edit, or regenerate any beat.
+            </p>
           </div>
           <Link
-            to="/editor"
+            href="/editor"
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
           >
             <Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate it

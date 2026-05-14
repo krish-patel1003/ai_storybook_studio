@@ -1,23 +1,8 @@
-@import "tailwindcss" source(none);
-@source "../src";
+@import "tailwindcss";
 @import "tw-animate-css";
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Nunito:wght@400;600;800&display=swap");
 
 @custom-variant dark (&:is(.dark *));
-
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -68,25 +53,20 @@
 
 :root {
   --radius: 1rem;
-  /* Warm cream */
   --background: oklch(0.97 0.025 85);
   --foreground: oklch(0.25 0.06 265);
   --card: oklch(0.99 0.012 85);
   --card-foreground: oklch(0.25 0.06 265);
   --popover: oklch(0.99 0.012 85);
   --popover-foreground: oklch(0.25 0.06 265);
-  /* Sunny coral / orange */
   --primary: oklch(0.7 0.18 35);
   --primary-foreground: oklch(0.99 0.01 85);
-  /* Sky blue */
   --secondary: oklch(0.78 0.12 230);
   --secondary-foreground: oklch(0.2 0.06 265);
   --muted: oklch(0.93 0.02 85);
   --muted-foreground: oklch(0.45 0.04 265);
-  /* Mint green */
   --accent: oklch(0.83 0.12 160);
   --accent-foreground: oklch(0.22 0.06 160);
-  /* Buttercup yellow */
   --highlight: oklch(0.9 0.16 95);
   --highlight-foreground: oklch(0.25 0.06 265);
   --destructive: oklch(0.6 0.22 25);
@@ -148,7 +128,6 @@
   * {
     border-color: var(--color-border);
   }
-
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);

@@ -1,30 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { motion } from "motion/react";
 import { Sparkles, Wand2, Palette, BookMarked, ArrowRight } from "lucide-react";
-import heroImg from "@/assets/hero.jpg";
-import coverImg from "@/assets/cover.jpg";
-import page1 from "@/assets/page1.jpg";
-import page2 from "@/assets/page2.jpg";
-import page3 from "@/assets/page3.jpg";
 
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Storybook Studio — Turn one idea into a children's book" },
-      {
-        name: "description",
-        content:
-          "AI storybook studio that turns a single prompt into a consistent, illustrated, publish-ready children's book.",
-      },
-      { property: "og:title", content: "Storybook Studio" },
-      { property: "og:description", content: "Turn one idea into a children's book." },
-    ],
-  }),
-  component: Index,
-});
-
-function Index() {
+export default function HomePage() {
   return (
     <main>
       {/* Hero */}
@@ -43,21 +23,21 @@ function Index() {
               .
             </h1>
             <p className="mt-6 max-w-md text-lg text-muted-foreground">
-              Give us a prompt. We'll write a children's book with consistent characters,
+              Give us a prompt. We&apos;ll write a children&apos;s book with consistent characters,
               hand-illustrated pages, and a print-ready PDF — in minutes.
             </p>
             <p className="mt-3 inline-flex w-fit items-center gap-2 rounded-full bg-highlight px-3 py-1 text-sm font-extrabold text-foreground chunky-border">
-              ✦ Publish-ready PDF & EPUB export
+              ✦ Publish-ready PDF &amp; EPUB export
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                to="/create"
+                href="/create"
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow transition-transform hover:-translate-y-1"
               >
                 Start your story <ArrowRight className="h-5 w-5" strokeWidth={3} />
               </Link>
               <Link
-                to="/reader"
+                href="/reader"
                 className="inline-flex items-center gap-2 rounded-full bg-card px-6 py-3 text-base font-extrabold text-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-1"
               >
                 See an example
@@ -73,7 +53,7 @@ function Index() {
               className="overflow-hidden rounded-3xl bg-card chunky-border chunky-shadow"
             >
               <img
-                src={heroImg}
+                src="/assets/hero.jpg"
                 alt="A fox, bunny and owl reading a glowing storybook"
                 width={1280}
                 height={960}
@@ -147,16 +127,16 @@ function Index() {
       <section className="mx-auto max-w-7xl px-4 py-20">
         <div className="flex items-end justify-between">
           <h2 className="font-display text-4xl font-black md:text-5xl">Made by storytellers like you</h2>
-          <Link to="/reader" className="hidden text-sm font-extrabold underline-offset-4 hover:underline md:inline">
+          <Link href="/reader" className="hidden text-sm font-extrabold underline-offset-4 hover:underline md:inline">
             Open a sample →
           </Link>
         </div>
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { img: coverImg, title: "The Brave Little Fox", age: "Ages 3–5" },
-            { img: page1, title: "Pip's Cozy Morning", age: "Ages 3–5" },
-            { img: page2, title: "Professor Hoot Knows", age: "Ages 6–8" },
-            { img: page3, title: "Berries by the Stream", age: "Ages 3–5" },
+            { img: "/assets/cover.jpg", title: "The Brave Little Fox", age: "Ages 3–5" },
+            { img: "/assets/page1.jpg", title: "Pip's Cozy Morning", age: "Ages 3–5" },
+            { img: "/assets/page2.jpg", title: "Professor Hoot Knows", age: "Ages 6–8" },
+            { img: "/assets/page3.jpg", title: "Berries by the Stream", age: "Ages 3–5" },
           ].map((b, i) => (
             <motion.div
               key={b.title}
@@ -178,7 +158,7 @@ function Index() {
       <footer className="border-t-[2.5px] border-foreground bg-foreground py-10 text-background">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-sm md:flex-row">
           <div className="font-display text-xl font-black">Storybook.Studio</div>
-          <div className="opacity-70">© {new Date().getFullYear()} — Made with crayons & code.</div>
+          <div className="opacity-70">© {new Date().getFullYear()} — Made with crayons &amp; code.</div>
         </div>
       </footer>
     </main>

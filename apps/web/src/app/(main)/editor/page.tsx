@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -19,19 +21,9 @@ import {
 } from "lucide-react";
 import { mockBook, mockCharacters } from "@/lib/mock-book";
 
-export const Route = createFileRoute("/editor")({
-  head: () => ({
-    meta: [
-      { title: "Editor — Storybook Studio" },
-      { name: "description", content: "Edit pages, lock characters, and regenerate illustrations." },
-    ],
-  }),
-  component: EditorPage,
-});
-
 type DrawerKind = null | "text" | "image";
 
-function EditorPage() {
+export default function EditorPage() {
   const [active, setActive] = useState(1);
   const [castOpen, setCastOpen] = useState(true);
   const [drawer, setDrawer] = useState<DrawerKind>(null);
@@ -52,13 +44,13 @@ function EditorPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            to="/reader"
+            href="/reader"
             className="inline-flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
           >
             <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview
           </Link>
           <Link
-            to="/export"
+            href="/export"
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
           >
             <Download className="h-4 w-4" strokeWidth={2.5} /> Export
@@ -128,7 +120,7 @@ function EditorPage() {
               </div>
             </div>
 
-            {/* Page canvas + floating toolbar */}
+            {/* Page canvas */}
             <div className="relative">
               <AnimatePresence mode="wait">
                 <motion.div
