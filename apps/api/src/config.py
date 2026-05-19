@@ -28,5 +28,12 @@ class Config(BaseSettings):
     # Ollama — override when running inside Docker
     OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
 
+    # MinIO (local object storage for illustrations)
+    MINIO_ENDPOINT: str = "minio:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_BUCKET: str = "illustrations"
+    MINIO_SECURE: bool = False
+
 
 settings = Config()

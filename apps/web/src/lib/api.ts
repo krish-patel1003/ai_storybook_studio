@@ -65,6 +65,12 @@ export interface PageOut {
   text: string | null;
   word_count: number | null;
   illustration_metadata: IllustrationMetadata | null;
+  has_image: boolean;
+}
+
+export function pageImageUrl(bookId: string, pageId: string): string {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
+  return `${base}/books/${bookId}/pages/${pageId}/image`;
 }
 
 export type GenerationStage =
@@ -103,6 +109,7 @@ export interface BookSummaryOut {
   page_count: number;
   visibility: "public" | "private";
   stage: GenerationStage;
+  illustrated_page_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -298,6 +305,18 @@ export const api = {
         method: "POST",
         headers: authed(token),
         body: JSON.stringify(data),
+      }),
+
+    illustrate: (token: string, bookId: string) =>
+      request<BookOut>(`/books/${bookId}/illustrate`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    illustratePage: (token: string, bookId: string, pageId: string) =>
+      request<BookOut>(`/books/${bookId}/pages/${pageId}/illustrate`, {
+        method: "POST",
+        headers: authed(token),
       }),
 
     addCharacter: (token: string, bookId: string, data: AddCharacterIn) =>

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.books.models import GenerationStage
 from src.generation.constants import (
@@ -89,8 +89,15 @@ class PageOut(BaseModel):
     text: str | None
     word_count: int | None
     illustration_metadata: IllustrationMetadata | None
+    image_key: str | None = Field(default=None, exclude=True)
+    has_image: bool = False
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _set_has_image(self) -> "PageOut":
+        self.has_image = self.image_key is not None
+        return self
 
 
 class BookOut(BaseModel):
@@ -125,6 +132,7 @@ class BookSummaryOut(BaseModel):
     page_count: int
     visibility: str
     stage: GenerationStage
+    illustrated_page_count: int = 0
     created_at: datetime
     updated_at: datetime
 

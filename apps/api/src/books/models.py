@@ -59,6 +59,9 @@ class Book(Base):
     # Visibility
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")
 
+    # Seed for illustration consistency — set once, used as base for per-page seeds
+    visual_seed: Mapped[int] = mapped_column(Integer, nullable=False, default=lambda: __import__('random').randint(0, 2**31 - 1))
+
     # Generation state
     stage: Mapped[GenerationStage] = mapped_column(
         Enum(GenerationStage, name="generation_stage", values_callable=lambda obj: [e.value for e in obj], create_type=False),
@@ -138,5 +141,8 @@ class Page(Base):
 
     # Illustration metadata (null until page stage completes)
     illustration_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # MinIO object key — set after illustration is uploaded (null = not yet illustrated)
+    image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     book: Mapped["Book"] = relationship(back_populates="pages")

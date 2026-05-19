@@ -21,6 +21,7 @@ from src.generation.schemas import (
 )
 from src.generation.stages.characters import CharacterStage
 from src.generation.stages.enhance import EnhanceStage
+from src.generation.stages.image import GeneratedImage, ImageStage
 from src.generation.stages.outline import OutlineStage
 from src.generation.stages.pages import PageStage
 from src.generation.stages.recalibrate import RecalibrateStage
@@ -81,12 +82,14 @@ class StoryPipeline:
     ) -> None:
         cfg = model_config or ModelConfig()
         client, fast, quality = _build_stages(cfg, api_key, ollama_base_url)
+        self._api_key = api_key
 
         self._enhance = EnhanceStage(client, model=fast)
         self._characters = CharacterStage(client, model=quality)
         self._outline = OutlineStage(client, model=fast)
         self._pages = PageStage(client, model=quality)
         self._recalibrate = RecalibrateStage(client, model=fast)
+        self._image = ImageStage(api_key=api_key)
 
     async def generate(
         self,
@@ -137,6 +140,24 @@ class StoryPipeline:
             new_page_count=new_page_count,
             locked_orders=locked_orders,
         )
+
+    async def illustrate(
+        self,
+        *,
+        pages: list,
+        visual_seed: int,
+    ) -> list[GeneratedImage]:
+        """Generate illustrations for all pages that have illustration_metadata."""
+        return await self._image.run(pages=pages, visual_seed=visual_seed)
+
+    async def illustrate_single(
+        self,
+        *,
+        page,
+        visual_seed: int,
+    ) -> GeneratedImage:
+        results = await self._image.run(pages=[page], visual_seed=visual_seed)
+        return results[0]
 
     async def regenerate_pages(
         self,

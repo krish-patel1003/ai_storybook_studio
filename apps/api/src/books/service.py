@@ -69,13 +69,22 @@ async def get_book(db: AsyncSession, book_id: uuid.UUID, user_id: uuid.UUID) -> 
     return book
 
 
-async def list_books(db: AsyncSession, user_id: uuid.UUID) -> Sequence[Book]:
-    result = await db.execute(
-        select(Book)
+async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, int]]:
+    from sqlalchemy import func
+    illustrated_sq = (
+        select(Page.book_id, func.count(Page.id).label("cnt"))
+        .where(Page.image_key.isnot(None))
+        .group_by(Page.book_id)
+        .subquery()
+    )
+    stmt = (
+        select(Book, func.coalesce(illustrated_sq.c.cnt, 0).label("illustrated_count"))
+        .outerjoin(illustrated_sq, illustrated_sq.c.book_id == Book.id)
         .where(Book.user_id == user_id)
         .order_by(Book.updated_at.desc())
     )
-    return result.scalars().all()
+    result = await db.execute(stmt)
+    return [(row.Book, int(row.illustrated_count)) for row in result.all()]
 
 
 # ── Draft & generate ──────────────────────────────────────────────────────────
@@ -313,6 +322,41 @@ async def recalibrate_book(
     book.page_count = data.new_page_count
     await db.commit()
 
+    return await get_book(db, book_id, user_id)
+
+
+# ── Illustration ─────────────────────────────────────────────────────────────
+
+
+async def illustrate_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    page_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from src.storage import minio_client
+
+    book = await get_book(db, book_id, user_id)
+    page = next((p for p in book.pages if p.id == page_id), None)
+    if page is None:
+        raise NotFoundError("Page not found")
+    if page.illustration_metadata is None:
+        raise ValueError("Page has no illustration metadata yet")
+
+    pipeline = _pipeline()
+    img = await pipeline.illustrate_single(page=page, visual_seed=book.visual_seed)
+
+    # Upload to MinIO; delete old object if regenerating
+    if page.image_key:
+        minio_client.delete_image(page.image_key)
+    key = minio_client.upload_image(
+        book_id=str(book_id),
+        page_id=str(page_id),
+        data=img.image_data,
+        mime_type=img.mime_type,
+    )
+    page.image_key = key
+    await db.commit()
     return await get_book(db, book_id, user_id)
 
 

@@ -19,6 +19,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, type PageOut } from "@/lib/api";
+import { useRelativeTime } from "@/lib/use-relative-time";
 import { toast } from "sonner";
 
 // ── Inline beat editor ────────────────────────────────────────────────────────
@@ -309,6 +310,7 @@ function NoBook() {
 export default function OutlinePage() {
   const { token } = useAuth();
   const { book, updateBook } = useBook();
+  const lastSaved = useRelativeTime(book?.updated_at);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -437,6 +439,9 @@ export default function OutlinePage() {
                   </span>
                 )}
               </p>
+              {lastSaved && (
+                <p className="mt-1 text-xs font-bold text-muted-foreground">Saved {lastSaved}</p>
+              )}
             </div>
             <Link
               href="/editor"

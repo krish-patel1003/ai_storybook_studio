@@ -1,7 +1,7 @@
 import uuid
 from typing import Sequence
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -125,8 +125,13 @@ async def list_books(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(current_user),
 ) -> list[BookSummaryOut]:
-    books = await service.list_books(db, user.id)
-    return [BookSummaryOut.model_validate(b) for b in books]
+    rows = await service.list_books(db, user.id)
+    result = []
+    for book, illustrated_count in rows:
+        summary = BookSummaryOut.model_validate(book)
+        summary.illustrated_page_count = illustrated_count
+        result.append(summary)
+    return result
 
 
 @router.post("/draft", response_model=BookOut, status_code=status.HTTP_201_CREATED)
@@ -201,6 +206,40 @@ async def generate_from_draft(
 ) -> BookOut:
     updated = await service.generate_from_draft(db, book.id, book.user_id, data)
     return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/pages/{page_id}/illustrate", response_model=BookOut)
+async def illustrate_page(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.illustrate_page(db, book.id, page_id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.get("/{book_id}/pages/{page_id}/image")
+async def get_page_image(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> Response:
+    from fastapi import HTTPException
+    from sqlalchemy import select as sa_select
+    from src.books.models import Page
+    from src.storage import minio_client
+
+    result = await db.execute(
+        sa_select(Page.image_key).where(
+            Page.id == page_id, Page.book_id == book.id
+        )
+    )
+    row = result.one_or_none()
+    if row is None or row.image_key is None:
+        raise HTTPException(status_code=404, detail="Image not generated yet")
+
+    data, content_type = minio_client.download_image(row.image_key)
+    return Response(content=data, media_type=content_type)
 
 
 @router.post("/{book_id}/pages", response_model=BookOut, status_code=status.HTTP_201_CREATED)
