@@ -222,7 +222,7 @@ export default function CreatePage() {
   const [pageCount, setPageCount] = useState(10);
   const [style, setStyle] = useState("watercolor");
   const [modelProvider, setModelProvider] = useState("gemini");
-  const [modelName, setModelName] = useState("gemini-2.0-flash");
+  const [modelName, setModelName] = useState("gemini-3.5-flash");
 
   // Model discovery state
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -544,7 +544,7 @@ export default function CreatePage() {
                                   description: "Cloud-hosted · High quality",
                                   available: true,
                                   models: [
-                                    { id: "gemini-2.0-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" },
+                                    { id: "gemini-3.5-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" },
                                     { id: "gemini-1.5-pro", name: "Gemini Pro", description: "Highest quality", size: "cloud" },
                                   ],
                                 },

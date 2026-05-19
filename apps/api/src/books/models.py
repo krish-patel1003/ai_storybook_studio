@@ -56,6 +56,9 @@ class Book(Base):
     # Generated content (stored as JSONB so no migration needed when schemas evolve)
     brief: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # Visibility
+    visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")
+
     # Generation state
     stage: Mapped[GenerationStage] = mapped_column(
         Enum(GenerationStage, name="generation_stage", values_callable=lambda obj: [e.value for e in obj], create_type=False),

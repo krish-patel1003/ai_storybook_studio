@@ -27,7 +27,7 @@ class CreateBookIn(BaseModel):
         le=MAX_PAGE_COUNT,
     )
     model_provider: str = "gemini"
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = "gemini-3.5-flash"
 
 
 class UpdatePageIn(BaseModel):
@@ -40,6 +40,10 @@ class UpdatePageIn(BaseModel):
 
 class RecalibrateIn(BaseModel):
     new_page_count: int = Field(ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+
+
+class UpdateBookIn(BaseModel):
+    visibility: str | None = Field(default=None, pattern=r"^(public|private)$")
 
 
 # ── Response schemas ──────────────────────────────────────────────────────────
@@ -100,6 +104,7 @@ class BookOut(BaseModel):
     page_count: int
     model_provider: str
     model_name: str
+    visibility: str
     stage: GenerationStage
     error: str | None
     brief: BriefOut | None
@@ -118,6 +123,7 @@ class BookSummaryOut(BaseModel):
     age_range: str
     art_style: str
     page_count: int
+    visibility: str
     stage: GenerationStage
     created_at: datetime
     updated_at: datetime
@@ -139,7 +145,7 @@ class BriefGenerateIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = "gemini-3.5-flash"
 
 
 class BriefOptionsOut(BaseModel):
@@ -173,7 +179,7 @@ class CreateDraftIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = "gemini-3.5-flash"
 
 
 class GenerateIn(BaseModel):

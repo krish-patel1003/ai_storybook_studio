@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   BookOpen,
   Plus,
@@ -12,6 +12,11 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Trash2,
+  Globe,
+  Lock,
+  ArrowRight,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -20,7 +25,7 @@ import { api, type BookSummaryOut, type BookOut } from "@/lib/api";
 import { toast } from "sonner";
 
 const STAGE_LABELS: Record<string, string> = {
-  pending: "Pending",
+  pending: "Draft",
   enhancing: "Enhancing…",
   characters: "Building characters…",
   outline: "Writing outline…",
@@ -39,7 +44,7 @@ function StageBadge({ stage }: { stage: string }) {
   const label = STAGE_LABELS[stage] ?? stage;
   const isComplete = stage === "complete";
   const isFailed = stage === "failed";
-  const isProcessing = !isComplete && !isFailed;
+  const isPending = stage === "pending";
 
   return (
     <span
@@ -48,25 +53,86 @@ function StageBadge({ stage }: { stage: string }) {
           ? "bg-accent text-accent-foreground"
           : isFailed
           ? "bg-destructive/10 text-destructive"
+          : isPending
+          ? "bg-muted text-muted-foreground"
           : "bg-highlight text-foreground"
       }`}
     >
       {isComplete && <CheckCircle2 className="h-3 w-3" />}
       {isFailed && <XCircle className="h-3 w-3" />}
-      {isProcessing && <Loader2 className="h-3 w-3 animate-spin" />}
+      {!isComplete && !isFailed && !isPending && <Loader2 className="h-3 w-3 animate-spin" />}
       {label}
     </span>
   );
 }
 
+// ── Delete confirmation dialog ────────────────────────────────────────────────
+
+function DeleteDialog({
+  title,
+  onConfirm,
+  onCancel,
+  deleting,
+}: {
+  title: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-3xl bg-card p-6 chunky-border chunky-shadow-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 grid h-12 w-12 place-items-center rounded-2xl bg-destructive/10 chunky-border">
+          <Trash2 className="h-5 w-5 text-destructive" strokeWidth={2.5} />
+        </div>
+        <h2 className="mt-3 font-display text-xl font-black">Delete book?</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          <span className="font-bold text-foreground">&ldquo;{title}&rdquo;</span> will be
+          permanently deleted. This cannot be undone.
+        </p>
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-destructive px-4 py-2.5 text-sm font-extrabold text-white chunky-border disabled:opacity-60"
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" strokeWidth={2.5} />}
+            Delete
+          </button>
+          <button
+            onClick={onCancel}
+            className="rounded-xl bg-background px-4 py-2.5 text-sm font-extrabold chunky-border"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Book card ─────────────────────────────────────────────────────────────────
+
 function BookCard({
   book,
-  onOpen,
-  loading,
+  onContinue,
+  onDelete,
+  onToggleVisibility,
+  loadingContinue,
+  loadingVisibility,
 }: {
   book: BookSummaryOut;
-  onOpen: () => void;
-  loading: boolean;
+  onContinue: () => void;
+  onDelete: () => void;
+  onToggleVisibility: () => void;
+  loadingContinue: boolean;
+  loadingVisibility: boolean;
 }) {
   const date = new Date(book.created_at).toLocaleDateString("en-US", {
     month: "short",
@@ -74,17 +140,44 @@ function BookCard({
     year: "numeric",
   });
 
+  const isPublic = book.visibility === "public";
+  const canContinue = book.stage === "complete" || book.stage === "pending" || book.stage === "failed";
+  const continueLabel =
+    book.stage === "complete" ? "Open book" :
+    book.stage === "pending" ? "Continue editing" :
+    book.stage === "failed" ? "View / retry" :
+    "In progress…";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       className="group flex flex-col rounded-3xl bg-card chunky-border chunky-shadow-sm overflow-hidden"
     >
-      {/* Colour block header */}
+      {/* Header */}
       <div className="relative flex h-28 items-center justify-center bg-primary/10 border-b-[2.5px] border-foreground">
         <BookOpen className="h-12 w-12 text-primary/40" strokeWidth={1.5} />
         <div className="absolute top-3 right-3">
           <StageBadge stage={book.stage} />
+        </div>
+        <div className="absolute top-3 left-3 flex gap-1.5">
+          {/* Visibility toggle */}
+          <button
+            onClick={onToggleVisibility}
+            disabled={loadingVisibility}
+            title={isPublic ? "Make private" : "Make public"}
+            className={`grid h-7 w-7 place-items-center rounded-full chunky-border transition-colors ${
+              isPublic ? "bg-accent text-accent-foreground" : "bg-background text-muted-foreground hover:bg-secondary"
+            }`}
+          >
+            {loadingVisibility ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : isPublic ? (
+              <Globe className="h-3.5 w-3.5" strokeWidth={2.5} />
+            ) : (
+              <Lock className="h-3.5 w-3.5" strokeWidth={2.5} />
+            )}
+          </button>
         </div>
       </div>
 
@@ -94,30 +187,50 @@ function BookCard({
         </h3>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-bold text-muted-foreground">
           <span>{AGE_LABELS[book.age_range] ?? book.age_range}</span>
-          <span>·</span>
-          <span className="capitalize">{book.art_style}</span>
+          {book.art_style && (
+            <>
+              <span>·</span>
+              <span className="capitalize">{book.art_style}</span>
+            </>
+          )}
           <span>·</span>
           <span>{book.page_count} pages</span>
         </div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-auto pt-2">
-          <Clock className="h-3 w-3" /> {date}
+        <div className="mt-auto pt-2 flex items-center justify-between">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" /> {date}
+          </div>
+          <span className={`text-xs font-bold ${isPublic ? "text-accent-foreground" : "text-muted-foreground"}`}>
+            {isPublic ? "Public" : "Private"}
+          </span>
         </div>
       </div>
 
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 flex gap-2">
         <button
-          onClick={onOpen}
-          disabled={book.stage !== "complete" || loading}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:translate-y-0"
+          onClick={onContinue}
+          disabled={!canContinue || loadingContinue}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:translate-y-0"
         >
-          {loading ? (
+          {loadingContinue ? (
             <Loader2 className="h-4 w-4 animate-spin" />
+          ) : book.stage === "complete" ? (
+            <><BookOpen className="h-4 w-4" strokeWidth={2.5} /> Open book</>
+          ) : book.stage === "pending" ? (
+            <><Pencil className="h-4 w-4" strokeWidth={2.5} /> Continue</>
+          ) : canContinue ? (
+            <><ArrowRight className="h-4 w-4" strokeWidth={2.5} /> {continueLabel}</>
           ) : (
-            <>
-              <BookOpen className="h-4 w-4" strokeWidth={2.5} />
-              {book.stage === "complete" ? "Open book" : "In progress…"}
-            </>
+            <><Loader2 className="h-4 w-4 animate-spin" /> In progress…</>
           )}
+        </button>
+
+        <button
+          onClick={onDelete}
+          title="Delete book"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-background hover:bg-destructive/10 hover:text-destructive chunky-border transition-colors"
+        >
+          <Trash2 className="h-4 w-4" strokeWidth={2.5} />
         </button>
       </div>
     </motion.div>
@@ -144,6 +257,8 @@ function EmptyState() {
   );
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function LibraryPage() {
   const router = useRouter();
   const { token } = useAuth();
@@ -151,8 +266,11 @@ export default function LibraryPage() {
 
   const [books, setBooks] = useState<BookSummaryOut[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [visibilityLoadingId, setVisibilityLoadingId] = useState<string | null>(null);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BookSummaryOut | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -163,12 +281,17 @@ export default function LibraryPage() {
       .finally(() => setFetching(false));
   }, [token]);
 
-  async function openBook(id: string) {
+  async function continueBook(book: BookSummaryOut) {
     if (!token) return;
-    setLoadingId(id);
+    if (book.stage === "pending") {
+      // Draft — load into store and send back to create wizard
+      router.push("/create");
+      return;
+    }
+    setLoadingId(book.id);
     try {
-      const book = await api.books.get(token, id);
-      setBook(book as unknown as BookOut);
+      const full = await api.books.get(token, book.id);
+      setBook(full as unknown as BookOut);
       router.push("/outline");
     } catch (e: any) {
       toast.error(e.message ?? "Could not load book");
@@ -177,58 +300,106 @@ export default function LibraryPage() {
     }
   }
 
-  return (
-    <main className="mx-auto max-w-7xl px-4 py-10">
-      {/* Header */}
-      <div className="flex items-end justify-between gap-4 mb-8">
-        <div>
-          <h1 className="font-display text-4xl font-black md:text-5xl">My Library</h1>
-          <p className="mt-1 text-muted-foreground">
-            {books.length > 0
-              ? `${books.length} book${books.length === 1 ? "" : "s"}`
-              : "Your storybooks live here"}
-          </p>
-        </div>
-        <Link
-          href="/create"
-          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
-        >
-          <Plus className="h-4 w-4" strokeWidth={3} /> New book
-        </Link>
-      </div>
+  async function toggleVisibility(book: BookSummaryOut) {
+    if (!token) return;
+    setVisibilityLoadingId(book.id);
+    const next = book.visibility === "public" ? "private" : "public";
+    try {
+      await api.books.updateVisibility(token, book.id, next);
+      setBooks((prev) =>
+        prev.map((b) => (b.id === book.id ? { ...b, visibility: next } : b))
+      );
+      toast.success(`Book is now ${next}`);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to update visibility");
+    } finally {
+      setVisibilityLoadingId(null);
+    }
+  }
 
-      {/* Content */}
-      {fetching ? (
-        <div className="flex justify-center py-32">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        </div>
-      ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-24 text-center">
-          <AlertCircle className="h-10 w-10 text-destructive" />
-          <p className="font-bold text-destructive">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="rounded-full bg-background px-4 py-2 text-sm font-bold chunky-border"
+  async function confirmDelete() {
+    if (!token || !deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.books.delete(token, deleteTarget.id);
+      setBooks((prev) => prev.filter((b) => b.id !== deleteTarget.id));
+      toast.success(`"${deleteTarget.title}" deleted`);
+      setDeleteTarget(null);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to delete");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const completeCount = books.filter((b) => b.stage === "complete").length;
+
+  return (
+    <>
+      <AnimatePresence>
+        {deleteTarget && (
+          <DeleteDialog
+            title={deleteTarget.title}
+            onConfirm={confirmDelete}
+            onCancel={() => setDeleteTarget(null)}
+            deleting={deleting}
+          />
+        )}
+      </AnimatePresence>
+
+      <main className="mx-auto max-w-7xl px-4 py-10">
+        <div className="flex items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 className="font-display text-4xl font-black md:text-5xl">My Library</h1>
+            <p className="mt-1 text-muted-foreground">
+              {books.length > 0
+                ? `${books.length} book${books.length === 1 ? "" : "s"} · ${completeCount} complete`
+                : "Your storybooks live here"}
+            </p>
+          </div>
+          <Link
+            href="/create"
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
           >
-            Retry
-          </button>
+            <Plus className="h-4 w-4" strokeWidth={3} /> New book
+          </Link>
         </div>
-      ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {books.length === 0 ? (
-            <EmptyState />
-          ) : (
-            books.map((book) => (
-              <BookCard
-                key={book.id}
-                book={book}
-                onOpen={() => openBook(book.id)}
-                loading={loadingId === book.id}
-              />
-            ))
-          )}
-        </div>
-      )}
-    </main>
+
+        {fetching ? (
+          <div className="flex justify-center py-32">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center gap-3 py-24 text-center">
+            <AlertCircle className="h-10 w-10 text-destructive" />
+            <p className="font-bold text-destructive">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-background px-4 py-2 text-sm font-bold chunky-border"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {books.length === 0 ? (
+              <EmptyState />
+            ) : (
+              books.map((book) => (
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  onContinue={() => continueBook(book)}
+                  onDelete={() => setDeleteTarget(book)}
+                  onToggleVisibility={() => toggleVisibility(book)}
+                  loadingContinue={loadingId === book.id}
+                  loadingVisibility={visibilityLoadingId === book.id}
+                />
+              ))
+            )}
+          </div>
+        )}
+      </main>
+    </>
   );
 }

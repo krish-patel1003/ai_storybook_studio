@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.books.models import Book, Character, GenerationStage, Page
-from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, GenerateIn, RecalibrateIn, UpdatePageIn
+from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
 from src.config import settings
 from src.exceptions import NotFoundError
 from src.generation.pipeline import ModelConfig, StoryPipeline
@@ -100,8 +100,7 @@ async def create_draft(
     )
     db.add(book)
     await db.commit()
-    await db.refresh(book)
-    return book
+    return await get_book(db, book.id, user_id)
 
 
 async def generate_from_draft(
@@ -314,6 +313,31 @@ async def recalibrate_book(
     book.page_count = data.new_page_count
     await db.commit()
 
+    return await get_book(db, book_id, user_id)
+
+
+# ── Delete & update ───────────────────────────────────────────────────────────
+
+async def delete_book(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> None:
+    book = await get_book(db, book_id, user_id)
+    await db.delete(book)
+    await db.commit()
+
+
+async def update_book(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: UpdateBookIn,
+) -> Book:
+    book = await get_book(db, book_id, user_id)
+    if data.visibility is not None:
+        book.visibility = data.visibility
+    await db.commit()
     return await get_book(db, book_id, user_id)
 
 

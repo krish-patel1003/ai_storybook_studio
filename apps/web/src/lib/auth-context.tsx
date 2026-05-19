@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(TOKEN_KEY, accessToken);
     localStorage.setItem(REFRESH_KEY, refreshToken);
     localStorage.setItem(USER_KEY, JSON.stringify(u));
-    setCookie(TOKEN_KEY, "1"); // presence flag for middleware
+    setCookie(TOKEN_KEY, accessToken); // stored for middleware JWT expiry check
     setToken(accessToken);
     setUser(u);
   }, []);

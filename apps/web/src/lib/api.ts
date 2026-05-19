@@ -85,6 +85,7 @@ export interface BookOut {
   art_style: string;
   safety_mode: boolean;
   page_count: number;
+  visibility: "public" | "private";
   stage: GenerationStage;
   error: string | null;
   brief: BriefOut | null;
@@ -100,6 +101,7 @@ export interface BookSummaryOut {
   age_range: string;
   art_style: string;
   page_count: number;
+  visibility: "public" | "private";
   stage: GenerationStage;
   created_at: string;
   updated_at: string;
@@ -317,6 +319,19 @@ export const api = {
         method: "POST",
         headers: authed(token),
         body: JSON.stringify({ art_style: artStyle }),
+      }),
+
+    delete: (token: string, bookId: string) =>
+      request<void>(`/books/${bookId}`, {
+        method: "DELETE",
+        headers: authed(token),
+      }),
+
+    updateVisibility: (token: string, bookId: string, visibility: "public" | "private") =>
+      request<BookOut>(`/books/${bookId}`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify({ visibility }),
       }),
   },
 };

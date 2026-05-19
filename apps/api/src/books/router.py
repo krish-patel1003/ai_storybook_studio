@@ -24,6 +24,7 @@ from src.books.schemas import (
     PageOut,
     ProviderInfo,
     RecalibrateIn,
+    UpdateBookIn,
     UpdatePageIn,
 )
 from src.database import get_db
@@ -141,6 +142,24 @@ async def create_draft(
 @router.get("/{book_id}", response_model=BookOut)
 async def get_book(book: Book = Depends(owned_book)) -> BookOut:
     return BookOut.model_validate(book)
+
+
+@router.patch("/{book_id}", response_model=BookOut)
+async def update_book(
+    data: UpdateBookIn,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.update_book(db, book.id, book.user_id, data)
+    return BookOut.model_validate(updated)
+
+
+@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_book(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> None:
+    await service.delete_book(db, book.id, book.user_id)
 
 
 @router.patch("/{book_id}/pages/{page_id}", response_model=BookOut)
