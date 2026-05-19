@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Eye, EyeOff, Sparkles, ArrowRight, Pencil } from "lucide-react";
+import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "@/lib/auth-context";
 
 const schema = z
@@ -32,8 +33,25 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { register: registerUser, isMock } = useAuth();
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const { register: registerUser, googleLogin, isMock } = useAuth();
   const router = useRouter();
+
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async ({ access_token }) => {
+      setIsGoogleLoading(true);
+      try {
+        await googleLogin(access_token);
+        toast.success("Account created! Welcome to Storybook Studio.");
+        router.push("/");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Google sign up failed");
+      } finally {
+        setIsGoogleLoading(false);
+      }
+    },
+    onError: () => toast.error("Google sign up was cancelled or failed"),
+  });
 
   const {
     register,
@@ -80,10 +98,12 @@ export default function SignUpPage() {
         <div className="rounded-3xl bg-card p-8 chunky-border chunky-shadow">
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-background px-4 py-3 font-extrabold chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"
+            onClick={() => handleGoogleLogin()}
+            disabled={isGoogleLoading}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-background px-4 py-3 font-extrabold chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <GoogleIcon />
-            Continue with Google
+            {isGoogleLoading ? <span className="animate-pulse">Connecting…</span> : "Continue with Google"}
           </button>
 
           <Divider />
