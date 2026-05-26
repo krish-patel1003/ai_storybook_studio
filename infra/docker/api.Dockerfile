@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements/base.txt requirements/base.txt
 RUN pip install --no-cache-dir -r requirements/base.txt
 
+# Bundle Fredoka Bold + Nunito Regular for PDF export
+COPY fonts/Fredoka-Bold.ttf /usr/share/fonts/truetype/Fredoka-Bold.ttf
+COPY fonts/Nunito-Regular.ttf /usr/share/fonts/truetype/Nunito-Regular.ttf
+
 COPY . .
 
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "300"]
