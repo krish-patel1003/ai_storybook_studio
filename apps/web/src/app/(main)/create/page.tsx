@@ -14,6 +14,9 @@ import {
   RefreshCw,
   Cpu,
   Cloud,
+  Wand2,
+  ImageIcon,
+  Mic,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -33,6 +36,12 @@ const STYLES = [
   { id: "papercut", label: "Papercut", img: "/assets/page3.jpg" },
 ];
 
+const TONES = [
+  "Funny", "Calm", "Adventurous", "Cozy", "Silly",
+  "Whimsical", "Magical", "Spooky", "Heartwarming",
+  "Educational", "Mysterious", "Epic",
+];
+
 const PAGE_COUNT_OPTIONS = [6, 8, 10, 12, 15, 20];
 
 const GENERATION_STAGES = [
@@ -43,7 +52,7 @@ const GENERATION_STAGES = [
   "Polishing the prose…",
 ];
 
-// ── Generating overlay ────────────────────────────────────────────────────────
+// ── Standard generating overlay (existing wizard) ─────────────────────────────
 
 function GeneratingOverlay() {
   const [stageIdx, setStageIdx] = useState(0);
@@ -63,7 +72,6 @@ function GeneratingOverlay() {
       );
     });
 
-    // Smooth progress fill over ~120s
     const tick = setInterval(() => {
       setProgress((p) => Math.min(p + 0.5, 94));
     }, 600);
@@ -81,12 +89,10 @@ function GeneratingOverlay() {
           <BookOpen className="h-10 w-10 text-primary-foreground" strokeWidth={2} />
           <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
         </div>
-
         <div>
           <h2 className="font-display text-3xl font-black">Writing your story…</h2>
           <p className="mt-1 text-muted-foreground">This takes about a minute. Grab a snack 🍎</p>
         </div>
-
         <div className="w-80">
           <div className="mb-3 h-3 overflow-hidden rounded-full bg-muted chunky-border">
             <motion.div
@@ -107,7 +113,6 @@ function GeneratingOverlay() {
             </motion.p>
           </AnimatePresence>
         </div>
-
         <div className="mt-2 flex gap-2">
           {GENERATION_STAGES.map((_, i) => (
             <div
@@ -119,6 +124,150 @@ function GeneratingOverlay() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── One-click overlay ─────────────────────────────────────────────────────────
+
+type OneClickStage = "writing" | "illustrating" | "narrating" | "done";
+
+const ONE_CLICK_STAGES: { id: OneClickStage; icon: React.ReactNode; label: string }[] = [
+  { id: "writing",     icon: <Sparkles className="h-4 w-4" />,  label: "Writing"     },
+  { id: "illustrating",icon: <ImageIcon className="h-4 w-4" />, label: "Illustrating"},
+  { id: "narrating",   icon: <Mic className="h-4 w-4" />,       label: "Narrating"   },
+];
+
+function OneClickOverlay({
+  stage,
+  progress,
+  book,
+  onView,
+}: {
+  stage: OneClickStage;
+  progress: { done: number; total: number };
+  book: BookOut | null;
+  onView: () => void;
+}) {
+  const stageIdx = ONE_CLICK_STAGES.findIndex((s) => s.id === stage);
+  const isDone = stage === "done";
+
+  const overallPct = isDone
+    ? 100
+    : stageIdx === 0
+    ? 15
+    : stageIdx === 1
+    ? 33 + (progress.total > 0 ? (progress.done / progress.total) * 34 : 0)
+    : 67 + (progress.total > 0 ? (progress.done / progress.total) * 30 : 0);
+
+  const statusLabel =
+    stage === "writing"
+      ? "Writing your story…"
+      : stage === "illustrating"
+      ? `Illustrating pages… ${progress.total > 0 ? `(${progress.done} / ${progress.total})` : ""}`
+      : stage === "narrating"
+      ? `Adding narration… ${progress.total > 0 ? `(${progress.done} / ${progress.total})` : ""}`
+      : "Your book is ready!";
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur px-6">
+      <AnimatePresence mode="wait">
+        {isDone ? (
+          <motion.div
+            key="done"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-6 text-center"
+          >
+            <div className="grid h-28 w-28 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
+              <BookOpen className="h-12 w-12 text-primary-foreground" strokeWidth={1.5} />
+            </div>
+            <div>
+              <h2 className="font-display text-4xl font-black">Your book is ready!</h2>
+              {book && (
+                <p className="mt-2 text-lg font-bold text-muted-foreground">
+                  {book.brief?.title ?? book.title}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={onView}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3.5 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform"
+            >
+              <BookOpen className="h-5 w-5" strokeWidth={2.5} /> Read your book
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="progress"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex w-full max-w-sm flex-col items-center gap-7 text-center"
+          >
+            {/* Spinning icon */}
+            <div className="relative grid h-24 w-24 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
+              <Wand2 className="h-10 w-10 text-primary-foreground" strokeWidth={2} />
+              <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+            </div>
+
+            <div>
+              <h2 className="font-display text-3xl font-black">Making your book…</h2>
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={statusLabel}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  className="mt-2 text-sm font-bold text-muted-foreground"
+                >
+                  {statusLabel}
+                </motion.p>
+              </AnimatePresence>
+            </div>
+
+            {/* Overall progress bar */}
+            <div className="w-full">
+              <div className="h-3 overflow-hidden rounded-full bg-muted chunky-border">
+                <motion.div
+                  className="h-full rounded-full bg-primary"
+                  animate={{ width: `${overallPct}%` }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                />
+              </div>
+            </div>
+
+            {/* Stage pills */}
+            <div className="flex items-center gap-3">
+              {ONE_CLICK_STAGES.map((s, i) => {
+                const done = i < stageIdx;
+                const active = i === stageIdx;
+                return (
+                  <div key={s.id} className="flex flex-col items-center gap-1.5">
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-full chunky-border transition-all ${
+                        done
+                          ? "bg-primary text-primary-foreground"
+                          : active
+                          ? "bg-primary text-primary-foreground scale-110 chunky-shadow"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {done ? <Check className="h-4 w-4" strokeWidth={3} /> : s.icon}
+                    </div>
+                    <span className={`text-xs font-bold ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              This takes a few minutes — sit back and relax ✨
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -224,27 +373,40 @@ export default function CreatePage() {
   const [modelProvider, setModelProvider] = useState("gemini");
   const [modelName, setModelName] = useState("gemini-3.5-flash");
 
-  // Model discovery state
+  // Model discovery
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
 
-  // Brief generation state
+  // Brief generation
   const [briefs, setBriefs] = useState<BriefOut[]>([]);
   const [briefsLoading, setBriefsLoading] = useState(false);
   const [selectedBriefIdx, setSelectedBriefIdx] = useState(0);
   const [editedBrief, setEditedBrief] = useState<BriefOut | null>(null);
 
-  // Draft & generation state
+  // Draft & generation
   const [draft, setDraft] = useState<BookOut | null>(null);
   const [generating, setGenerating] = useState(false);
 
-  // Fetch available models once on mount
+  // One-click state
+  const [oneClickRunning, setOneClickRunning] = useState(false);
+  const [oneClickStage, setOneClickStage] = useState<OneClickStage>("writing");
+  const [oneClickProgress, setOneClickProgress] = useState({ done: 0, total: 0 });
+  const [oneClickBook, setOneClickBook] = useState<BookOut | null>(null);
+
   useEffect(() => {
     if (!token) return;
     setModelsLoading(true);
     api.books.models(token)
-      .then((d) => setProviders(d.providers))
-      .catch(() => {}) // non-fatal
+      .then((d) => {
+        setProviders(d.providers);
+        // Auto-select first available provider + model
+        const first = d.providers.find((p) => p.available);
+        if (first) {
+          setModelProvider(first.id);
+          if (first.models[0]) setModelName(first.models[0].id);
+        }
+      })
+      .catch(() => {})
       .finally(() => setModelsLoading(false));
   }, [token]);
 
@@ -257,7 +419,6 @@ export default function CreatePage() {
     setEditedBrief(null);
     setSelectedBriefIdx(0);
     try {
-      // Save draft to DB on first brief generation (not on regenerate)
       if (!existingDraft && !draft) {
         const saved = await api.books.createDraft(token, {
           raw_prompt: prompt,
@@ -281,6 +442,9 @@ export default function CreatePage() {
         model_name: modelName,
       });
       setBriefs(res.briefs);
+      // Auto-select first brief
+      setSelectedBriefIdx(0);
+      if (res.briefs[0]) setEditedBrief(res.briefs[0]);
       return true;
     } catch (err: any) {
       toast.error(err.message ?? "Failed to generate briefs");
@@ -292,30 +456,21 @@ export default function CreatePage() {
 
   async function handleNext() {
     if (step === 0) {
-      if (prompt.trim().length < 10) {
-        toast.error("Tell us a bit more about your story");
-        return;
-      }
+      if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
       setStep(1);
       return;
     }
-
     if (step === 1) {
-      // Audience → trigger brief generation, advance to step 2
       setStep(2);
       await fetchBriefs();
       return;
     }
-
     if (step === 2) {
       if (!activeBrief) { toast.error("Pick a brief first"); return; }
       setStep(3);
       return;
     }
-
-    if (step === 3) {
-      await generateBook();
-    }
+    if (step === 3) await generateBook();
   }
 
   async function generateBook() {
@@ -325,10 +480,8 @@ export default function CreatePage() {
     try {
       let book;
       if (draft) {
-        // Use existing draft — just kick off generation with the chosen art style
         book = await api.books.generate(token, draft.id, style);
       } else {
-        // Fallback: create + generate in one call (shouldn't happen in normal flow)
         book = await api.books.create(token, {
           raw_prompt: prompt,
           age_range: age,
@@ -346,6 +499,74 @@ export default function CreatePage() {
       toast.error(err.message ?? "Generation failed. Please try again.");
       setGenerating(false);
     }
+  }
+
+  // ── One-click handler ───────────────────────────────────────────────────────
+
+  async function handleOneClick() {
+    if (!token) { toast.error("Please sign in first"); return; }
+    if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
+
+    setOneClickRunning(true);
+    setOneClickStage("writing");
+    setOneClickProgress({ done: 0, total: 0 });
+
+    try {
+      // 1. Create draft using the user's selected options from step 1
+      const savedDraft = await api.books.createDraft(token, {
+        raw_prompt: prompt,
+        age_range: age,
+        tone: tone.length > 0 ? tone : ["Whimsical"],
+        safety_mode: safety,
+        page_count: pageCount,
+        model_provider: modelProvider,
+        model_name: modelName,
+      });
+      setBook(savedDraft);
+
+      // 2. Generate full book text (blocks until complete)
+      const generated = await api.books.generate(token, savedDraft.id, "watercolor");
+      setBook(generated);
+
+      // 3. Illustrate every page
+      setOneClickStage("illustrating");
+      const pages = [...generated.pages].sort((a, b) => a.order - b.order);
+      setOneClickProgress({ done: 0, total: pages.length });
+
+      let currentBook = generated;
+      for (let i = 0; i < pages.length; i++) {
+        const updated = await api.books.illustratePage(token, generated.id, pages[i].id);
+        setBook(updated);
+        currentBook = updated;
+        setOneClickProgress({ done: i + 1, total: pages.length });
+      }
+
+      // 4. Narrate every page that has text
+      setOneClickStage("narrating");
+      const textPages = [...currentBook.pages]
+        .sort((a, b) => a.order - b.order)
+        .filter((p) => p.text);
+      setOneClickProgress({ done: 0, total: textPages.length });
+
+      for (let i = 0; i < textPages.length; i++) {
+        const updated = await api.books.narratePage(token, currentBook.id, textPages[i].id);
+        setBook(updated);
+        currentBook = updated;
+        setOneClickProgress({ done: i + 1, total: textPages.length });
+      }
+
+      // 5. Done — show completion screen
+      setOneClickStage("done");
+      setOneClickBook(currentBook);
+
+    } catch (err: any) {
+      toast.error(err.message ?? "Something went wrong. Please try again.");
+      setOneClickRunning(false);
+    }
+  }
+
+  function handleViewBook() {
+    router.push("/reader");
   }
 
   function handlePrev() {
@@ -366,6 +587,14 @@ export default function CreatePage() {
   return (
     <>
       {generating && <GeneratingOverlay />}
+      {oneClickRunning && (
+        <OneClickOverlay
+          stage={oneClickStage}
+          progress={oneClickProgress}
+          book={oneClickBook}
+          onView={handleViewBook}
+        />
+      )}
 
       <main className="flex h-[calc(100vh-4rem)] flex-col px-4 py-5 md:px-8 md:py-6">
         {/* Progress dots */}
@@ -417,6 +646,7 @@ export default function CreatePage() {
                         </button>
                       ))}
                     </div>
+
                   </div>
                 )}
 
@@ -456,7 +686,7 @@ export default function CreatePage() {
                         Tone
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {["Funny", "Calm", "Adventurous", "Cozy", "Silly"].map((t) => {
+                        {TONES.map((t) => {
                           const on = tone.includes(t);
                           return (
                             <button
@@ -524,7 +754,7 @@ export default function CreatePage() {
                       </span>
                     </button>
 
-                    {/* ── AI model selector ── */}
+                    {/* AI model selector */}
                     <div className="mt-6">
                       <div className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">
                         AI model
@@ -603,6 +833,46 @@ export default function CreatePage() {
                         </div>
                       )}
                     </div>
+
+                    {/* ── One-click CTA ── */}
+                    <div className="mt-8 rounded-2xl bg-primary/5 p-5 chunky-border">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary chunky-border">
+                          <Wand2 className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} />
+                        </div>
+                        <div>
+                          <p className="font-extrabold">Make it for me</p>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            One click — writes, illustrates &amp; narrates your entire book automatically.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {[
+                          { icon: <Sparkles className="h-3 w-3" />, label: "Story written by AI" },
+                          { icon: <ImageIcon className="h-3 w-3" />, label: "Every page illustrated" },
+                          { icon: <Mic className="h-3 w-3" />, label: "Full narration recorded" },
+                        ].map(({ icon, label }) => (
+                          <span key={label} className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1 text-xs font-bold chunky-border">
+                            {icon} {label}
+                          </span>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={handleOneClick}
+                        disabled={prompt.trim().length < 10}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0"
+                      >
+                        <Wand2 className="h-4 w-4" strokeWidth={2.5} />
+                        Make my book — fully automatic
+                      </button>
+
+                      <p className="mt-3 text-center text-xs text-muted-foreground">
+                        Uses your selections above · Watercolor art style
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -650,7 +920,6 @@ export default function CreatePage() {
                             />
                           ))}
                         </div>
-
                         {activeBrief && (
                           <BriefEditor
                             brief={activeBrief}
@@ -742,17 +1011,11 @@ export default function CreatePage() {
                 className="inline-flex items-center gap-1.5 rounded-full bg-primary px-6 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0"
               >
                 {step === 3 ? (
-                  <>
-                    <Sparkles className="h-4 w-4" strokeWidth={3} /> Generate book
-                  </>
+                  <><Sparkles className="h-4 w-4" strokeWidth={3} /> Generate book</>
                 ) : step === 1 ? (
-                  <>
-                    Next — generate briefs <ArrowRight className="h-4 w-4" strokeWidth={3} />
-                  </>
+                  <>Next — generate briefs <ArrowRight className="h-4 w-4" strokeWidth={3} /></>
                 ) : (
-                  <>
-                    Next <ArrowRight className="h-4 w-4" strokeWidth={3} />
-                  </>
+                  <>Next <ArrowRight className="h-4 w-4" strokeWidth={3} /></>
                 )}
               </button>
             </div>
