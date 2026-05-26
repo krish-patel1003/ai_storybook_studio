@@ -19,6 +19,8 @@ import {
   Link2,
   Share2,
   X,
+  Volume2,
+  Mic,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -113,6 +115,39 @@ function NoBook() {
 
 // ── Page card ─────────────────────────────────────────────────────────────────
 
+function useAudioPreview(bookId: string, pageId: string, token: string | null) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function togglePreview() {
+    if (previewing && audioRef.current) {
+      audioRef.current.pause();
+      setPreviewing(false);
+      return;
+    }
+    if (!token) return;
+    setLoading(true);
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/books/${bookId}/pages/${pageId}/audio`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { setLoading(false); return; }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const audio = new Audio(blobUrl);
+      audio.onended = () => { setPreviewing(false); URL.revokeObjectURL(blobUrl); };
+      audio.onpause = () => setPreviewing(false);
+      audioRef.current = audio;
+      await audio.play();
+      setPreviewing(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { previewing, loading, togglePreview };
+}
+
 function PageCard({
   page,
   bookId,
@@ -120,6 +155,8 @@ function PageCard({
   status,
   elapsed,
   onGenerate,
+  onNarrate,
+  narrateStatus,
 }: {
   page: PageOut;
   bookId: string;
@@ -127,9 +164,12 @@ function PageCard({
   status: "idle" | "generating" | "done" | "error";
   elapsed: number;
   onGenerate: () => void;
+  onNarrate: () => void;
+  narrateStatus: "idle" | "narrating" | "done" | "error";
 }) {
   const imgUrl = pageImageUrl(bookId, page.id);
   const blobUrl = useAuthImage(imgUrl, token, page.has_image);
+  const { previewing, loading: previewLoading, togglePreview } = useAudioPreview(bookId, page.id, token);
 
   const fmt = (s: number) => `${Math.floor(s / 60) > 0 ? `${Math.floor(s / 60)}m ` : ""}${(s % 60).toString().padStart(2, "0")}s`;
 
@@ -207,21 +247,59 @@ function PageCard({
         )}
       </div>
 
-      {/* Per-page generate button */}
-      <div className="px-4 pb-4">
+      {/* Per-page buttons */}
+      <div className="flex gap-2 px-4 pb-4">
+        {/* Illustrate */}
         <button
           onClick={onGenerate}
           disabled={status === "generating"}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-secondary transition-colors disabled:opacity-40"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-secondary transition-colors disabled:opacity-40"
         >
           {status === "generating" ? (
             <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
           ) : page.has_image ? (
-            <><RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Regenerate</>
+            <><RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Reillustrate</>
           ) : (
-            <><Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} /> Generate</>
+            <><Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} /> Illustrate</>
           )}
         </button>
+
+        {/* Narrate + preview — only for pages with text */}
+        {page.text && (
+          <div className="flex gap-1.5">
+            {/* Preview play button — only when audio exists */}
+            {page.has_audio && (
+              <button
+                onClick={togglePreview}
+                disabled={previewLoading}
+                title={previewing ? "Stop preview" : "Preview narration"}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary chunky-border hover:bg-primary/20 transition-colors disabled:opacity-40"
+              >
+                {previewLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : previewing ? (
+                  <span className="h-3 w-3 rounded-sm bg-primary" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" strokeWidth={2.5} fill="currentColor" />
+                )}
+              </button>
+            )}
+
+            {/* Narrate button */}
+            <button
+              onClick={onNarrate}
+              disabled={narrateStatus === "narrating"}
+              title={page.has_audio ? "Re-narrate this page" : "Narrate this page"}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-secondary transition-colors disabled:opacity-40"
+            >
+              {narrateStatus === "narrating" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Mic className="h-3.5 w-3.5" strokeWidth={2.5} />
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -379,6 +457,17 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
               {downloadingEpub ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download EPUB</>}
             </button>
           </div>
+
+          {/* Narration status */}
+          {book.pages.some((p) => p.has_audio) && (
+            <div className="flex items-center gap-3 rounded-2xl bg-background px-4 py-3 chunky-border">
+              <Volume2 className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.5} />
+              <span className="text-sm font-bold">
+                {book.pages.filter((p) => p.has_audio).length} of {book.pages.filter((p) => p.text).length} pages narrated
+              </span>
+              <span className="text-xs text-muted-foreground">· playable in the reader</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -404,6 +493,11 @@ export default function EditorPage() {
   const [isRunning, setIsRunning] = useState(false);
   const abortRef = useRef(false);
   const timer = useTimer();
+
+  // Narration state
+  const [narratingBook, setNarratingBook] = useState(false);
+  const [narrateProgress, setNarrateProgress] = useState<{ done: number; total: number } | null>(null);
+  const [pageNarrateStatuses, setPageNarrateStatuses] = useState<Record<string, "idle" | "narrating" | "done" | "error">>({});
 
   // Per-page timers
   const pageTimerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -477,6 +571,40 @@ export default function EditorPage() {
 
   function handleStop() {
     abortRef.current = true;
+  }
+
+  async function handleNarrate() {
+    if (!token || !book) return;
+    const textPages = book.pages.filter((p) => p.text && !p.has_audio);
+    if (textPages.length === 0) { toast("All pages are already narrated!"); return; }
+    setNarratingBook(true);
+    setNarrateProgress({ done: 0, total: textPages.length });
+    try {
+      for (const page of textPages) {
+        const updated = await api.books.narratePage(token, book.id, page.id);
+        updateBook(updated);
+        setNarrateProgress((p) => p ? { ...p, done: p.done + 1 } : null);
+      }
+      toast.success("Narration complete! Open the reader to listen.");
+    } catch {
+      toast.error("Narration failed — check your Gemini API key supports TTS.");
+    } finally {
+      setNarratingBook(false);
+      setNarrateProgress(null);
+    }
+  }
+
+  async function handleNarrateOne(page: PageOut) {
+    if (!token || !book) return;
+    setPageNarrateStatuses((s) => ({ ...s, [page.id]: "narrating" }));
+    try {
+      const updated = await api.books.narratePage(token, book.id, page.id);
+      updateBook(updated);
+      setPageNarrateStatuses((s) => ({ ...s, [page.id]: "done" }));
+    } catch {
+      setPageNarrateStatuses((s) => ({ ...s, [page.id]: "error" }));
+      toast.error("Narration failed for this page.");
+    }
   }
 
   if (!book) return <main className="mx-auto max-w-7xl px-4 py-10"><NoBook /></main>;
@@ -625,6 +753,42 @@ export default function EditorPage() {
         </div>
       </div>
 
+      {/* Narration bar — only shown once pages have text */}
+      {allPages.some((p) => p.text) && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 chunky-border">
+              <Volume2 className="h-4 w-4 text-primary" strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold">Audio narration</p>
+              <p className="text-xs text-muted-foreground">
+                {allPages.filter((p) => p.has_audio).length} of {allPages.filter((p) => p.text).length} pages narrated
+              </p>
+            </div>
+          </div>
+          <div className="ml-auto">
+            <button
+              onClick={handleNarrate}
+              disabled={narratingBook || allPages.filter((p) => p.text && !p.has_audio).length === 0}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
+            >
+              {narratingBook ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {narrateProgress ? `Narrating ${narrateProgress.done + 1} of ${narrateProgress.total}…` : "Starting…"}
+                </>
+              ) : (
+                <>
+                  <Mic className="h-4 w-4" strokeWidth={2.5} />
+                  {allPages.filter((p) => p.has_audio).length > 0 ? "Narrate remaining" : "Narrate all pages"}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Character consistency warning */}
       {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image) && (
         <div className="mb-4 flex items-center gap-3 rounded-2xl bg-highlight/60 px-4 py-3 chunky-border text-sm">
@@ -648,6 +812,8 @@ export default function EditorPage() {
             status={pageStatuses[page.id] ?? "idle"}
             elapsed={pageElapsed[page.id] ?? 0}
             onGenerate={() => handleGenerateSingle(page)}
+            onNarrate={() => handleNarrateOne(page)}
+            narrateStatus={pageNarrateStatuses[page.id] ?? "idle"}
           />
         ))}
       </div>
