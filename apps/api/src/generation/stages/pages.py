@@ -74,13 +74,26 @@ class PageStage:
                 word_max=word_max,
             )
             system = _build_page_system(age_range, word_min, word_max)
-            return await self._client.generate(
+            page = await self._client.generate(
                 prompt=prompt,
                 schema=GeneratedPage,
                 system=system,
                 model=self._model,
                 temperature=TEMP_PAGES,
             )
+            # Hard guard: if the model still exceeded the limit, trim to word_max words.
+            if not page.is_cover and page.text:
+                words = page.text.split()
+                if len(words) > word_max:
+                    trimmed = " ".join(words[:word_max])
+                    # End on a sentence boundary if possible.
+                    for end in (".", "!", "?"):
+                        idx = trimmed.rfind(end)
+                        if idx > len(trimmed) // 2:
+                            trimmed = trimmed[: idx + 1]
+                            break
+                    page = page.model_copy(update={"text": trimmed, "word_count": len(trimmed.split())})
+            return page
 
 
 def _build_page_system(age_range: str, word_min: int, word_max: int) -> str:

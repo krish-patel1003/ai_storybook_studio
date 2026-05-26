@@ -47,11 +47,38 @@ function useAuthBlob(url: string, token: string | null, enabled: boolean) {
 
 // ── Single book page ──────────────────────────────────────────────────────────
 
+// ── Auto-fit text hook ────────────────────────────────────────────────────────
+// Shrinks font-size step by step until the text fits its container.
+
+function useTextFit(text: string | null | undefined) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const el = textRef.current;
+    if (!container || !el || !text) return;
+
+    // Reset to base size before measuring.
+    el.style.fontSize = "";
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    const minSize = 9;
+
+    while (el.scrollHeight > container.clientHeight && size > minSize) {
+      size -= 0.5;
+      el.style.fontSize = `${size}px`;
+    }
+  }, [text]);
+
+  return { containerRef, textRef };
+}
+
 const BookPage = forwardRef<
   HTMLDivElement,
   { page: PageOut; bookId: string; token: string | null }
 >(({ page, bookId, token }, ref) => {
   const imgUrl = useAuthBlob(pageImageUrl(bookId, page.id), token, page.has_image);
+  const { containerRef, textRef } = useTextFit(page.text);
 
   return (
     <div ref={ref} className="relative overflow-hidden bg-card select-none" style={{ height: "100%" }}>
@@ -69,13 +96,17 @@ const BookPage = forwardRef<
           </div>
         )}
       </div>
-      <div className="absolute inset-x-0 bottom-0 overflow-hidden border-t-[2.5px] border-foreground bg-card px-4 py-3" style={{ height: "32%" }}>
+      <div
+        ref={containerRef}
+        className="absolute inset-x-0 bottom-0 overflow-hidden border-t-[2.5px] border-foreground bg-card px-4 py-3"
+        style={{ height: "32%" }}
+      >
         {page.is_cover ? (
-          <h2 className="text-center font-display text-lg font-black leading-tight overflow-hidden">
+          <h2 ref={textRef as React.RefObject<HTMLHeadingElement>} className="text-center font-display text-lg font-black leading-tight">
             {page.text ?? ""}
           </h2>
         ) : (
-          <p className="font-sans text-sm leading-relaxed overflow-hidden">
+          <p ref={textRef as React.RefObject<HTMLParagraphElement>} className="font-sans text-sm leading-relaxed">
             {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
           </p>
         )}
