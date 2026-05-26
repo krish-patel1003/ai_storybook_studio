@@ -8,7 +8,7 @@ from src.generation.constants import (
     WORD_LIMITS,
 )
 from src.generation.llm_client import LLMClient
-from src.generation.prompts.system import PAGES
+from src.generation.prompts.system import PAGES, _AGE_VOICE
 from src.generation.schemas import (
     CharacterSheet,
     GeneratedPage,
@@ -84,10 +84,12 @@ class PageStage:
 
 
 def _build_page_system(age_range: str, word_min: int, word_max: int) -> str:
+    voice = _AGE_VOICE.get(age_range, "")
     return (
         PAGES
-        + f"\n\nWord limit for age range {age_range}: {word_min}–{word_max} words per page. "
-        f"Do not exceed {word_max} words. Do not pad if the beat is naturally shorter than {word_min}."
+        + f"\n\n{voice}"
+        + f"\nWORD COUNT: {word_min}–{word_max} words for this page. "
+        f"Do not exceed {word_max}. Do not pad to hit {word_min} if the beat is naturally shorter."
     )
 
 

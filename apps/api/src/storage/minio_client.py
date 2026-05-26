@@ -72,3 +72,34 @@ def delete_image(key: str) -> None:
         _client().remove_object(settings.MINIO_BUCKET, key)
     except S3Error:
         pass
+
+
+def character_key(book_id: str, character_id: str) -> str:
+    return f"characters/{book_id}/{character_id}.png"
+
+
+def upload(key: str, data: bytes, mime_type: str = "image/png") -> str:
+    """Generic upload; returns the key."""
+    from src.config import settings
+    ensure_bucket()
+    _client().put_object(
+        settings.MINIO_BUCKET,
+        key,
+        io.BytesIO(data),
+        length=len(data),
+        content_type=mime_type,
+    )
+    return key
+
+
+def download(key: str) -> tuple[bytes, str]:
+    """Generic download; returns (bytes, content_type)."""
+    from src.config import settings
+    response = _client().get_object(settings.MINIO_BUCKET, key)
+    try:
+        data = response.read()
+        content_type = response.headers.get("content-type", "image/png")
+    finally:
+        response.close()
+        response.release_conn()
+    return data, content_type

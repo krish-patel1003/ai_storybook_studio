@@ -21,6 +21,7 @@ from src.generation.schemas import (
 )
 from src.generation.stages.characters import CharacterStage
 from src.generation.stages.enhance import EnhanceStage
+from src.generation.stages.character_sheet import CharacterSheetStage, GeneratedCharacterSheet
 from src.generation.stages.image import GeneratedImage, ImageStage
 from src.generation.stages.outline import OutlineStage
 from src.generation.stages.pages import PageStage
@@ -90,6 +91,7 @@ class StoryPipeline:
         self._pages = PageStage(client, model=quality)
         self._recalibrate = RecalibrateStage(client, model=fast)
         self._image = ImageStage(api_key=api_key)
+        self._char_sheet = CharacterSheetStage(api_key=api_key)
 
     async def generate(
         self,
@@ -141,22 +143,39 @@ class StoryPipeline:
             locked_orders=locked_orders,
         )
 
+    async def generate_character_sheets(
+        self,
+        *,
+        characters: list,
+        art_style: str,
+        visual_seed: int,
+    ) -> list[GeneratedCharacterSheet]:
+        return await self._char_sheet.run(
+            characters=characters,
+            art_style=art_style,
+            visual_seed=visual_seed,
+        )
+
     async def illustrate(
         self,
         *,
         pages: list,
         visual_seed: int,
+        character_refs: dict[str, bytes] | None = None,
     ) -> list[GeneratedImage]:
         """Generate illustrations for all pages that have illustration_metadata."""
-        return await self._image.run(pages=pages, visual_seed=visual_seed)
+        return await self._image.run(pages=pages, visual_seed=visual_seed, character_refs=character_refs)
 
     async def illustrate_single(
         self,
         *,
         page,
         visual_seed: int,
+        character_refs: dict[str, bytes] | None = None,
     ) -> GeneratedImage:
-        results = await self._image.run(pages=[page], visual_seed=visual_seed)
+        results = await self._image.run(
+            pages=[page], visual_seed=visual_seed, character_refs=character_refs
+        )
         return results[0]
 
     async def regenerate_pages(

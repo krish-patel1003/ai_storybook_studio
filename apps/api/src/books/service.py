@@ -328,6 +328,41 @@ async def recalibrate_book(
 # ── Illustration ─────────────────────────────────────────────────────────────
 
 
+async def generate_character_sheets(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from src.storage import minio_client as mc
+
+    book = await get_book(db, book_id, user_id)
+    if not book.characters:
+        raise ValueError("Book has no characters")
+
+    pipeline = _pipeline()
+    sheets = await pipeline.generate_character_sheets(
+        characters=book.characters,
+        art_style=book.art_style,
+        visual_seed=book.visual_seed,
+    )
+
+    sheet_map = {s.character_id: s for s in sheets}
+    for char in book.characters:
+        sheet = sheet_map.get(str(char.id))
+        if sheet:
+            if char.reference_image_key:
+                mc.delete_image(char.reference_image_key)
+            key = mc.upload(
+                mc.character_key(str(book_id), str(char.id)),
+                sheet.image_data,
+                sheet.mime_type,
+            )
+            char.reference_image_key = key
+
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
 async def illustrate_page(
     db: AsyncSession,
     book_id: uuid.UUID,
@@ -343,10 +378,24 @@ async def illustrate_page(
     if page.illustration_metadata is None:
         raise ValueError("Page has no illustration metadata yet")
 
-    pipeline = _pipeline()
-    img = await pipeline.illustrate_single(page=page, visual_seed=book.visual_seed)
+    # Fetch character reference images for characters present on this page
+    character_refs: dict[str, bytes] = {}
+    present = set(page.characters_present or [])
+    for char in book.characters:
+        if char.name in present and char.reference_image_key:
+            try:
+                data, _ = minio_client.download(char.reference_image_key)
+                character_refs[char.name] = data
+            except Exception:
+                pass  # missing ref is non-fatal — fall back to text-only
 
-    # Upload to MinIO; delete old object if regenerating
+    pipeline = _pipeline()
+    img = await pipeline.illustrate_single(
+        page=page,
+        visual_seed=book.visual_seed,
+        character_refs=character_refs if character_refs else None,
+    )
+
     if page.image_key:
         minio_client.delete_image(page.image_key)
     key = minio_client.upload_image(
@@ -432,6 +481,30 @@ async def add_character(
     ))
     await db.commit()
     return await get_book(db, book_id, user_id)
+
+
+# ── Export ────────────────────────────────────────────────────────────────────
+
+async def build_export_pages(db: AsyncSession, book: Book) -> list:
+    """Download all page images from MinIO and return ExportPage list."""
+    from src.books.export import ExportPage
+    from src.storage import minio_client
+
+    result = []
+    for page in sorted(book.pages, key=lambda p: p.order):
+        image_bytes = None
+        if page.image_key:
+            try:
+                image_bytes, _ = minio_client.download_image(page.image_key)
+            except Exception:
+                pass
+        result.append(ExportPage(
+            order=page.order,
+            is_cover=page.is_cover,
+            text=page.text,
+            image_bytes=image_bytes,
+        ))
+    return result
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────

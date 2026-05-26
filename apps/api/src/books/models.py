@@ -106,6 +106,7 @@ class Character(Base):
     personality: Mapped[str] = mapped_column(Text, nullable=False)
     visual_anchors: Mapped[list] = mapped_column(JSONB, nullable=False)
     illustration_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    reference_image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     book: Mapped["Book"] = relationship(back_populates="characters")
 

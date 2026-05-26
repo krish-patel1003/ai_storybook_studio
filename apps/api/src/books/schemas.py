@@ -72,8 +72,15 @@ class CharacterOut(BaseModel):
     personality: str
     visual_anchors: list[str]
     illustration_prompt: str
+    reference_image_key: str | None = Field(default=None, exclude=True)
+    has_reference_image: bool = False
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _set_has_ref_image(self) -> "CharacterOut":
+        self.has_reference_image = self.reference_image_key is not None
+        return self
 
 
 class PageOut(BaseModel):
