@@ -98,12 +98,15 @@ class PageOut(BaseModel):
     illustration_metadata: IllustrationMetadata | None
     image_key: str | None = Field(default=None, exclude=True)
     has_image: bool = False
+    audio_key: str | None = Field(default=None, exclude=True)
+    has_audio: bool = False
 
     model_config = {"from_attributes": True}
 
     @model_validator(mode="after")
-    def _set_has_image(self) -> "PageOut":
+    def _set_flags(self) -> "PageOut":
         self.has_image = self.image_key is not None
+        self.has_audio = self.audio_key is not None
         return self
 
 

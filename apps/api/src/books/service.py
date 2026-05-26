@@ -409,6 +409,51 @@ async def illustrate_page(
     return await get_book(db, book_id, user_id)
 
 
+# ── Narration ────────────────────────────────────────────────────────────────
+
+async def narrate_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    page_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from src.storage import minio_client
+    from src.generation.tts import synthesize
+
+    book = await get_book(db, book_id, user_id)
+    page = next((p for p in book.pages if p.id == page_id), None)
+    if page is None:
+        raise NotFoundError("Page not found")
+    if not page.text:
+        raise ValueError("Page has no text yet")
+
+    raw_key = f"audio/{book_id}/{page_id}.raw.pcm"
+    wav = await synthesize(page.text, debug_raw_key=raw_key)
+
+    if page.audio_key:
+        try:
+            minio_client.delete_image(page.audio_key)
+        except Exception:
+            pass
+    key = minio_client.upload_audio(str(book_id), str(page_id), wav)
+    page.audio_key = key
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def narrate_book(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    """Narrate all pages that have text but no audio yet."""
+    book = await get_book(db, book_id, user_id)
+    pages_to_narrate = [p for p in book.pages if p.text and not p.audio_key]
+    for page in pages_to_narrate:
+        await narrate_page(db, book_id, page.id, user_id)
+    return await get_book(db, book_id, user_id)
+
+
 # ── Delete & update ───────────────────────────────────────────────────────────
 
 async def delete_book(

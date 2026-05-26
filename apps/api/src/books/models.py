@@ -146,4 +146,7 @@ class Page(Base):
     # MinIO object key — set after illustration is uploaded (null = not yet illustrated)
     image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # MinIO object key — set after narration is generated (null = not yet narrated)
+    audio_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     book: Mapped["Book"] = relationship(back_populates="pages")

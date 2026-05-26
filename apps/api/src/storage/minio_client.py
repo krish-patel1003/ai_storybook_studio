@@ -103,3 +103,33 @@ def download(key: str) -> tuple[bytes, str]:
         response.close()
         response.release_conn()
     return data, content_type
+
+
+def audio_key(book_id: str, page_id: str) -> str:
+    return f"audio/{book_id}/{page_id}.wav"
+
+
+def upload_audio(book_id: str, page_id: str, data: bytes) -> str:
+    """Upload WAV audio bytes; returns the object key."""
+    from src.config import settings
+    ensure_bucket()
+    key = audio_key(book_id, page_id)
+    _client().put_object(
+        settings.MINIO_BUCKET,
+        key,
+        io.BytesIO(data),
+        length=len(data),
+        content_type="audio/wav",
+    )
+    return key
+
+
+def download_audio(key: str) -> bytes:
+    """Download audio; returns raw bytes."""
+    from src.config import settings
+    response = _client().get_object(settings.MINIO_BUCKET, key)
+    try:
+        return response.read()
+    finally:
+        response.close()
+        response.release_conn()

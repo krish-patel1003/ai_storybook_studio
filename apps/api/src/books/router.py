@@ -362,6 +362,79 @@ async def get_page_image(
     return Response(content=data, media_type=content_type)
 
 
+@router.post("/{book_id}/pages/{page_id}/narrate", response_model=BookOut)
+async def narrate_page(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.narrate_page(db, book.id, page_id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/narrate", response_model=BookOut)
+async def narrate_book(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    """Narrate all un-narrated pages in the book sequentially."""
+    updated = await service.narrate_book(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.get("/{book_id}/pages/{page_id}/audio")
+async def get_page_audio(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> Response:
+    from fastapi import HTTPException
+    from sqlalchemy import select as sa_select
+    from src.books.models import Page
+    from src.storage import minio_client
+    from fastapi.responses import Response as FastAPIResponse
+
+    result = await db.execute(
+        sa_select(Page.audio_key).where(
+            Page.id == page_id, Page.book_id == book.id
+        )
+    )
+    row = result.one_or_none()
+    if row is None or row.audio_key is None:
+        raise HTTPException(status_code=404, detail="Audio not generated yet")
+
+    data = minio_client.download_audio(row.audio_key)
+    return FastAPIResponse(content=data, media_type="audio/wav")
+
+
+@router.get("/{book_id}/pages/{page_id}/audio/raw")
+async def get_page_audio_raw(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> Response:
+    """Download the raw PCM debug file for a page (saved alongside the WAV)."""
+    from fastapi import HTTPException
+    from src.config import settings
+    from src.storage import minio_client
+    from fastapi.responses import Response as FastAPIResponse
+
+    raw_key = f"audio/{book.id}/{page_id}.raw.pcm"
+    try:
+        response = minio_client._client().get_object(settings.MINIO_BUCKET, raw_key)
+        data = response.read()
+        response.close()
+        response.release_conn()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Raw PCM not found — narrate the page first")
+
+    return FastAPIResponse(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename=\"page_{page_id}.raw.pcm\""},
+    )
+
+
 @router.post("/{book_id}/pages", response_model=BookOut, status_code=status.HTTP_201_CREATED)
 async def add_page(
     data: AddPageIn,

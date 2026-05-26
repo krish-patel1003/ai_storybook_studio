@@ -17,3 +17,5 @@ minio==7.2.15
 fpdf2==2.8.3
 Pillow==11.2.1
 ebooklib==0.18
+numpy>=1.26.0
+soundfile>=0.12.1
