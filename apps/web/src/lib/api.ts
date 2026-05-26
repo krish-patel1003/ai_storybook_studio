@@ -67,6 +67,7 @@ export interface PageOut {
   word_count: number | null;
   illustration_metadata: IllustrationMetadata | null;
   has_image: boolean;
+  has_audio: boolean;
 }
 
 export function pageImageUrl(bookId: string, pageId: string): string {
@@ -378,5 +379,20 @@ export const api = {
 
     getPublicBook: (bookId: string) =>
       request<BookOut>(`/books/public/${bookId}`),
+
+    narratePage: (token: string, bookId: string, pageId: string) =>
+      request<BookOut>(`/books/${bookId}/pages/${pageId}/narrate`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    narrateBook: (token: string, bookId: string) =>
+      request<BookOut>(`/books/${bookId}/narrate`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    pageAudioUrl: (bookId: string, pageId: string) =>
+      `${API_URL}/books/${bookId}/pages/${pageId}/audio`,
   },
 };
