@@ -41,6 +41,7 @@ export interface CharacterOut {
   personality: string;
   visual_anchors: string[];
   illustration_prompt: string;
+  has_reference_image: boolean;
 }
 
 export interface IllustrationMetadata {
@@ -71,6 +72,16 @@ export interface PageOut {
 export function pageImageUrl(bookId: string, pageId: string): string {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "";
   return `${base}/books/${bookId}/pages/${pageId}/image`;
+}
+
+export function characterImageUrl(bookId: string, characterId: string): string {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
+  return `${base}/books/${bookId}/characters/${characterId}/image`;
+}
+
+export function publicPageImageUrl(bookId: string, pageId: string): string {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
+  return `${base}/books/public/${bookId}/pages/${pageId}/image`;
 }
 
 export type GenerationStage =
@@ -319,6 +330,12 @@ export const api = {
         headers: authed(token),
       }),
 
+    generateCharacterSheets: (token: string, bookId: string) =>
+      request<BookOut>(`/books/${bookId}/characters/sheets`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
     addCharacter: (token: string, bookId: string, data: AddCharacterIn) =>
       request<BookOut>(`/books/${bookId}/characters`, {
         method: "POST",
@@ -352,5 +369,14 @@ export const api = {
         headers: authed(token),
         body: JSON.stringify({ visibility }),
       }),
+
+    exportPdf: (token: string, bookId: string): Promise<globalThis.Response> =>
+      fetch(`${API_URL}/books/${bookId}/export/pdf`, { headers: authed(token) }),
+
+    exportEpub: (token: string, bookId: string): Promise<globalThis.Response> =>
+      fetch(`${API_URL}/books/${bookId}/export/epub`, { headers: authed(token) }),
+
+    getPublicBook: (bookId: string) =>
+      request<BookOut>(`/books/public/${bookId}`),
   },
 };

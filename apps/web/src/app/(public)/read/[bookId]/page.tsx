@@ -3,12 +3,9 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { forwardRef, useRef, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
-import { useBook } from "@/lib/book-store";
-import { pageImageUrl } from "@/lib/api";
-import type { PageOut } from "@/lib/api";
+import { useParams } from "next/navigation";
+import { ChevronLeft, ChevronRight, ImageIcon, BookOpen } from "lucide-react";
+import { api, publicPageImageUrl, type BookOut, type PageOut } from "@/lib/api";
 import type { HTMLFlipBookRef, HTMLFlipBookProps } from "react-pageflip";
 
 const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
@@ -16,50 +13,19 @@ const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
   { ssr: false }
 ) as React.ForwardRefExoticComponent<HTMLFlipBookProps & React.RefAttributes<HTMLFlipBookRef>>;
 
-// ── Authenticated image hook ──────────────────────────────────────────────────
-
-function useAuthImage(url: string, token: string | null, hasImage: boolean) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!hasImage || !token) { setBlobUrl(null); return; }
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => {
-        if (blob && !cancelled) {
-          objectUrl = URL.createObjectURL(blob);
-          setBlobUrl(objectUrl);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [url, token, hasImage]);
-
-  return blobUrl;
-}
-
 // ── Single book page (must use forwardRef for react-pageflip) ────────────────
 
 const BookPage = forwardRef<
   HTMLDivElement,
-  { page: PageOut; bookId: string; token: string | null }
->(({ page, bookId, token }, ref) => {
-  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
-
+  { page: PageOut; bookId: string }
+>(({ page, bookId }, ref) => {
   return (
     <div ref={ref} className="relative overflow-hidden bg-card select-none" style={{ height: "100%" }}>
       {/* Illustration — top 68% */}
       <div className="absolute inset-x-0 top-0 overflow-hidden bg-muted" style={{ height: "68%" }}>
-        {blobUrl ? (
+        {page.has_image ? (
           <img
-            src={blobUrl}
+            src={publicPageImageUrl(bookId, page.id)}
             alt={page.is_cover ? "Cover" : `Page ${page.order}`}
             className="h-full w-full object-cover"
             draggable={false}
@@ -78,7 +44,7 @@ const BookPage = forwardRef<
             {page.text ?? ""}
           </h2>
         ) : (
-          <p className="font-sans text-sm leading-relaxed overflow-hidden">
+          <p className="font-display text-sm leading-relaxed overflow-hidden">
             {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
           </p>
         )}
@@ -88,7 +54,7 @@ const BookPage = forwardRef<
 });
 BookPage.displayName = "BookPage";
 
-// ── Back cover (last page — makes the book close cleanly) ────────────────────
+// ── Back cover ───────────────────────────────────────────────────────────────
 
 const BackCover = forwardRef<HTMLDivElement, { title: string }>(({ title }, ref) => (
   <div ref={ref} className="flex flex-col items-center justify-between overflow-hidden bg-primary select-none p-8">
@@ -110,50 +76,82 @@ const BackCover = forwardRef<HTMLDivElement, { title: string }>(({ title }, ref)
 ));
 BackCover.displayName = "BackCover";
 
-// ── Reader ────────────────────────────────────────────────────────────────────
+// ── Not found state ───────────────────────────────────────────────────────────
 
-export default function ReaderPage() {
-  const router = useRouter();
-  const { token } = useAuth();
-  const { book } = useBook();
+function BookNotFound() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-6 py-32 text-center px-4">
+      <div className="grid h-24 w-24 place-items-center rounded-3xl bg-muted chunky-border">
+        <BookOpen className="h-10 w-10 text-muted-foreground" strokeWidth={1.5} />
+      </div>
+      <div>
+        <h2 className="font-display text-2xl font-black">Book not found</h2>
+        <p className="mt-1 text-muted-foreground">This book doesn&apos;t exist or isn&apos;t public.</p>
+      </div>
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+      >
+        View on AI Storybook Studio
+      </Link>
+    </div>
+  );
+}
+
+// ── Public reader ─────────────────────────────────────────────────────────────
+
+export default function PublicReaderPage() {
+  const params = useParams();
+  const bookId = params.bookId as string;
+
+  const [book, setBook] = useState<BookOut | null | "not_found">(null);
   const bookRef = useRef<HTMLFlipBookRef>(null);
   const [currentPage, setCurrentPage] = useState(0);
 
   useEffect(() => {
-    if (book === null) router.replace("/library");
-  }, [book, router]);
+    if (!bookId) return;
+    api.books.getPublicBook(bookId)
+      .then((b) => setBook(b))
+      .catch(() => setBook("not_found"));
+  }, [bookId]);
 
-  if (!book) return null;
+  if (book === null) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (book === "not_found") {
+    return (
+      <main className="min-h-screen bg-background">
+        <BookNotFound />
+      </main>
+    );
+  }
 
   const pages = [...book.pages].sort((a, b) => a.order - b.order);
   const totalPages = pages.length + 1; // +1 for back cover
+  const title = book.brief?.title ?? book.title;
 
   function goNext() { bookRef.current?.pageFlip().flipNext(); }
   function goPrev() { bookRef.current?.pageFlip().flipPrev(); }
 
   return (
-    <main className="flex h-[calc(100vh-4rem)] flex-col bg-background overflow-hidden">
+    <main className="flex h-screen flex-col bg-background overflow-hidden">
       {/* Title bar */}
       <div className="flex shrink-0 items-center justify-between border-b-[2px] border-foreground/20 px-5 py-2.5">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/editor"
-            className="rounded-full bg-card p-2 chunky-border transition-transform hover:-translate-y-0.5"
-          >
-            <ArrowLeft className="h-4 w-4" strokeWidth={3} />
-          </Link>
-          <span className="font-display text-base font-black md:text-lg">
-            {book.brief?.title ?? book.title}
-          </span>
-        </div>
-        <span className="text-sm font-bold text-muted-foreground">
-          {currentPage === 0 ? "Cover"
-            : currentPage === totalPages - 1 ? "The End"
-            : `Page ${currentPage} of ${totalPages - 2}`}
-        </span>
+        <span className="font-display text-base font-black md:text-lg">{title}</span>
+        <Link
+          href="/"
+          className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          View on AI Storybook Studio →
+        </Link>
       </div>
 
-      {/* Flip book — flex-1 + min-h-0 gives it a bounded height */}
+      {/* Flip book */}
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 py-6">
         <HTMLFlipBook
           ref={bookRef}
@@ -174,13 +172,13 @@ export default function ReaderPage() {
           onFlip={(e: { data: number }) => setCurrentPage(e.data)}
         >
           {pages.map((page) => (
-            <BookPage key={page.id} page={page} bookId={book.id} token={token} />
+            <BookPage key={page.id} page={page} bookId={bookId} />
           ))}
-          <BackCover title={book.brief?.title ?? book.title} />
+          <BackCover title={title} />
         </HTMLFlipBook>
       </div>
 
-      {/* Bottom nav — part of flex column so it never overlaps the book */}
+      {/* Bottom nav */}
       <div className="shrink-0 border-t-[2.5px] border-foreground bg-card">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <button
@@ -192,17 +190,11 @@ export default function ReaderPage() {
           </button>
 
           <div className="flex items-center gap-2">
-            {Array.from({ length: totalPages }).map((_, i) => (
-              <button
-                key={i}
-                onClick={() => bookRef.current?.pageFlip().flip(i)}
-                className={`h-2 rounded-full transition-all ${
-                  i === currentPage
-                    ? "w-6 bg-primary"
-                    : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/60"
-                }`}
-              />
-            ))}
+            <span className="text-sm font-bold text-muted-foreground">
+              {currentPage === 0 ? "Cover"
+                : currentPage === totalPages - 1 ? "The End"
+                : `Page ${currentPage} of ${totalPages - 2}`}
+            </span>
           </div>
 
           <button

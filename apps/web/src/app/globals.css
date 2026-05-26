@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Nunito:wght@400;600;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@700&family=Nunito:wght@400;600;800&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -47,7 +47,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-highlight: var(--highlight);
   --color-highlight-foreground: var(--highlight-foreground);
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-display: "Fredoka", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
 }
 

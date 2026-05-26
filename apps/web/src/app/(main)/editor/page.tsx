@@ -15,10 +15,14 @@ import {
   Clock,
   SkipForward,
   Eye,
+  Download,
+  Link2,
+  Share2,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, pageImageUrl, type PageOut } from "@/lib/api";
+import { api, pageImageUrl, type PageOut, type BookOut } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { toast } from "sonner";
 
@@ -223,6 +227,164 @@ function PageCard({
   );
 }
 
+// ── Export modal ──────────────────────────────────────────────────────────────
+
+function ExportModal({ book, token, onClose }: { book: BookOut; token: string | null; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingEpub, setDownloadingEpub] = useState(false);
+  const [makingPublic, setMakingPublic] = useState(false);
+  const [isPublic, setIsPublic] = useState(book.visibility === "public");
+  const { updateBook } = useBook();
+
+  const shareUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/read/public/${book.id}`
+    : "";
+
+  async function handleShare() {
+    if (!token) return;
+    setMakingPublic(true);
+    try {
+      if (!isPublic) {
+        const updated = await api.books.updateVisibility(token, book.id, "public");
+        updateBook({ visibility: updated.visibility });
+        setIsPublic(true);
+      }
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      toast.success("Link copied!");
+    } catch {
+      toast.error("Failed to copy link");
+    } finally {
+      setMakingPublic(false);
+    }
+  }
+
+  async function downloadFile(fetcher: Promise<Response>, filename: string) {
+    const res = await fetcher;
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handlePdf() {
+    if (!token) return;
+    setDownloadingPdf(true);
+    try {
+      const title = book.brief?.title ?? book.title;
+      await downloadFile(api.books.exportPdf(token, book.id), `${title}.pdf`);
+      toast.success("PDF downloaded!");
+    } catch {
+      toast.error("PDF export failed");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
+  async function handleEpub() {
+    if (!token) return;
+    setDownloadingEpub(true);
+    try {
+      const title = book.brief?.title ?? book.title;
+      await downloadFile(api.books.exportEpub(token, book.id), `${title}.epub`);
+      toast.success("EPUB downloaded!");
+    } catch {
+      toast.error("EPUB export failed");
+    } finally {
+      setDownloadingEpub(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-3xl bg-card p-6 chunky-border chunky-shadow-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="font-display text-2xl font-black">Export book</h2>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full bg-background chunky-border hover:bg-secondary">
+            <X className="h-4 w-4" strokeWidth={2.5} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {/* Shareable link */}
+          <div className="rounded-2xl bg-background p-4 chunky-border">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 chunky-border">
+                <Link2 className="h-5 w-5 text-primary" strokeWidth={2.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-display text-base font-black">Shareable link</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isPublic ? "Anyone with the link can view this book." : "Makes your book public then copies the link."}
+                </p>
+                {isPublic && (
+                  <p className="mt-1.5 truncate rounded-lg bg-muted px-2 py-1 text-xs font-mono text-muted-foreground">
+                    {shareUrl}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={handleShare}
+              disabled={makingPublic}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border disabled:opacity-60"
+            >
+              {makingPublic ? <Loader2 className="h-4 w-4 animate-spin" /> : copied ? <Check className="h-4 w-4" strokeWidth={3} /> : <Share2 className="h-4 w-4" strokeWidth={2.5} />}
+              {copied ? "Copied!" : isPublic ? "Copy link" : "Make public & copy link"}
+            </button>
+          </div>
+
+          {/* PDF */}
+          <div className="rounded-2xl bg-background p-4 chunky-border">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/50 chunky-border">
+                <Download className="h-5 w-5 text-foreground" strokeWidth={2.5} />
+              </div>
+              <div className="flex-1">
+                <p className="font-display text-base font-black">Download PDF</p>
+                <p className="text-xs text-muted-foreground mt-0.5">A5 print-ready, all illustrations + text.</p>
+              </div>
+            </div>
+            <button
+              onClick={handlePdf}
+              disabled={downloadingPdf}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-2.5 text-sm font-extrabold text-background chunky-border disabled:opacity-60"
+            >
+              {downloadingPdf ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download PDF</>}
+            </button>
+          </div>
+
+          {/* EPUB */}
+          <div className="rounded-2xl bg-background p-4 chunky-border">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-highlight chunky-border">
+                <Download className="h-5 w-5 text-foreground" strokeWidth={2.5} />
+              </div>
+              <div className="flex-1">
+                <p className="font-display text-base font-black">Download EPUB</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Kindle-ready. Send to your device via email.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleEpub}
+              disabled={downloadingEpub}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-2.5 text-sm font-extrabold text-background chunky-border disabled:opacity-60"
+            >
+              {downloadingEpub ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download EPUB</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type Mode = "one-by-one" | "all";
@@ -234,6 +396,7 @@ export default function EditorPage() {
   const { book, updateBook } = useBook();
   const lastSaved = useRelativeTime(book?.updated_at);
 
+  const [showExport, setShowExport] = useState(false);
   const [mode, setMode] = useState<Mode>("one-by-one");
   const [concurrency, setConcurrency] = useState<Concurrency>("sync");
   const [pageStatuses, setPageStatuses] = useState<Record<string, PageStatus>>({});
@@ -325,21 +488,33 @@ export default function EditorPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
+      {showExport && (
+        <ExportModal book={book as BookOut} token={token} onClose={() => setShowExport(false)} />
+      )}
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <Link href="/outline" className="inline-flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Outline
           </Link>
-          {illustratedCount > 0 && (
-            <Link
-              href="/reader"
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+          <div className="flex items-center gap-2">
+            {illustratedCount > 0 && (
+              <Link
+                href="/reader"
+                className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+              >
+                <Eye className="h-4 w-4" strokeWidth={2.5} />
+                Preview book
+              </Link>
+            )}
+            <button
+              onClick={() => setShowExport(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-extrabold text-background chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
             >
-              <Eye className="h-4 w-4" strokeWidth={2.5} />
-              Preview book
-            </Link>
-          )}
+              <Download className="h-4 w-4" strokeWidth={2.5} />
+              Export
+            </button>
+          </div>
         </div>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -449,6 +624,18 @@ export default function EditorPage() {
           )}
         </div>
       </div>
+
+      {/* Character consistency warning */}
+      {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image) && (
+        <div className="mb-4 flex items-center gap-3 rounded-2xl bg-highlight/60 px-4 py-3 chunky-border text-sm">
+          <Sparkles className="h-4 w-4 shrink-0 text-foreground" strokeWidth={2.5} />
+          <span className="font-bold">Character sheets not generated.</span>
+          <span className="text-muted-foreground">Illustrations may lack character consistency.</span>
+          <Link href="/outline" className="ml-auto shrink-0 text-xs font-extrabold underline underline-offset-2">
+            Generate sheets →
+          </Link>
+        </div>
+      )}
 
       {/* Page grid */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   GripVertical,
@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, type PageOut } from "@/lib/api";
+import { api, characterImageUrl, type CharacterOut, type PageOut } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { toast } from "sonner";
 
@@ -275,6 +275,92 @@ function AddCharacterModal({
   );
 }
 
+// ── Character card with reference image ───────────────────────────────────────
+
+function useAuthImage(url: string, token: string | null, hasImage: boolean) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hasImage || !token) { setBlobUrl(null); return; }
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (blob && !cancelled) {
+          objectUrl = URL.createObjectURL(blob);
+          setBlobUrl(objectUrl);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, token, hasImage]);
+  return blobUrl;
+}
+
+function CharacterCard({
+  character, bookId, token, regenerating, onRegenerate,
+}: {
+  character: CharacterOut;
+  bookId: string;
+  token: string | null;
+  regenerating: boolean;
+  onRegenerate: () => void;
+}) {
+  const imgUrl = characterImageUrl(bookId, character.id);
+  const blobUrl = useAuthImage(imgUrl, token, character.has_reference_image);
+
+  return (
+    <div className="rounded-2xl bg-background p-3 chunky-border">
+      <div className="flex items-center gap-3">
+        {/* Avatar / reference image */}
+        <div className="relative grid h-14 w-14 shrink-0 place-items-center rounded-xl overflow-hidden chunky-border">
+          {blobUrl ? (
+            <img src={blobUrl} alt={character.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full w-full place-items-center bg-primary/10 font-display text-2xl font-black text-primary">
+              {character.name.charAt(0)}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-lg font-black truncate">{character.name}</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {character.has_reference_image ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-accent-foreground">
+                <Check className="h-3 w-3" strokeWidth={3} /> Sheet ready
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">
+                No sheet yet
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={onRegenerate}
+          disabled={regenerating}
+          title="Regenerate reference sheet"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-secondary disabled:opacity-40"
+        >
+          {regenerating
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {character.visual_anchors.map((t) => (
+          <span key={t} className="rounded-full bg-accent/50 px-2 py-0.5 text-xs font-bold text-accent-foreground">
+            {t}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── No-book placeholder ───────────────────────────────────────────────────────
 
 function NoBook() {
@@ -316,11 +402,14 @@ export default function OutlinePage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [expandedTextId, setExpandedTextId] = useState<string | null>(null);
 
   const [addingPage, setAddingPage] = useState(false);
   const [savingPage, setSavingPage] = useState(false);
   const [showCharModal, setShowCharModal] = useState(false);
   const [savingChar, setSavingChar] = useState(false);
+  const [generatingSheets, setGeneratingSheets] = useState(false);
+  const [regeneratingCharId, setRegeneratingCharId] = useState<string | null>(null);
 
   if (!book) return <main className="mx-auto max-w-7xl px-4 py-10"><NoBook /></main>;
 
@@ -411,6 +500,34 @@ export default function OutlinePage() {
       toast.error(e.message ?? "Failed to add character");
     } finally {
       setSavingChar(false);
+    }
+  }
+
+  async function handleGenerateAllSheets() {
+    if (!token) return;
+    setGeneratingSheets(true);
+    try {
+      const updated = await api.books.generateCharacterSheets(token, book!.id);
+      updateBook({ characters: updated.characters });
+      toast.success("Character sheets generated!");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to generate character sheets");
+    } finally {
+      setGeneratingSheets(false);
+    }
+  }
+
+  async function handleRegenerateSheet(characterId: string) {
+    if (!token) return;
+    setRegeneratingCharId(characterId);
+    try {
+      const updated = await api.books.generateCharacterSheets(token, book!.id);
+      updateBook({ characters: updated.characters });
+      toast.success("Character sheet regenerated!");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to regenerate sheet");
+    } finally {
+      setRegeneratingCharId(null);
     }
   }
 
@@ -507,9 +624,17 @@ export default function OutlinePage() {
                           )}
                         </div>
                         {page.text && (
-                          <p className="mt-2 text-sm text-muted-foreground line-clamp-2 italic">
-                            &ldquo;{page.text}&rdquo;
-                          </p>
+                          <div className="mt-2">
+                            <p className={`text-sm text-muted-foreground italic ${expandedTextId === page.id ? "" : "line-clamp-2"}`}>
+                              &ldquo;{page.text}&rdquo;
+                            </p>
+                            <button
+                              onClick={() => setExpandedTextId(expandedTextId === page.id ? null : page.id)}
+                              className="mt-0.5 text-xs font-bold text-primary/70 hover:text-primary"
+                            >
+                              {expandedTextId === page.id ? "Show less ↑" : "Read more ↓"}
+                            </button>
+                          </div>
                         )}
                       </>
                     )}
@@ -580,39 +705,36 @@ export default function OutlinePage() {
         {/* Cast sidebar */}
         <aside className="lg:sticky lg:top-20 lg:self-start">
           <div className="rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
-            <h2 className="font-display text-2xl font-black">Cast</h2>
-            <p className="text-sm text-muted-foreground">Locked traits keep them consistent.</p>
-            <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-display text-2xl font-black">Cast</h2>
+              {book.characters.length > 0 && (
+                <button
+                  onClick={handleGenerateAllSheets}
+                  disabled={generatingSheets}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border disabled:opacity-50"
+                >
+                  {generatingSheets
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</>
+                    : <><Sparkles className="h-3 w-3" strokeWidth={2.5} /> Generate sheets</>}
+                </button>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">Reference images keep characters consistent across illustrations.</p>
+            <div className="space-y-3">
               {book.characters.length === 0 ? (
                 <p className="text-sm text-muted-foreground italic">No characters yet</p>
               ) : (
                 book.characters.map((c) => (
-                  <div key={c.id} className="rounded-2xl bg-background p-3 chunky-border">
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-primary/10 chunky-border font-display text-2xl font-black text-primary">
-                        {c.name.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-display text-lg font-black truncate">{c.name}</div>
-                        <div className="flex items-center gap-1 text-xs font-bold text-accent-foreground">
-                          <Lock className="h-3 w-3" /> {c.visual_anchors.length} visual anchors
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {c.visual_anchors.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-accent-foreground"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                  <CharacterCard
+                    key={c.id}
+                    character={c}
+                    bookId={book.id}
+                    token={token}
+                    regenerating={regeneratingCharId === c.id}
+                    onRegenerate={() => handleRegenerateSheet(c.id)}
+                  />
                 ))
               )}
-
               <button
                 onClick={() => setShowCharModal(true)}
                 className="flex w-full items-center justify-center gap-1.5 rounded-2xl border-[2.5px] border-dashed border-foreground/40 px-3 py-3 text-sm font-extrabold text-foreground/60 hover:bg-background hover:text-foreground"
