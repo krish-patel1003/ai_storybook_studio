@@ -1,7 +1,7 @@
 import uuid
 from typing import Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -197,46 +197,6 @@ async def get_public_page_image(
 
     data, content_type = minio_client.download_image(page_row.image_key)
     return Response(content=data, media_type=content_type)
-
-
-# ── SSE streaming generation (must be BEFORE /{book_id}) ─────────────────────
-
-@router.get("/{book_id}/generate/stream")
-async def generate_stream(
-    book_id: uuid.UUID,
-    art_style: str,
-    token: str,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Server-Sent Events endpoint that runs the full pipeline and streams
-    progress events. The Bearer token is passed as a query param because
-    the browser EventSource API cannot set custom headers.
-    """
-    from sse_starlette.sse import EventSourceResponse
-    from src.auth.utils import decode_access_token
-    from src.auth.exceptions import InvalidCredentials
-    from src.auth.models import User as UserModel
-    from src.books.stream_service import generate_book_stream
-
-    # Validate token manually (can't use Depends(current_user) — no Auth header)
-    try:
-        payload = decode_access_token(token)
-    except InvalidCredentials as exc:
-        raise HTTPException(status_code=401, detail=str(exc))
-
-    user = await db.get(UserModel, uuid.UUID(payload["sub"]))
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found or inactive")
-
-    resume_from = request.headers.get("last-event-id")
-
-    async def event_generator():
-        async for event in generate_book_stream(db, book_id, user.id, art_style, resume_from):
-            yield event
-
-    return EventSourceResponse(event_generator(), ping=15)
 
 
 @router.get("/{book_id}", response_model=BookOut)

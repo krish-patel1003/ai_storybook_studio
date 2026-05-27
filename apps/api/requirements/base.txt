@@ -19,4 +19,3 @@ Pillow==11.2.1
 ebooklib==0.18
 numpy>=1.26.0
 soundfile>=0.12.1
-sse-starlette==2.1.3

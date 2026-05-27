@@ -201,40 +201,6 @@ export interface CreateDraftIn {
   model_name: string;
 }
 
-// ── SSE types ─────────────────────────────────────────────────────────────────
-
-export type SSEStage = "writing" | "characters" | "illustrating" | "narrating";
-
-export interface StageChangeData {
-  stage: SSEStage;
-  page_total: number | null;
-}
-
-export interface PageDoneData {
-  stage: "illustrating" | "narrating";
-  page_id: string;
-  page_order: number;
-  done: number;
-  total: number;
-}
-
-export interface BookReadyData {
-  book_id: string;
-  book: BookOut;
-}
-
-export interface SSEErrorData {
-  message: string;
-  stage: string | null;
-}
-
-export interface GenerateStreamHandlers {
-  onStageChange: (data: StageChangeData) => void;
-  onPageDone: (data: PageDoneData) => void;
-  onBookReady: (data: BookReadyData) => void;
-  onError: (data: SSEErrorData) => void;
-}
-
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
@@ -428,46 +394,5 @@ export const api = {
 
     pageAudioUrl: (bookId: string, pageId: string) =>
       `${API_URL}/books/${bookId}/pages/${pageId}/audio`,
-
-    connectGenerateStream: (
-      token: string,
-      bookId: string,
-      artStyle: string,
-      handlers: GenerateStreamHandlers,
-    ): EventSource => {
-      const url = new URL(`${API_URL}/books/${bookId}/generate/stream`);
-      url.searchParams.set("token", token);
-      url.searchParams.set("art_style", artStyle);
-
-      const es = new EventSource(url.toString());
-
-      es.addEventListener("stage_change", (e: MessageEvent) => {
-        handlers.onStageChange(JSON.parse(e.data) as StageChangeData);
-      });
-
-      es.addEventListener("page_done", (e: MessageEvent) => {
-        handlers.onPageDone(JSON.parse(e.data) as PageDoneData);
-      });
-
-      es.addEventListener("book_ready", (e: MessageEvent) => {
-        handlers.onBookReady(JSON.parse(e.data) as BookReadyData);
-        es.close();
-      });
-
-      es.addEventListener("error", (e: Event) => {
-        const me = e as MessageEvent;
-        if (me.data) {
-          handlers.onError(JSON.parse(me.data) as SSEErrorData);
-        } else {
-          // Network-level error (no data field) — EventSource will auto-reconnect.
-          // Only treat as fatal if the connection is permanently closed.
-          if (es.readyState === EventSource.CLOSED) {
-            handlers.onError({ message: "Connection lost", stage: null });
-          }
-        }
-      });
-
-      return es;
-    },
   },
 };

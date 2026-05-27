@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowRight,
@@ -398,10 +398,6 @@ export default function CreatePage() {
   const [oneClickStage, setOneClickStage] = useState<OneClickStage>("writing");
   const [oneClickProgress, setOneClickProgress] = useState({ done: 0, total: 0 });
   const [oneClickBook, setOneClickBook] = useState<BookOut | null>(null);
-  const esRef = useRef<EventSource | null>(null);
-
-  // Clean up SSE connection on unmount
-  useEffect(() => () => { esRef.current?.close(); }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -511,7 +507,7 @@ export default function CreatePage() {
     }
   }
 
-  // ── One-click handler (SSE-driven) ─────────────────────────────────────────
+  // ── One-click handler ───────────────────────────────────────────────────────
 
   async function handleOneClick() {
     if (!token) { toast.error("Please sign in first"); return; }
@@ -521,10 +517,9 @@ export default function CreatePage() {
     setOneClickStage("writing");
     setOneClickProgress({ done: 0, total: 0 });
 
-    // 1. Create the draft record (fast POST — gives us a book_id for the SSE URL)
-    let savedDraft: BookOut;
     try {
-      savedDraft = await api.books.createDraft(token, {
+      // 1. Create draft using the user's selected options from step 1
+      const savedDraft = await api.books.createDraft(token, {
         raw_prompt: prompt,
         age_range: age,
         tone: tone.length > 0 ? tone : ["Whimsical"],
@@ -534,36 +529,52 @@ export default function CreatePage() {
         model_name: modelName,
       });
       setBook(savedDraft);
+
+      // 2. Generate full book text (blocks until complete)
+      const generated = await api.books.generate(token, savedDraft.id, "watercolor");
+      setBook(generated);
+
+      // 3. Generate character reference sheets
+      setOneClickStage("characters");
+      setOneClickProgress({ done: 0, total: 0 });
+      const withChars = await api.books.generateCharacterSheets(token, generated.id);
+      setBook(withChars);
+
+      // 4. Illustrate every page
+      setOneClickStage("illustrating");
+      const pages = [...withChars.pages].sort((a, b) => a.order - b.order);
+      setOneClickProgress({ done: 0, total: pages.length });
+
+      let currentBook = withChars;
+      for (let i = 0; i < pages.length; i++) {
+        const updated = await api.books.illustratePage(token, withChars.id, pages[i].id);
+        setBook(updated);
+        currentBook = updated;
+        setOneClickProgress({ done: i + 1, total: pages.length });
+      }
+
+      // 5. Narrate every page that has text
+      setOneClickStage("narrating");
+      const textPages = [...currentBook.pages]
+        .sort((a, b) => a.order - b.order)
+        .filter((p) => p.text);
+      setOneClickProgress({ done: 0, total: textPages.length });
+
+      for (let i = 0; i < textPages.length; i++) {
+        const updated = await api.books.narratePage(token, currentBook.id, textPages[i].id);
+        setBook(updated);
+        currentBook = updated;
+        setOneClickProgress({ done: i + 1, total: textPages.length });
+      }
+
+      // 6. Done — show completion screen
+      setOneClickStage("done");
+      setOneClickBook(currentBook);
+
     } catch (err: any) {
-      toast.error(err.message ?? "Failed to start book creation.");
+      toast.error(err.message ?? "Something went wrong. Please try again.");
       setOneClickRunning(false);
-      return;
     }
-
-    // 2. Open SSE stream — all heavy generation happens server-side
-    const artStyle = "watercolor";
-    const es = api.books.connectGenerateStream(token, savedDraft.id, artStyle, {
-      onStageChange: (data) => {
-        setOneClickStage(data.stage as OneClickStage);
-        setOneClickProgress({ done: 0, total: data.page_total ?? 0 });
-      },
-      onPageDone: (data) => {
-        setOneClickProgress((prev) => ({ ...prev, done: data.done }));
-      },
-      onBookReady: (data) => {
-        setBook(data.book);
-        setOneClickStage("done");
-        setOneClickBook(data.book);
-        esRef.current = null;
-      },
-      onError: (data) => {
-        toast.error(data.message ?? "Something went wrong. Please try again.");
-        setOneClickRunning(false);
-        esRef.current = null;
-      },
-    });
-
-    esRef.current = es;
   }
 
   function handleViewBook() {
