@@ -17,6 +17,7 @@ import {
   Wand2,
   ImageIcon,
   Mic,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -130,10 +131,11 @@ function GeneratingOverlay() {
 
 // ── One-click overlay ─────────────────────────────────────────────────────────
 
-type OneClickStage = "writing" | "illustrating" | "narrating" | "done";
+type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
 
 const ONE_CLICK_STAGES: { id: OneClickStage; icon: React.ReactNode; label: string }[] = [
   { id: "writing",     icon: <Sparkles className="h-4 w-4" />,  label: "Writing"     },
+  { id: "characters",  icon: <Users className="h-4 w-4" />,     label: "Characters"  },
   { id: "illustrating",icon: <ImageIcon className="h-4 w-4" />, label: "Illustrating"},
   { id: "narrating",   icon: <Mic className="h-4 w-4" />,       label: "Narrating"   },
 ];
@@ -155,14 +157,18 @@ function OneClickOverlay({
   const overallPct = isDone
     ? 100
     : stageIdx === 0
-    ? 15
+    ? 10
     : stageIdx === 1
-    ? 33 + (progress.total > 0 ? (progress.done / progress.total) * 34 : 0)
-    : 67 + (progress.total > 0 ? (progress.done / progress.total) * 30 : 0);
+    ? 25
+    : stageIdx === 2
+    ? 40 + (progress.total > 0 ? (progress.done / progress.total) * 30 : 0)
+    : 70 + (progress.total > 0 ? (progress.done / progress.total) * 27 : 0);
 
   const statusLabel =
     stage === "writing"
       ? "Writing your story…"
+      : stage === "characters"
+      ? "Designing character sheets…"
       : stage === "illustrating"
       ? `Illustrating pages… ${progress.total > 0 ? `(${progress.done} / ${progress.total})` : ""}`
       : stage === "narrating"
@@ -528,20 +534,26 @@ export default function CreatePage() {
       const generated = await api.books.generate(token, savedDraft.id, "watercolor");
       setBook(generated);
 
-      // 3. Illustrate every page
+      // 3. Generate character reference sheets
+      setOneClickStage("characters");
+      setOneClickProgress({ done: 0, total: 0 });
+      const withChars = await api.books.generateCharacterSheets(token, generated.id);
+      setBook(withChars);
+
+      // 4. Illustrate every page
       setOneClickStage("illustrating");
-      const pages = [...generated.pages].sort((a, b) => a.order - b.order);
+      const pages = [...withChars.pages].sort((a, b) => a.order - b.order);
       setOneClickProgress({ done: 0, total: pages.length });
 
-      let currentBook = generated;
+      let currentBook = withChars;
       for (let i = 0; i < pages.length; i++) {
-        const updated = await api.books.illustratePage(token, generated.id, pages[i].id);
+        const updated = await api.books.illustratePage(token, withChars.id, pages[i].id);
         setBook(updated);
         currentBook = updated;
         setOneClickProgress({ done: i + 1, total: pages.length });
       }
 
-      // 4. Narrate every page that has text
+      // 5. Narrate every page that has text
       setOneClickStage("narrating");
       const textPages = [...currentBook.pages]
         .sort((a, b) => a.order - b.order)
@@ -555,7 +567,7 @@ export default function CreatePage() {
         setOneClickProgress({ done: i + 1, total: textPages.length });
       }
 
-      // 5. Done — show completion screen
+      // 6. Done — show completion screen
       setOneClickStage("done");
       setOneClickBook(currentBook);
 
