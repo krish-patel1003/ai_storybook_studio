@@ -9,8 +9,6 @@ import { useState, useRef, useEffect } from "react";
 const navItems = [
   { href: "/create", label: "Create" },
   { href: "/library", label: "Library" },
-  { href: "/outline", label: "Outline" },
-  { href: "/editor", label: "Editor" },
   { href: "/reader", label: "Reader" },
 ] as const;
 
