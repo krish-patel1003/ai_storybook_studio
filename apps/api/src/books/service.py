@@ -136,7 +136,8 @@ async def generate_from_draft(
             page_count=book.page_count,
         )
 
-        await _persist_result(db, book, result.brief, result.characters, result.beats, result.pages)
+        split_pages, split_beats = _split_overlong_pages(result.pages, result.beats, book.age_range)
+        await _persist_result(db, book, result.brief, result.characters, split_beats, split_pages)
         book.stage = GenerationStage.COMPLETE
         book.title = result.brief.title
         await db.commit()
@@ -193,7 +194,8 @@ async def create_and_generate(
             page_count=data.page_count,
         )
 
-        await _persist_result(db, book, result.brief, result.characters, result.beats, result.pages)
+        split_pages, split_beats = _split_overlong_pages(result.pages, result.beats, data.age_range)
+        await _persist_result(db, book, result.brief, result.characters, split_beats, split_pages)
         book.stage = GenerationStage.COMPLETE
         book.title = result.brief.title
         await db.commit()
@@ -596,6 +598,132 @@ async def _persist_result(db, book, brief, characters, beats, pages) -> None:
         ))
 
     await db.flush()
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into individual sentences at . ! ? boundaries."""
+    import re
+    parts = re.split(r'(?<=[.!?])\s+', text.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _split_overlong_pages(
+    pages: list,
+    beats: list,
+    age_range: str,
+) -> tuple[list, list]:
+    """
+    Find pages whose word count >= PAGE_SPLIT_THRESHOLD[age_range], split each one at
+    the sentence boundary closest to the text midpoint, insert a continuation page
+    directly after it, and renumber all non-cover pages sequentially.
+
+    Returns (new_pages, new_beats) — new_beats includes synthetic continuation beats so
+    _persist_result can fill in narrative_role, characters_present, setting_note, etc.
+    """
+    from src.generation.constants import PAGE_SPLIT_THRESHOLD
+    from src.generation.schemas import GeneratedPage, IllustrationMetadata, StoryBeat as SBeat
+
+    threshold = PAGE_SPLIT_THRESHOLD.get(age_range, 9999)
+    beat_map = {b.order: b for b in beats}
+
+    expanded_pages: list = []
+    extra_beat_queue: list[dict] = []   # raw dicts for continuation beats, order filled in later
+
+    for page in sorted(pages, key=lambda p: p.order):
+        if page.is_cover or not page.text or page.word_count < threshold:
+            expanded_pages.append(page)
+            continue
+
+        sentences = _split_sentences(page.text)
+        if len(sentences) < 2:
+            expanded_pages.append(page)
+            continue
+
+        # Sentence boundary closest to midpoint word count
+        target = page.word_count // 2
+        running = 0
+        split_idx = max(1, len(sentences) // 2)
+        for i, sent in enumerate(sentences):
+            running += len(sent.split())
+            if running >= target:
+                split_idx = i + 1
+                break
+
+        first_half_sents = sentences[:split_idx]
+        second_half_sents = sentences[split_idx:]
+        if not first_half_sents or not second_half_sents:
+            expanded_pages.append(page)
+            continue
+
+        first_text  = " ".join(first_half_sents)
+        second_text = " ".join(second_half_sents)
+
+        expanded_pages.append(page.model_copy(update={
+            "text": first_text,
+            "word_count": len(first_text.split()),
+        }))
+
+        # Continuation illustration — same visual world, slightly shifted moment
+        orig_meta = page.illustration_metadata
+        cont_meta = IllustrationMetadata(
+            mood=orig_meta.mood,
+            characters_present=orig_meta.characters_present,
+            key_visual_elements=orig_meta.key_visual_elements,
+            composition_note=(
+                "Continuation of the previous scene — same location, characters, and lighting. "
+                "Slightly shifted angle or beat-moment. " + orig_meta.composition_note
+            ),
+            assembled_prompt=(
+                "Continuation scene — same art style, characters, and location as the preceding image. "
+                + orig_meta.assembled_prompt
+            ),
+            negative_prompt=orig_meta.negative_prompt,
+        )
+
+        cont_page = GeneratedPage(
+            order=-1,  # placeholder; renumbered below
+            is_cover=False,
+            beat_reference=page.beat_reference + " (continued)",
+            text=second_text,
+            word_count=len(second_text.split()),
+            illustration_metadata=cont_meta,
+        )
+        expanded_pages.append(cont_page)
+
+        parent_beat = beat_map.get(page.order)
+        extra_beat_queue.append({
+            "order": -1,  # placeholder
+            "narrative_role": "continuation",
+            "beat": (parent_beat.beat + " (continued)") if parent_beat else page.beat_reference + " (continued)",
+            "emotional_note": parent_beat.emotional_note if parent_beat else "",
+            "characters_present": parent_beat.characters_present if parent_beat else [],
+            "setting_note": parent_beat.setting_note if parent_beat else "",
+        })
+
+    # Renumber pages AND rebuild beat list so orders stay in sync.
+    # expanded_pages may contain new continuation pages (order=-1) interleaved with
+    # original pages whose old orders are no longer consecutive after splits.
+    cover_pages   = [p for p in expanded_pages if p.is_cover]
+    content_pages = [p for p in expanded_pages if not p.is_cover]
+
+    extra_beat_iter = iter(extra_beat_queue)
+    renumbered_pages: list = list(cover_pages)
+    renumbered_beats: list = [b for b in beats if b.order == 0]  # keep cover beat(s)
+
+    for new_order, p in enumerate(content_pages, start=1):
+        renumbered_pages.append(p.model_copy(update={"order": new_order}))
+        if p.order == -1:
+            # Continuation page — synthesise a beat at the new order
+            raw = next(extra_beat_iter)
+            raw["order"] = new_order
+            renumbered_beats.append(SBeat(**raw))
+        else:
+            # Original page — copy its beat with updated order so _persist_result finds it
+            orig_beat = beat_map.get(p.order)
+            if orig_beat is not None:
+                renumbered_beats.append(orig_beat.model_copy(update={"order": new_order}))
+
+    return renumbered_pages, renumbered_beats
 
 
 def _page_to_beat(page: Page) -> StoryBeat:

@@ -5,7 +5,16 @@ from typing import Final
 WORD_LIMITS: Final[dict[str, tuple[int, int]]] = {
     "3-5":  (20,  35),
     "6-8":  (45,  70),
-    "9-11": (80, 120),
+    "9-11": (80, 160),   # raised to 160 — long beats get split into two pages
+}
+
+# ── Page-split threshold ───────────────────────────────────────────────────────
+# When generated page text exceeds this word count the pipeline splits it into
+# two pages, each with its own illustration.  Use 9999 to disable for an age group.
+PAGE_SPLIT_THRESHOLD: Final[dict[str, int]] = {
+    "3-5":  9999,   # toddler pages are always short — never split
+    "6-8":  9999,   # 70-word max fits comfortably — never split
+    "9-11": 130,    # 160-word max → split if the LLM writes ≥ 130 words
 }
 
 # ── Page count ────────────────────────────────────────────────────────────────

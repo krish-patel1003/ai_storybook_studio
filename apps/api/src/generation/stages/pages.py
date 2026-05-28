@@ -4,6 +4,7 @@ import json
 from src.generation.constants import (
     GEMINI_PRO,
     PAGE_GEN_CONCURRENCY,
+    PAGE_SPLIT_THRESHOLD,
     TEMP_PAGES,
     WORD_LIMITS,
 )
@@ -81,12 +82,16 @@ class PageStage:
                 model=self._model,
                 temperature=TEMP_PAGES,
             )
-            # Hard guard: if the model still exceeded the limit, trim to word_max words.
+            # Hard guard: trim only if the page is not a split candidate.
+            # If word_count >= PAGE_SPLIT_THRESHOLD the service layer will split
+            # the text into two pages — trimming here would destroy the second half.
+            split_threshold = PAGE_SPLIT_THRESHOLD.get(age_range, 9999)
             if not page.is_cover and page.text:
                 words = page.text.split()
-                if len(words) > word_max:
+                if len(words) > word_max and len(words) < split_threshold:
+                    # Too long for one page but not long enough to warrant a split —
+                    # trim to word_max at a sentence boundary.
                     trimmed = " ".join(words[:word_max])
-                    # End on a sentence boundary if possible.
                     for end in (".", "!", "?"):
                         idx = trimmed.rfind(end)
                         if idx > len(trimmed) // 2:
