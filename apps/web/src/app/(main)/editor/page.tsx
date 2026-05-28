@@ -498,6 +498,15 @@ export default function EditorPage() {
   const [narratingBook, setNarratingBook] = useState(false);
   const [narrateProgress, setNarrateProgress] = useState<{ done: number; total: number } | null>(null);
   const [pageNarrateStatuses, setPageNarrateStatuses] = useState<Record<string, "idle" | "narrating" | "done" | "error">>({});
+  const [selectedVoice, setSelectedVoice] = useState("Kore");
+  const [availableVoices, setAvailableVoices] = useState<Array<{ id: string; description: string; is_default: boolean }>>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    api.books.listVoices(token).then((res) => {
+      if (res.voices?.length) setAvailableVoices(res.voices);
+    }).catch(() => {/* voices are a nice-to-have */});
+  }, [token]);
 
   // Per-page timers
   const pageTimerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -581,7 +590,7 @@ export default function EditorPage() {
     setNarrateProgress({ done: 0, total: textPages.length });
     try {
       for (const page of textPages) {
-        const updated = await api.books.narratePage(token, book.id, page.id);
+        const updated = await api.books.narratePage(token, book.id, page.id, selectedVoice);
         updateBook(updated);
         setNarrateProgress((p) => p ? { ...p, done: p.done + 1 } : null);
       }
@@ -598,7 +607,7 @@ export default function EditorPage() {
     if (!token || !book) return;
     setPageNarrateStatuses((s) => ({ ...s, [page.id]: "narrating" }));
     try {
-      const updated = await api.books.narratePage(token, book.id, page.id);
+      const updated = await api.books.narratePage(token, book.id, page.id, selectedVoice);
       updateBook(updated);
       setPageNarrateStatuses((s) => ({ ...s, [page.id]: "done" }));
     } catch {
@@ -767,7 +776,23 @@ export default function EditorPage() {
               </p>
             </div>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {/* Voice picker */}
+            {availableVoices.length > 0 && (
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                disabled={narratingBook}
+                className="rounded-full border border-border bg-card px-3 py-2 text-xs font-bold chunky-border disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                title="Select narrator voice"
+              >
+                {availableVoices.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.id} — {v.description}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               onClick={handleNarrate}
               disabled={narratingBook || allPages.filter((p) => p.text && !p.has_audio).length === 0}

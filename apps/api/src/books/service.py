@@ -416,9 +416,10 @@ async def narrate_page(
     book_id: uuid.UUID,
     page_id: uuid.UUID,
     user_id: uuid.UUID,
+    voice_name: str = "Kore",
 ) -> Book:
     from src.storage import minio_client
-    from src.generation.tts import synthesize
+    from src.generation.tts import synthesize, DEFAULT_VOICE
 
     book = await get_book(db, book_id, user_id)
     page = next((p for p in book.pages if p.id == page_id), None)
@@ -428,7 +429,7 @@ async def narrate_page(
         raise ValueError("Page has no text yet")
 
     raw_key = f"audio/{book_id}/{page_id}.raw.pcm"
-    wav = await synthesize(page.text, debug_raw_key=raw_key)
+    wav = await synthesize(page.text, voice_name=voice_name or DEFAULT_VOICE, debug_raw_key=raw_key)
 
     if page.audio_key:
         try:
@@ -445,12 +446,13 @@ async def narrate_book(
     db: AsyncSession,
     book_id: uuid.UUID,
     user_id: uuid.UUID,
+    voice_name: str = "Kore",
 ) -> Book:
     """Narrate all pages that have text but no audio yet."""
     book = await get_book(db, book_id, user_id)
     pages_to_narrate = [p for p in book.pages if p.text and not p.audio_key]
     for page in pages_to_narrate:
-        await narrate_page(db, book_id, page.id, user_id)
+        await narrate_page(db, book_id, page.id, user_id, voice_name=voice_name)
     return await get_book(db, book_id, user_id)
 
 

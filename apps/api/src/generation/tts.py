@@ -15,8 +15,17 @@ import soundfile as sf
 logger = logging.getLogger(__name__)
 
 _MODEL = "gemini-3.1-flash-tts-preview"
-_VOICE = "Kore"        # warm, expressive — good for children's stories
 _SAMPLE_RATE = 24_000  # Hz — Gemini TTS output rate
+
+# Available voices with descriptions
+AVAILABLE_VOICES: dict[str, str] = {
+    "Kore":   "Warm & expressive — classic narrator",
+    "Puck":   "Upbeat & playful — great for fun stories",
+    "Aoede":  "Breezy & light — gentle, soothing",
+    "Leda":   "Youthful & bright — sounds like a child",
+    "Zephyr": "Clear & bright — crisp storytelling",
+}
+DEFAULT_VOICE = "Kore"
 
 
 def _pcm_to_wav(pcm_bytes: bytes) -> bytes:
@@ -28,9 +37,12 @@ def _pcm_to_wav(pcm_bytes: bytes) -> bytes:
     return buf.read()
 
 
-def _synthesize_sync(text: str, api_key: str, save_raw_key: str | None = None) -> bytes:
+def _synthesize_sync(text: str, api_key: str, voice_name: str = DEFAULT_VOICE, save_raw_key: str | None = None) -> bytes:
     from google import genai
     from google.genai import types
+
+    if voice_name not in AVAILABLE_VOICES:
+        voice_name = DEFAULT_VOICE
 
     client = genai.Client(api_key=api_key, vertexai=False)
     response = client.models.generate_content(
@@ -41,7 +53,7 @@ def _synthesize_sync(text: str, api_key: str, save_raw_key: str | None = None) -
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=_VOICE,
+                        voice_name=voice_name,
                     )
                 )
             ),
@@ -78,7 +90,7 @@ def _synthesize_sync(text: str, api_key: str, save_raw_key: str | None = None) -
     return _pcm_to_wav(pcm_bytes)
 
 
-async def synthesize(text: str, debug_raw_key: str | None = None) -> bytes:
+async def synthesize(text: str, voice_name: str = DEFAULT_VOICE, debug_raw_key: str | None = None) -> bytes:
     """Generate WAV audio for *text* using Gemini TTS. Returns WAV bytes."""
     from src.config import settings
-    return await asyncio.to_thread(_synthesize_sync, text, settings.GEMINI_API_KEY, debug_raw_key)
+    return await asyncio.to_thread(_synthesize_sync, text, settings.GEMINI_API_KEY, voice_name, debug_raw_key)

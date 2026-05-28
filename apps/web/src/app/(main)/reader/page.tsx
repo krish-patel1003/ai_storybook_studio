@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { forwardRef, useRef, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { pageImageUrl } from "@/lib/api";
@@ -15,6 +15,31 @@ const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
   () => import("react-pageflip"),
   { ssr: false }
 ) as React.ForwardRefExoticComponent<HTMLFlipBookProps & React.RefAttributes<HTMLFlipBookRef>>;
+
+// ── Font options ──────────────────────────────────────────────────────────────
+
+const FONTS = [
+  { id: "nunito",       label: "Nunito",        stack: '"Nunito", sans-serif',        sample: "Aa" },
+  { id: "patrick-hand", label: "Patrick Hand",  stack: '"Patrick Hand", cursive',     sample: "Aa" },
+  { id: "caveat",       label: "Caveat",         stack: '"Caveat", cursive',           sample: "Aa" },
+  { id: "merriweather", label: "Merriweather",   stack: '"Merriweather", serif',       sample: "Aa" },
+  { id: "quicksand",    label: "Quicksand",      stack: '"Quicksand", sans-serif',     sample: "Aa" },
+] as const;
+
+type FontId = typeof FONTS[number]["id"];
+
+function useReaderFont(): [FontId, (f: FontId) => void] {
+  const [font, setFontState] = useState<FontId>("nunito");
+  useEffect(() => {
+    const saved = localStorage.getItem("reader-font") as FontId | null;
+    if (saved && FONTS.find((f) => f.id === saved)) setFontState(saved);
+  }, []);
+  const setFont = useCallback((f: FontId) => {
+    setFontState(f);
+    localStorage.setItem("reader-font", f);
+  }, []);
+  return [font, setFont];
+}
 
 // ── Authenticated resource hook ───────────────────────────────────────────────
 
@@ -45,76 +70,151 @@ function useAuthBlob(url: string, token: string | null, enabled: boolean) {
   return blobUrl;
 }
 
-// ── Single book page ──────────────────────────────────────────────────────────
+// ── Cover page — full-bleed image with title + author overlay ─────────────────
 
-// ── Auto-fit text hook ────────────────────────────────────────────────────────
-// Shrinks font-size step by step until the text fits its container.
-
-function useTextFit(text: string | null | undefined) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    const el = textRef.current;
-    if (!container || !el || !text) return;
-
-    // Reset to base size before measuring.
-    el.style.fontSize = "";
-    let size = parseFloat(getComputedStyle(el).fontSize);
-    const minSize = 9;
-
-    while (el.scrollHeight > container.clientHeight && size > minSize) {
-      size -= 0.5;
-      el.style.fontSize = `${size}px`;
-    }
-  }, [text]);
-
-  return { containerRef, textRef };
-}
-
-const BookPage = forwardRef<
+const CoverPage = forwardRef<
   HTMLDivElement,
-  { page: PageOut; bookId: string; token: string | null }
->(({ page, bookId, token }, ref) => {
+  { page: PageOut; bookId: string; token: string | null; author: string; fontStack: string }
+>(({ page, bookId, token, author, fontStack }, ref) => {
   const imgUrl = useAuthBlob(pageImageUrl(bookId, page.id), token, page.has_image);
-  const { containerRef, textRef } = useTextFit(page.text);
 
   return (
-    <div ref={ref} className="relative overflow-hidden bg-card select-none" style={{ height: "100%" }}>
-      <div className="absolute inset-x-0 top-0 overflow-hidden bg-muted" style={{ height: "68%" }}>
-        {imgUrl ? (
-          <img
-            src={imgUrl}
-            alt={page.is_cover ? "Cover" : `Page ${page.order}`}
-            className="h-full w-full object-cover"
-            draggable={false}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
-          </div>
-        )}
-      </div>
+    <div ref={ref} className="relative overflow-hidden select-none bg-foreground" style={{ height: "100%" }}>
+      {/* Full-bleed illustration */}
+      {imgUrl ? (
+        <img
+          src={imgUrl}
+          alt="Cover"
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+          <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
+        </div>
+      )}
+
+      {/* Bottom gradient overlay */}
       <div
-        ref={containerRef}
-        className="absolute inset-x-0 bottom-0 overflow-hidden border-t-[2.5px] border-foreground bg-card px-4 py-3"
-        style={{ height: "32%" }}
-      >
-        {page.is_cover ? (
-          <h2 ref={textRef as React.RefObject<HTMLHeadingElement>} className="text-center font-display text-lg font-black leading-tight">
-            {page.text ?? ""}
-          </h2>
-        ) : (
-          <p ref={textRef as React.RefObject<HTMLParagraphElement>} className="font-sans text-sm leading-relaxed">
-            {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
+        className="absolute inset-x-0 bottom-0"
+        style={{
+          height: "55%",
+          background: "linear-gradient(to bottom, transparent 0%, rgba(10,10,20,0.55) 40%, rgba(10,10,20,0.88) 100%)",
+        }}
+      />
+
+      {/* Title + author */}
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-8 px-6 text-center">
+        <h1
+          className="text-white leading-tight drop-shadow-lg"
+          style={{
+            fontFamily: '"Fredoka", sans-serif',
+            fontWeight: 700,
+            fontSize: "clamp(1.4rem, 5vw, 2.2rem)",
+            textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+          }}
+        >
+          {page.text ?? ""}
+        </h1>
+        {author && (
+          <p
+            className="mt-2 text-white/75 drop-shadow"
+            style={{
+              fontFamily: fontStack,
+              fontSize: "clamp(0.75rem, 2vw, 0.95rem)",
+              textShadow: "0 1px 6px rgba(0,0,0,0.5)",
+            }}
+          >
+            by {author}
           </p>
         )}
       </div>
     </div>
   );
 });
-BookPage.displayName = "BookPage";
+CoverPage.displayName = "CoverPage";
+
+// ── Story page — full-bleed image + gradient fade into text ───────────────────
+
+const StoryPage = forwardRef<
+  HTMLDivElement,
+  { page: PageOut; bookId: string; token: string | null; fontStack: string }
+>(({ page, bookId, token, fontStack }, ref) => {
+  const imgUrl = useAuthBlob(pageImageUrl(bookId, page.id), token, page.has_image);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-shrink font if text overflows
+  useEffect(() => {
+    const el = textRef.current;
+    const container = containerRef.current;
+    if (!el || !container || !page.text) return;
+    el.style.fontSize = "";
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    const minSize = 8.5;
+    while (el.scrollHeight > container.clientHeight && size > minSize) {
+      size -= 0.5;
+      el.style.fontSize = `${size}px`;
+    }
+  }, [page.text, fontStack]);
+
+  // Text zone height — grows with more text, caps at 42%
+  const textZone = "38%";
+
+  return (
+    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
+      {/* Full-bleed illustration — sits behind everything */}
+      {imgUrl ? (
+        <img
+          src={imgUrl}
+          alt={`Page ${page.order}`}
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+          <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
+        </div>
+      )}
+
+      {/* Gradient blending layer — no hard line */}
+      <div
+        className="absolute inset-x-0 bottom-0 pointer-events-none"
+        style={{
+          height: textZone,
+          background: "linear-gradient(to bottom, transparent 0%, rgba(250,248,243,0.82) 35%, rgba(250,248,243,0.97) 60%, #faf8f3 100%)",
+        }}
+      />
+
+      {/* Text area — sits in the gradient zone */}
+      <div
+        ref={containerRef}
+        className="absolute inset-x-0 bottom-0 overflow-hidden"
+        style={{ height: textZone, padding: "14px 18px 14px 18px" }}
+      >
+        {page.text ? (
+          <p
+            ref={textRef}
+            className="leading-relaxed text-foreground"
+            style={{ fontFamily: fontStack, fontSize: "0.88rem" }}
+          >
+            {page.text}
+          </p>
+        ) : (
+          <p className="italic text-muted-foreground text-sm" style={{ fontFamily: fontStack }}>
+            No text yet
+          </p>
+        )}
+      </div>
+
+      {/* Page number — subtle, bottom right */}
+      <div className="absolute bottom-1.5 right-3 text-[10px] font-bold text-foreground/30 select-none">
+        {page.order}
+      </div>
+    </div>
+  );
+});
+StoryPage.displayName = "StoryPage";
 
 // ── Back cover ────────────────────────────────────────────────────────────────
 
@@ -129,6 +229,52 @@ const BackCover = forwardRef<HTMLDivElement, { title: string }>(({ title }, ref)
   </div>
 ));
 BackCover.displayName = "BackCover";
+
+// ── Font picker popover ───────────────────────────────────────────────────────
+
+function FontPicker({ font, setFont }: { font: FontId; setFont: (f: FontId) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Change font"
+        className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border transition-transform hover:-translate-y-0.5"
+      >
+        <Type className="h-4 w-4" strokeWidth={2.5} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl bg-card p-2 chunky-border chunky-shadow z-50">
+          <p className="px-2 pb-1.5 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
+            Story font
+          </p>
+          {FONTS.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => { setFont(f.id); setOpen(false); }}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
+                font === f.id ? "bg-primary text-primary-foreground" : "hover:bg-highlight"
+              }`}
+            >
+              <span className="text-lg w-6 shrink-0" style={{ fontFamily: f.stack }}>{f.sample}</span>
+              <span className="text-sm font-bold" style={{ fontFamily: f.stack }}>{f.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Audio player hook ─────────────────────────────────────────────────────────
 //
@@ -187,7 +333,6 @@ function usePageAudio(
   }, [currentPage, pages, bookId, token]);
 
   // Play left-page audio as soon as its blob is ready.
-  // Resets playingRight so the "ended" handler knows we're starting fresh.
   useEffect(() => {
     const audio = audioRef.current;
     ctx.current.playingRight = false;
@@ -222,7 +367,6 @@ function usePageAudio(
       if (ctx.current.muted) { ctx.current.playingRight = false; return; }
 
       if (!ctx.current.playingRight) {
-        // Left page just ended — try playing right-side page.
         const rightPage = ctx.current.pages[ctx.current.currentPage + 1];
         if (rightPage?.has_audio) {
           const blobUrl = cache.current.get(rightPage.id);
@@ -235,11 +379,9 @@ function usePageAudio(
               .catch(() => doFlip());
             return;
           }
-          // Blob not cached yet — skip right audio and flip.
         }
         doFlip();
       } else {
-        // Right page just ended — auto-flip.
         doFlip();
       }
     };
@@ -282,10 +424,11 @@ function usePageAudio(
 
 export default function ReaderPage() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { book } = useBook();
   const bookRef = useRef<HTMLFlipBookRef>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [font, setFont] = useReaderFont();
 
   useEffect(() => {
     if (book === null) router.replace("/library");
@@ -294,11 +437,12 @@ export default function ReaderPage() {
   const pages = book ? [...book.pages].sort((a, b) => a.order - b.order) : [];
   const totalPages = pages.length + 1; // +1 for back cover
 
-  // All hooks before early return.
   const { audioRef, playing, muted, hasAudio, togglePlay, toggleMute } =
     usePageAudio(pages, currentPage, book?.id ?? "", token, bookRef);
 
   const bookHasAnyAudio = pages.some((p) => p.has_audio);
+  const fontStack = FONTS.find((f) => f.id === font)?.stack ?? FONTS[0].stack;
+  const penName = user?.pen_name ?? "";
 
   if (!book) return null;
 
@@ -313,7 +457,7 @@ export default function ReaderPage() {
       <div className="flex shrink-0 items-center justify-between border-b-[2px] border-foreground/20 px-5 py-2.5">
         <div className="flex items-center gap-3">
           <Link
-            href="/editor"
+            href="/library"
             className="rounded-full bg-card p-2 chunky-border transition-transform hover:-translate-y-0.5"
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={3} />
@@ -323,6 +467,7 @@ export default function ReaderPage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <FontPicker font={font} setFont={setFont} />
           {bookHasAnyAudio && (
             <button
               onClick={toggleMute}
@@ -362,9 +507,13 @@ export default function ReaderPage() {
           className="book-shadow"
           onFlip={(e: { data: number }) => setCurrentPage(e.data)}
         >
-          {pages.map((page) => (
-            <BookPage key={page.id} page={page} bookId={book.id} token={token} />
-          ))}
+          {pages.map((page) =>
+            page.is_cover ? (
+              <CoverPage key={page.id} page={page} bookId={book.id} token={token} author={penName} fontStack={fontStack} />
+            ) : (
+              <StoryPage key={page.id} page={page} bookId={book.id} token={token} fontStack={fontStack} />
+            )
+          )}
           <BackCover title={book.brief?.title ?? book.title} />
         </HTMLFlipBook>
       </div>

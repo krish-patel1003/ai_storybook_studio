@@ -20,6 +20,7 @@ from src.books.schemas import (
     GenerateIn,
     ModelInfo,
     ModelsOut,
+    NarrateIn,
     PageCountOptionsOut,
     PageOut,
     ProviderInfo,
@@ -228,6 +229,7 @@ async def delete_book(
 async def export_pdf(
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
 ) -> Response:
     from src.books import service
     from src.books.export import build_pdf
@@ -235,7 +237,8 @@ async def export_pdf(
 
     export_pages = await service.build_export_pages(db, book)
     title = book.brief.get("title", book.title) if book.brief else book.title
-    pdf_bytes = await build_pdf(title, export_pages)
+    author = getattr(user, "pen_name", "") or ""
+    pdf_bytes = await build_pdf(title, export_pages, author=author)
     return FastAPIResponse(content=pdf_bytes, media_type="application/pdf")
 
 
@@ -243,6 +246,7 @@ async def export_pdf(
 async def export_epub(
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
 ) -> Response:
     from src.books import service
     from src.books.export import build_epub
@@ -250,7 +254,8 @@ async def export_epub(
 
     export_pages = await service.build_export_pages(db, book)
     title = book.brief.get("title", book.title) if book.brief else book.title
-    epub_bytes = await build_epub(title, "AI Storybook Studio", export_pages)
+    author = getattr(user, "pen_name", "") or ""
+    epub_bytes = await build_epub(title, author or "AI Storybook Studio", export_pages)
     return FastAPIResponse(content=epub_bytes, media_type="application/epub+zip")
 
 
@@ -362,23 +367,37 @@ async def get_page_image(
     return Response(content=data, media_type=content_type)
 
 
+@router.get("/voices", response_model=dict)
+async def list_voices(user: User = Depends(current_user)) -> dict:
+    """Return available TTS voices with descriptions."""
+    from src.generation.tts import AVAILABLE_VOICES, DEFAULT_VOICE
+    return {
+        "voices": [
+            {"id": k, "description": v, "is_default": k == DEFAULT_VOICE}
+            for k, v in AVAILABLE_VOICES.items()
+        ]
+    }
+
+
 @router.post("/{book_id}/pages/{page_id}/narrate", response_model=BookOut)
 async def narrate_page(
     page_id: uuid.UUID,
+    data: NarrateIn = NarrateIn(),
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
 ) -> BookOut:
-    updated = await service.narrate_page(db, book.id, page_id, book.user_id)
+    updated = await service.narrate_page(db, book.id, page_id, book.user_id, voice_name=data.voice_name)
     return BookOut.model_validate(updated)
 
 
 @router.post("/{book_id}/narrate", response_model=BookOut)
 async def narrate_book(
+    data: NarrateIn = NarrateIn(),
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
 ) -> BookOut:
     """Narrate all un-narrated pages in the book sequentially."""
-    updated = await service.narrate_book(db, book.id, book.user_id)
+    updated = await service.narrate_book(db, book.id, book.user_id, voice_name=data.voice_name)
     return BookOut.model_validate(updated)
 
 

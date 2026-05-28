@@ -380,16 +380,24 @@ export const api = {
     getPublicBook: (bookId: string) =>
       request<BookOut>(`/books/public/${bookId}`),
 
-    narratePage: (token: string, bookId: string, pageId: string) =>
+    listVoices: (token: string) =>
+      request<{ voices: Array<{ id: string; description: string; is_default: boolean }> }>(
+        `/books/voices`,
+        { headers: authed(token) },
+      ),
+
+    narratePage: (token: string, bookId: string, pageId: string, voiceName?: string) =>
       request<BookOut>(`/books/${bookId}/pages/${pageId}/narrate`, {
         method: "POST",
-        headers: authed(token),
+        headers: { ...authed(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ voice_name: voiceName ?? "Kore" }),
       }),
 
-    narrateBook: (token: string, bookId: string) =>
+    narrateBook: (token: string, bookId: string, voiceName?: string) =>
       request<BookOut>(`/books/${bookId}/narrate`, {
         method: "POST",
-        headers: authed(token),
+        headers: { ...authed(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ voice_name: voiceName ?? "Kore" }),
       }),
 
     pageAudioUrl: (bookId: string, pageId: string) =>

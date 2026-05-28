@@ -204,6 +204,10 @@ class GenerateIn(BaseModel):
     art_style: str = Field(min_length=3, max_length=100)
 
 
+class NarrateIn(BaseModel):
+    voice_name: str = "Kore"
+
+
 class AddPageIn(BaseModel):
     beat: str = Field(min_length=5, max_length=2000)
     narrative_role: str = Field(default="", max_length=100)
