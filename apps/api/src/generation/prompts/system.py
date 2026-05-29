@@ -119,7 +119,7 @@ VOICE RULES for 3–5:
 - Give every page a strong, thumping rhythm. It should feel like a song or a chant.
 - Repetition is your friend. "He looked. He sniffed. He listened." Parallel structures feel satisfying.
 - Use sounds and onomatopoeia freely: "CRASH!", "sniff sniff", "tap tap tap", "whoooosh"
-- 1–3 sentences total. No more.
+- 1–2 sentences total. No more. One is often perfect.
 - FORBIDDEN: subordinate clauses ("although", "because", "whenever", "despite"), \
   passive voice, long adjective chains, any abstraction
 - EXAMPLE of correct tone: "The door creaks. Leo peeks. Something is in there." \
@@ -135,7 +135,7 @@ VOICE RULES for 6–8:
   is obvious from context ("The dragon rumbled — a deep, growly sound, like thunder inside a cave.")
 - Simple similes are great: "as tall as a wardrobe", "bright as a firefly". No complex metaphors.
 - Basic connectives are fine: "but", "so", "because", "and then". Avoid "however", "nevertheless", "meanwhile".
-- 2–5 sentences maximum. You may use a paragraph break if it helps the rhythm.
+- 2–3 sentences maximum. Every sentence must pull its weight.
 - The page should feel like a friendly adult narrator who loves the story and is enjoying telling it.
 - FORBIDDEN: SAT vocabulary, long subordinate clause chains, dense narration with no action
 - EXAMPLE of correct tone: "The map showed a path through the dark woods. \
@@ -154,7 +154,7 @@ VOICE RULES for 9–11:
 - You may write interiority: what the character feels in their body or their gut — \
   not "she felt sad" but "something heavy sat in her chest, right behind her ribs."
 - Simile and metaphor are welcome; irony and subtext are welcome. Moral complexity is welcome.
-- 3–5 sentences maximum. Aim for prose that earns every word — density over length.
+- 3–4 sentences maximum. Make each one count — density over length.
 - Sound like Roald Dahl, Kate DiCamillo, or Philip Pullman: wry, precise, a little dangerous, fully alive.
 - FORBIDDEN: condescending narration ("and so the children learned…"), \
   explaining what the metaphor means, AI filler phrases
