@@ -158,8 +158,10 @@ const StoryPage = forwardRef<
     }
   }, [page.text, fontStack]);
 
-  // Text zone height — smaller = text starts lower on the page
-  const textZone = "30%";
+  // Text zone: where the text box sits (bottom of page).
+  // Gradient zone: taller than the text zone so the fade bleeds up into the image.
+  const textZone   = "36%";
+  const gradientZone = "52%";
 
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
@@ -177,16 +179,16 @@ const StoryPage = forwardRef<
         </div>
       )}
 
-      {/* Gradient blending layer — no hard line */}
+      {/* Gradient blending layer — starts above the text zone for a smooth fade */}
       <div
         className="absolute inset-x-0 bottom-0 pointer-events-none"
         style={{
-          height: textZone,
-          background: "linear-gradient(to bottom, transparent 0%, rgba(250,248,243,0.82) 35%, rgba(250,248,243,0.97) 60%, #faf8f3 100%)",
+          height: gradientZone,
+          background: "linear-gradient(to bottom, transparent 0%, transparent 15%, rgba(250,248,243,0.45) 38%, rgba(250,248,243,0.88) 58%, rgba(250,248,243,0.97) 72%, #faf8f3 100%)",
         }}
       />
 
-      {/* Text area — sits in the gradient zone */}
+      {/* Text area — sits at the bottom, inside the fully opaque part of the gradient */}
       <div
         ref={containerRef}
         className="absolute inset-x-0 bottom-0 overflow-hidden"

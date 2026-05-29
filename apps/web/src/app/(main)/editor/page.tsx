@@ -190,13 +190,13 @@ function PagePreviewModal({
           </div>
         )}
 
-        {/* Gradient overlay */}
+        {/* Gradient overlay — taller than text zone for smooth blend */}
         {page.text && (
           <div
             className="absolute inset-x-0 bottom-0 pointer-events-none"
             style={{
-              height: "30%",
-              background: "linear-gradient(to bottom, transparent 0%, rgba(250,248,243,0.82) 35%, rgba(250,248,243,0.97) 60%, #faf8f3 100%)",
+              height: "52%",
+              background: "linear-gradient(to bottom, transparent 0%, transparent 15%, rgba(250,248,243,0.45) 38%, rgba(250,248,243,0.88) 58%, rgba(250,248,243,0.97) 72%, #faf8f3 100%)",
             }}
           />
         )}
@@ -205,7 +205,7 @@ function PagePreviewModal({
         {page.text && (
           <div
             className="absolute inset-x-0 bottom-0 px-4 pb-3 pt-1"
-            style={{ height: "30%" }}
+            style={{ height: "36%" }}
           >
             <p
               className="text-xs font-bold leading-relaxed text-foreground line-clamp-4"
