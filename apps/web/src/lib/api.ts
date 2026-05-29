@@ -371,11 +371,17 @@ export const api = {
         body: JSON.stringify({ visibility }),
       }),
 
-    exportPdf: (token: string, bookId: string): Promise<globalThis.Response> =>
-      fetch(`${API_URL}/books/${bookId}/export/pdf`, { headers: authed(token) }),
+    listExportFonts: (token: string) =>
+      request<{ fonts: Array<{ id: string; label: string; is_default: boolean }> }>(
+        `/books/export/fonts`,
+        { headers: authed(token) },
+      ),
 
-    exportEpub: (token: string, bookId: string): Promise<globalThis.Response> =>
-      fetch(`${API_URL}/books/${bookId}/export/epub`, { headers: authed(token) }),
+    exportPdf: (token: string, bookId: string, fontId?: string): Promise<globalThis.Response> =>
+      fetch(`${API_URL}/books/${bookId}/export/pdf${fontId ? `?font=${fontId}` : ""}`, { headers: authed(token) }),
+
+    exportEpub: (token: string, bookId: string, fontId?: string): Promise<globalThis.Response> =>
+      fetch(`${API_URL}/books/${bookId}/export/epub${fontId ? `?font=${fontId}` : ""}`, { headers: authed(token) }),
 
     getPublicBook: (bookId: string) =>
       request<BookOut>(`/books/public/${bookId}`),

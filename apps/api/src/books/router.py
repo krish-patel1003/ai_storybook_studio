@@ -1,7 +1,7 @@
 import uuid
 from typing import Sequence
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -223,39 +223,57 @@ async def delete_book(
     await service.delete_book(db, book.id, book.user_id)
 
 
+# ── Export font list ──────────────────────────────────────────────────────────
+
+@router.get("/export/fonts")
+async def list_export_fonts(user: User = Depends(current_user)) -> dict:
+    """Return available fonts for PDF/EPUB export."""
+    from src.books.export import EXPORT_FONTS, DEFAULT_EXPORT_FONT
+    return {
+        "fonts": [
+            {"id": fid, "label": cfg["label"], "is_default": fid == DEFAULT_EXPORT_FONT}
+            for fid, cfg in EXPORT_FONTS.items()
+        ]
+    }
+
+
 # ── Export endpoints (must be BEFORE /{book_id}/pages/{page_id}) ─────────────
 
 @router.get("/{book_id}/export/pdf")
 async def export_pdf(
+    font: str = Query(default="nunito"),
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
     user: User = Depends(current_user),
 ) -> Response:
     from src.books import service
-    from src.books.export import build_pdf
+    from src.books.export import build_pdf, EXPORT_FONTS, DEFAULT_EXPORT_FONT
     from fastapi.responses import Response as FastAPIResponse
 
+    font_id = font if font in EXPORT_FONTS else DEFAULT_EXPORT_FONT
     export_pages = await service.build_export_pages(db, book)
     title = book.brief.get("title", book.title) if book.brief else book.title
     author = getattr(user, "pen_name", "") or ""
-    pdf_bytes = await build_pdf(title, export_pages, author=author)
+    pdf_bytes = await build_pdf(title, export_pages, author=author, font_id=font_id)
     return FastAPIResponse(content=pdf_bytes, media_type="application/pdf")
 
 
 @router.get("/{book_id}/export/epub")
 async def export_epub(
+    font: str = Query(default="nunito"),
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
     user: User = Depends(current_user),
 ) -> Response:
     from src.books import service
-    from src.books.export import build_epub
+    from src.books.export import build_epub, EXPORT_FONTS, DEFAULT_EXPORT_FONT
     from fastapi.responses import Response as FastAPIResponse
 
+    font_id = font if font in EXPORT_FONTS else DEFAULT_EXPORT_FONT
     export_pages = await service.build_export_pages(db, book)
     title = book.brief.get("title", book.title) if book.brief else book.title
     author = getattr(user, "pen_name", "") or ""
-    epub_bytes = await build_epub(title, author or "AI Storybook Studio", export_pages)
+    epub_bytes = await build_epub(title, author or "AI Storybook Studio", export_pages, font_id=font_id)
     return FastAPIResponse(content=epub_bytes, media_type="application/epub+zip")
 
 

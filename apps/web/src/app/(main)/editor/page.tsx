@@ -432,7 +432,16 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
   const [downloadingEpub, setDownloadingEpub] = useState(false);
   const [makingPublic, setMakingPublic] = useState(false);
   const [isPublic, setIsPublic] = useState(book.visibility === "public");
+  const [exportFont, setExportFont] = useState("nunito");
+  const [exportFonts, setExportFonts] = useState<Array<{ id: string; label: string; is_default: boolean }>>([]);
   const { updateBook } = useBook();
+
+  useEffect(() => {
+    if (!token) return;
+    api.books.listExportFonts(token).then((r) => {
+      if (r.fonts?.length) setExportFonts(r.fonts);
+    }).catch(() => {});
+  }, [token]);
 
   const shareUrl = typeof window !== "undefined"
     ? `${window.location.origin}/read/public/${book.id}`
@@ -475,7 +484,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
     setDownloadingPdf(true);
     try {
       const title = book.brief?.title ?? book.title;
-      await downloadFile(api.books.exportPdf(token, book.id), `${title}.pdf`);
+      await downloadFile(api.books.exportPdf(token, book.id, exportFont), `${title}.pdf`);
       toast.success("PDF downloaded!");
     } catch {
       toast.error("PDF export failed");
@@ -489,7 +498,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
     setDownloadingEpub(true);
     try {
       const title = book.brief?.title ?? book.title;
-      await downloadFile(api.books.exportEpub(token, book.id), `${title}.epub`);
+      await downloadFile(api.books.exportEpub(token, book.id, exportFont), `${title}.epub`);
       toast.success("EPUB downloaded!");
     } catch {
       toast.error("EPUB export failed");
@@ -536,6 +545,28 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
               {copied ? "Copied!" : isPublic ? "Copy link" : "Make public & copy link"}
             </button>
           </div>
+
+          {/* Font picker — applies to both PDF and EPUB */}
+          {exportFonts.length > 0 && (
+            <div className="rounded-2xl bg-background p-4 chunky-border">
+              <p className="mb-2 text-sm font-extrabold">Story font</p>
+              <div className="flex flex-wrap gap-2">
+                {exportFonts.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setExportFont(f.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${
+                      exportFont === f.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card hover:bg-secondary"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* PDF */}
           <div className="rounded-2xl bg-background p-4 chunky-border">
