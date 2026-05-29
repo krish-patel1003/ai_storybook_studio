@@ -135,7 +135,7 @@ VOICE RULES for 6–8:
   is obvious from context ("The dragon rumbled — a deep, growly sound, like thunder inside a cave.")
 - Simple similes are great: "as tall as a wardrobe", "bright as a firefly". No complex metaphors.
 - Basic connectives are fine: "but", "so", "because", "and then". Avoid "however", "nevertheless", "meanwhile".
-- 2–4 sentences. You may use a paragraph break if it helps the rhythm.
+- 2–5 sentences maximum. You may use a paragraph break if it helps the rhythm.
 - The page should feel like a friendly adult narrator who loves the story and is enjoying telling it.
 - FORBIDDEN: SAT vocabulary, long subordinate clause chains, dense narration with no action
 - EXAMPLE of correct tone: "The map showed a path through the dark woods. \
@@ -154,7 +154,7 @@ VOICE RULES for 9–11:
 - You may write interiority: what the character feels in their body or their gut — \
   not "she felt sad" but "something heavy sat in her chest, right behind her ribs."
 - Simile and metaphor are welcome; irony and subtext are welcome. Moral complexity is welcome.
-- 4–7 sentences. Aim for prose that earns its page.
+- 3–5 sentences maximum. Aim for prose that earns every word — density over length.
 - Sound like Roald Dahl, Kate DiCamillo, or Philip Pullman: wry, precise, a little dangerous, fully alive.
 - FORBIDDEN: condescending narration ("and so the children learned…"), \
   explaining what the metaphor means, AI filler phrases

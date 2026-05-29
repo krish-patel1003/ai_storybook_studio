@@ -21,6 +21,7 @@ import {
   X,
   Volume2,
   Mic,
+  Expand,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -148,6 +149,109 @@ function useAudioPreview(bookId: string, pageId: string, token: string | null) {
   return { previewing, loading, togglePreview };
 }
 
+// ── Per-page preview modal ───────────────────────────────────────────────────
+
+function PagePreviewModal({
+  page,
+  blobUrl,
+  onClose,
+}: {
+  page: PageOut;
+  blobUrl: string | null;
+  onClose: () => void;
+}) {
+  // Close on backdrop click or Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-sm rounded-2xl overflow-hidden chunky-border chunky-shadow"
+        style={{ aspectRatio: "148/210" }}  /* A5 portrait */
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Image */}
+        {blobUrl ? (
+          <img
+            src={blobUrl}
+            alt={`Page ${page.order}`}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
+          </div>
+        )}
+
+        {/* Gradient overlay */}
+        {page.text && (
+          <div
+            className="absolute inset-x-0 bottom-0 pointer-events-none"
+            style={{
+              height: "30%",
+              background: "linear-gradient(to bottom, transparent 0%, rgba(250,248,243,0.82) 35%, rgba(250,248,243,0.97) 60%, #faf8f3 100%)",
+            }}
+          />
+        )}
+
+        {/* Text */}
+        {page.text && (
+          <div
+            className="absolute inset-x-0 bottom-0 px-4 pb-3 pt-1"
+            style={{ height: "30%" }}
+          >
+            <p
+              className="text-xs font-bold leading-relaxed text-foreground line-clamp-4"
+              style={{ fontFamily: '"Nunito", sans-serif' }}
+            >
+              {page.text}
+            </p>
+          </div>
+        )}
+
+        {/* Cover overlay */}
+        {page.is_cover && page.text && (
+          <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-6 px-4 text-center"
+            style={{
+              height: "45%",
+              background: "linear-gradient(to bottom, transparent 0%, rgba(10,10,20,0.55) 40%, rgba(10,10,20,0.88) 100%)",
+            }}
+          >
+            <p
+              className="text-white text-lg font-black leading-tight"
+              style={{ fontFamily: '"Fredoka", sans-serif' }}
+            >
+              {page.text}
+            </p>
+          </div>
+        )}
+
+        {/* Page label */}
+        <div className="absolute top-3 left-3">
+          <span className="inline-flex h-7 items-center justify-center rounded-full bg-background/90 px-2.5 font-display text-xs font-black chunky-border">
+            {page.is_cover ? "Cover" : `Page ${page.order}`}
+          </span>
+        </div>
+
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-background/90 chunky-border hover:bg-background transition-colors"
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={3} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PageCard({
   page,
   bookId,
@@ -170,10 +274,15 @@ function PageCard({
   const imgUrl = pageImageUrl(bookId, page.id);
   const blobUrl = useAuthImage(imgUrl, token, page.has_image);
   const { previewing, loading: previewLoading, togglePreview } = useAudioPreview(bookId, page.id, token);
+  const [showPreview, setShowPreview] = useState(false);
 
   const fmt = (s: number) => `${Math.floor(s / 60) > 0 ? `${Math.floor(s / 60)}m ` : ""}${(s % 60).toString().padStart(2, "0")}s`;
 
   return (
+    <>
+    {showPreview && (
+      <PagePreviewModal page={page} blobUrl={blobUrl} onClose={() => setShowPreview(false)} />
+    )}
     <div className={`group flex flex-col rounded-3xl bg-card chunky-border chunky-shadow-sm overflow-hidden transition-all ${
       status === "generating" ? "ring-2 ring-primary/50" : ""
     }`}>
@@ -211,11 +320,20 @@ function PageCard({
           </div>
         )}
 
-        {/* Page number */}
-        <div className="absolute top-3 left-3">
+        {/* Page number + preview button row */}
+        <div className="absolute top-3 left-3 flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-background font-display text-sm font-black chunky-border">
             {page.is_cover ? "C" : page.order}
           </span>
+          {(blobUrl || page.text) && (
+            <button
+              onClick={() => setShowPreview(true)}
+              title="Preview page"
+              className="grid h-7 w-7 place-items-center rounded-full bg-background/90 chunky-border hover:bg-background transition-colors"
+            >
+              <Expand className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+          )}
         </div>
 
         {/* Status badge */}
@@ -302,6 +420,7 @@ function PageCard({
         )}
       </div>
     </div>
+    </>
   );
 }
 

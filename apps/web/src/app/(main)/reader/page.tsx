@@ -158,8 +158,8 @@ const StoryPage = forwardRef<
     }
   }, [page.text, fontStack]);
 
-  // Text zone height — grows with more text, caps at 42%
-  const textZone = "38%";
+  // Text zone height — smaller = text starts lower on the page
+  const textZone = "30%";
 
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
@@ -195,7 +195,7 @@ const StoryPage = forwardRef<
         {page.text ? (
           <p
             ref={textRef}
-            className="leading-relaxed text-foreground"
+            className="leading-relaxed text-foreground font-bold"
             style={{ fontFamily: fontStack, fontSize: "0.88rem" }}
           >
             {page.text}
@@ -249,9 +249,10 @@ function FontPicker({ font, setFont }: { font: FontId; setFont: (f: FontId) => v
       <button
         onClick={() => setOpen((o) => !o)}
         title="Change font"
-        className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border transition-transform hover:-translate-y-0.5"
+        className="flex items-center gap-1.5 rounded-full bg-card px-3 h-8 chunky-border transition-transform hover:-translate-y-0.5 text-xs font-extrabold"
       >
-        <Type className="h-4 w-4" strokeWidth={2.5} />
+        <Type className="h-3.5 w-3.5" strokeWidth={2.5} />
+        <span>Font</span>
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl bg-card p-2 chunky-border chunky-shadow z-50">
