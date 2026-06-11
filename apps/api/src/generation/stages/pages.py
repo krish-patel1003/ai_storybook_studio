@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 
 from src.generation.constants import (
     GEMINI_PRO,
@@ -82,6 +83,10 @@ class PageStage:
                 model=self._model,
                 temperature=TEMP_PAGES,
             )
+            # Humanise: strip AI punctuation tells before any further processing.
+            if not page.is_cover and page.text:
+                page = page.model_copy(update={"text": _humanize_text(page.text)})
+
             # Hard guard: trim only if the page is not a split candidate.
             # If word_count >= PAGE_SPLIT_THRESHOLD the service layer will split
             # the text into two pages — trimming here would destroy the second half.
@@ -138,10 +143,10 @@ def _build_page_prompt(
             )
 
     return f"""\
-Story brief (title + moral + world for prose consistency):
+Story brief (for prose consistency):
   Title: {brief.title}
-  World: {brief.world}
-  Moral (never state this directly): {brief.moral}
+  Story: {brief.description}
+  Lesson (never state this directly): {brief.lesson}
 
 Character visual anchors for this page (inject ALL into assembled_prompt):
 {anchors_block}
@@ -157,9 +162,50 @@ NOW WRITE PAGE {beat.order}:
   Emotional note: {beat.emotional_note}
   Characters present: {", ".join(beat.characters_present) or "none"}
   Setting: {beat.setting_note}
-  Is cover: {"yes — write title only, no body text" if beat.order == 0 else "no"}
+  Is cover: {"yes. Write the title only. No body text at all." if beat.order == 0 else "no"}
 
 Write the page text ({word_min}–{word_max} words) and full illustration_metadata.
 The assembled_prompt in illustration_metadata must include the art style "{art_style}" \
 and all visual anchors listed above.
 """
+
+
+def _humanize_text(text: str) -> str:
+    """
+    Post-processing safety net: strip punctuation patterns that read as AI-generated
+    even when the LLM ignores the system prompt instructions.
+
+    Rules applied in order:
+    1.  " — " (em-dash with spaces)  →  ". " (new sentence feels more natural)
+    2.  "—" (mid-word em-dash)        →  " " (separate the words cleanly)
+    3.  " – " (en-dash with spaces)   →  ", " (softer pause)
+    4.  "–" (mid-word en-dash)        →  "-"  (keep as plain hyphen)
+    5.  " - " (spaced hyphen, AI tell) → ", " (unless it looks like a list bullet)
+    6.  Semicolons                     →  ". " (break into sentences)
+    7.  " ... " (spaced ellipsis)      →  "... " (tighten)
+    8.  Collapse any double-spaces left behind.
+    9.  Capitalise the first letter after any ". " we introduced.
+    """
+    # 1. Em-dash with surrounding spaces → new sentence
+    text = re.sub(r"\s*—\s*", ". ", text)
+
+    # 2. En-dash with surrounding spaces → comma pause
+    text = re.sub(r"\s*–\s*", ", ", text)
+
+    # 3. Spaced hyphen used as a clause separator (not a compound word hyphen)
+    #    e.g. "she ran - her heart racing" → "she ran, her heart racing"
+    text = re.sub(r"(?<=[a-zA-Z,!?])\s+-\s+(?=[a-zA-Z])", ", ", text)
+
+    # 4. Semicolons → full stop (capitalise next word below)
+    text = re.sub(r";\s*", ". ", text)
+
+    # 5. Tighten spaced ellipsis
+    text = re.sub(r"\s+\.\.\.\s+", "... ", text)
+
+    # 6. Collapse double spaces
+    text = re.sub(r"  +", " ", text)
+
+    # 7. Capitalise first letter after a sentence-ending period we introduced
+    text = re.sub(r"\.\s+([a-z])", lambda m: ". " + m.group(1).upper(), text)
+
+    return text.strip()

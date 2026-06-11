@@ -550,9 +550,9 @@ export default function OutlinePage() {
               <h1 className="font-display text-4xl font-black md:text-5xl">Story outline</h1>
               <p className="mt-1 text-muted-foreground">
                 {contentPages.length} pages · {lockedCount} locked.
-                {book.brief && (
+                {book.brief && book.brief.themes?.length > 0 && (
                   <span className="ml-1 font-semibold text-foreground">
-                    {book.brief.narrative_structure}
+                    {book.brief.themes.join(" · ")}
                   </span>
                 )}
               </p>
@@ -572,7 +572,7 @@ export default function OutlinePage() {
           {book.brief && (
             <div className="mt-4 rounded-2xl bg-card p-4 chunky-border chunky-shadow-sm">
               <p className="font-display text-lg font-black">{book.brief.title}</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">{book.brief.logline}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{book.brief.description}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {book.brief.arc.map((stage) => (
                   <span

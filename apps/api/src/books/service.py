@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.auth.models import User
 from src.books.models import Book, Character, GenerationStage, Page
 from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
 from src.config import settings
@@ -40,21 +41,50 @@ def _pipeline(model_config: ModelConfig | None = None) -> StoryPipeline:
 
 # ── Read helpers ──────────────────────────────────────────────────────────────
 
-async def generate_brief_options(data: BriefGenerateIn) -> list:
-    """Run EnhanceStage 4x concurrently — LLM non-determinism gives natural variety."""
+async def generate_brief(data: BriefGenerateIn):
+    """Generate a single story brief via EnhanceStage."""
     cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
     pipeline = _pipeline(cfg)
-    tasks = [
-        pipeline._enhance.run(
-            raw_prompt=data.raw_prompt,
-            age_range=data.age_range,
-            tone=data.tone,
-            safety=data.safety_mode,
-            page_count=data.page_count,
-        )
-        for _ in range(4)
-    ]
-    return list(await asyncio.gather(*tasks))
+    return await pipeline._enhance.run(
+        raw_prompt=data.raw_prompt,
+        age_range=data.age_range,
+        tone=data.tone,
+        safety=data.safety_mode,
+        page_count=data.page_count,
+    )
+
+
+async def regenerate_brief_field(data) -> dict:
+    """
+    Regenerate one field of an existing brief.
+    Generates a fresh brief from the same prompt, then splices in just the
+    requested field so every other field stays exactly as the user left it.
+    """
+    from src.books.schemas import BriefFieldRegenerateIn
+    assert isinstance(data, BriefFieldRegenerateIn)
+
+    valid_fields = {"title", "description", "characters_intro", "themes", "lesson"}
+    if data.field not in valid_fields:
+        raise ValueError(f"field must be one of {valid_fields}")
+
+    cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
+    pipeline = _pipeline(cfg)
+    new_brief = await pipeline._enhance.run(
+        raw_prompt=data.raw_prompt,
+        age_range=data.age_range,
+        tone=data.tone,
+        safety=data.safety_mode,
+        page_count=data.page_count,
+    )
+
+    # Merge: keep everything from current_brief, replace only the requested field
+    merged = data.current_brief.model_dump()
+    merged[data.field] = getattr(new_brief, data.field)
+    return merged
+
+
+# Keep old name as alias so any other callers don't break
+generate_brief_options = lambda data: generate_brief(data)  # type: ignore
 
 
 async def get_book(db: AsyncSession, book_id: uuid.UUID, user_id: uuid.UUID) -> Book:
@@ -69,7 +99,8 @@ async def get_book(db: AsyncSession, book_id: uuid.UUID, user_id: uuid.UUID) -> 
     return book
 
 
-async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, int]]:
+async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, int, str | None]]:
+    """Return (book, illustrated_page_count, cover_page_id | None) for each book."""
     from sqlalchemy import func
     illustrated_sq = (
         select(Page.book_id, func.count(Page.id).label("cnt"))
@@ -77,14 +108,28 @@ async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, i
         .group_by(Page.book_id)
         .subquery()
     )
+    # Subquery: the ID of the cover page for each book (null if not illustrated yet)
+    cover_sq = (
+        select(Page.book_id, Page.id.label("cover_page_id"))
+        .where(Page.is_cover.is_(True), Page.image_key.isnot(None))
+        .subquery()
+    )
     stmt = (
-        select(Book, func.coalesce(illustrated_sq.c.cnt, 0).label("illustrated_count"))
+        select(
+            Book,
+            func.coalesce(illustrated_sq.c.cnt, 0).label("illustrated_count"),
+            cover_sq.c.cover_page_id,
+        )
         .outerjoin(illustrated_sq, illustrated_sq.c.book_id == Book.id)
+        .outerjoin(cover_sq, cover_sq.c.book_id == Book.id)
         .where(Book.user_id == user_id)
         .order_by(Book.updated_at.desc())
     )
     result = await db.execute(stmt)
-    return [(row.Book, int(row.illustrated_count)) for row in result.all()]
+    return [
+        (row.Book, int(row.illustrated_count), str(row.cover_page_id) if row.cover_page_id else None)
+        for row in result.all()
+    ]
 
 
 # ── Draft & generate ──────────────────────────────────────────────────────────
@@ -143,6 +188,9 @@ async def generate_from_draft(
         await db.commit()
         await db.refresh(book)
 
+        # Auto-generate KDP fields — don't let a failure here break book creation
+        await _try_generate_kdp(db, book)
+
     except Exception as exc:
         logger.exception("Generation failed for book %s", book.id)
         try:
@@ -200,6 +248,9 @@ async def create_and_generate(
         book.title = result.brief.title
         await db.commit()
         await db.refresh(book)
+
+        # Auto-generate KDP fields — don't let a failure here break book creation
+        await _try_generate_kdp(db, book)
 
     except Exception as exc:
         logger.exception("Generation failed for book %s", book.id)
@@ -419,6 +470,7 @@ async def narrate_page(
     page_id: uuid.UUID,
     user_id: uuid.UUID,
     voice_name: str = "Kore",
+    voice_profile_id: uuid.UUID | None = None,
 ) -> Book:
     from src.storage import minio_client
     from src.generation.tts import synthesize, DEFAULT_VOICE
@@ -430,8 +482,17 @@ async def narrate_page(
     if not page.text:
         raise ValueError("Page has no text yet")
 
-    raw_key = f"audio/{book_id}/{page_id}.raw.pcm"
-    wav = await synthesize(page.text, voice_name=voice_name or DEFAULT_VOICE, debug_raw_key=raw_key)
+    # Route to ElevenLabs if a cloned voice profile is requested
+    if voice_profile_id is not None:
+        from src.voices.models import VoiceProfile
+        from src.generation.elevenlabs import synthesize as el_synthesize
+        profile = await db.get(VoiceProfile, voice_profile_id)
+        if profile is None or profile.user_id != user_id:
+            raise NotFoundError("Voice profile not found")
+        wav = await el_synthesize(page.text, profile.elevenlabs_voice_id, age_range=book.age_range)
+    else:
+        raw_key = f"audio/{book_id}/{page_id}.raw.pcm"
+        wav = await synthesize(page.text, voice_name=voice_name or DEFAULT_VOICE, debug_raw_key=raw_key)
 
     if page.audio_key:
         try:
@@ -449,12 +510,17 @@ async def narrate_book(
     book_id: uuid.UUID,
     user_id: uuid.UUID,
     voice_name: str = "Kore",
+    voice_profile_id: uuid.UUID | None = None,
 ) -> Book:
-    """Narrate all pages that have text but no audio yet."""
+    """Narrate all pages with text using the selected voice (overwrites existing audio)."""
     book = await get_book(db, book_id, user_id)
-    pages_to_narrate = [p for p in book.pages if p.text and not p.audio_key]
+    pages_to_narrate = [p for p in book.pages if p.text]
     for page in pages_to_narrate:
-        await narrate_page(db, book_id, page.id, user_id, voice_name=voice_name)
+        await narrate_page(
+            db, book_id, page.id, user_id,
+            voice_name=voice_name,
+            voice_profile_id=voice_profile_id,
+        )
     return await get_book(db, book_id, user_id)
 
 
@@ -535,18 +601,29 @@ async def add_character(
 # ── Export ────────────────────────────────────────────────────────────────────
 
 async def build_export_pages(db: AsyncSession, book: Book) -> list:
-    """Download all page images from MinIO and return ExportPage list."""
+    """Download all page images from MinIO and return ExportPage list.
+
+    Continuation pages (split overflow) have no image_key of their own —
+    they reuse the last available image so no page is left blank in the export.
+    """
     from src.books.export import ExportPage
     from src.storage import minio_client
 
     result = []
+    last_image_bytes: bytes | None = None
+
     for page in sorted(book.pages, key=lambda p: p.order):
         image_bytes = None
         if page.image_key:
             try:
                 image_bytes, _ = minio_client.download_image(page.image_key)
+                last_image_bytes = image_bytes   # cache for continuation pages
             except Exception:
-                pass
+                image_bytes = last_image_bytes   # fallback to previous
+        elif not page.is_cover:
+            # Continuation / split page — reuse previous page's image
+            image_bytes = last_image_bytes
+
         result.append(ExportPage(
             order=page.order,
             is_cover=page.is_cover,
@@ -557,6 +634,24 @@ async def build_export_pages(db: AsyncSession, book: Book) -> list:
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+async def _try_generate_kdp(db: AsyncSession, book: Book) -> None:
+    """Silently generate KDP fields after a book completes. Failures are logged, not raised."""
+    try:
+        from src.books.kdp import generate_kdp_fields
+        from src.generation.gemini import GeminiClient
+
+        user = await db.get(User, book.user_id)
+        if user is None:
+            return
+
+        client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+        await generate_kdp_fields(book, user, client)
+        await db.commit()
+        logger.info("KDP fields auto-generated for book %s", book.id)
+    except Exception:
+        logger.exception("KDP auto-generation failed for book %s (non-fatal)", book.id)
+
 
 async def _set_stage(db: AsyncSession, book: Book, stage: GenerationStage) -> None:
     book.stage = stage

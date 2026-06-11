@@ -25,11 +25,10 @@ export interface ArcStage {
 
 export interface BriefOut {
   title: string;
-  logline: string;
-  central_conflict: string;
-  moral: string;
-  world: string;
-  narrative_structure: string;
+  description: string;
+  characters_intro: string[];
+  themes: string[];
+  lesson: string;
   arc: ArcStage[];
 }
 
@@ -122,6 +121,7 @@ export interface BookSummaryOut {
   visibility: "public" | "private";
   stage: GenerationStage;
   illustrated_page_count: number;
+  cover_image_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -136,6 +136,11 @@ export interface BriefGenerateIn {
   page_count: number;
   model_provider: string;
   model_name: string;
+}
+
+export interface BriefFieldRegenerateIn extends BriefGenerateIn {
+  current_brief: BriefOut;
+  field: string;
 }
 
 export interface ModelInfo {
@@ -199,6 +204,35 @@ export interface CreateDraftIn {
   page_count: number;
   model_provider: string;
   model_name: string;
+}
+
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface KDPOut {
+  title: string;
+  subtitle: string;
+  author: string;
+  description_html: string;
+  primary_category: string;
+  secondary_category: string;
+  keywords: string[];
+  reading_age_min: number;
+  reading_age_max: number;
+  grade_range: string;
+  language: string;
+  trim_size: string;
+  interior_type: string;
+  paper_color: string;
+  estimated_page_count: number;
+  publishing_rights: string;
+  territories: string;
+  royalty_plan: string;
+  suggested_price_usd: string;
+  is_cached: boolean;
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -269,8 +303,15 @@ export const api = {
   },
 
   books: {
-    generateBriefs: (token: string, data: BriefGenerateIn) =>
-      request<{ briefs: BriefOut[] }>("/books/briefs/generate", {
+    generateBrief: (token: string, data: BriefGenerateIn) =>
+      request<BriefOut>("/books/briefs/generate", {
+        method: "POST",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
+    regenerateBriefField: (token: string, data: BriefFieldRegenerateIn) =>
+      request<BriefOut>("/books/briefs/regenerate-field", {
         method: "POST",
         headers: authed(token),
         body: JSON.stringify(data),
@@ -383,6 +424,22 @@ export const api = {
     exportEpub: (token: string, bookId: string, fontId?: string): Promise<globalThis.Response> =>
       fetch(`${API_URL}/books/${bookId}/export/epub${fontId ? `?font=${fontId}` : ""}`, { headers: authed(token) }),
 
+    kdp: (token: string, bookId: string) =>
+      request<KDPOut>(`/books/${bookId}/kdp`, { headers: authed(token) }),
+
+    kdpRegenerate: (token: string, bookId: string) =>
+      request<KDPOut>(`/books/${bookId}/kdp/regenerate`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    kdpUpdate: (token: string, bookId: string, data: Partial<Omit<KDPOut, "is_cached">>) =>
+      request<KDPOut>(`/books/${bookId}/kdp`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
     getPublicBook: (bookId: string) =>
       request<BookOut>(`/books/public/${bookId}`),
 
@@ -392,21 +449,64 @@ export const api = {
         { headers: authed(token) },
       ),
 
-    narratePage: (token: string, bookId: string, pageId: string, voiceName?: string) =>
+    narratePage: (
+      token: string,
+      bookId: string,
+      pageId: string,
+      voiceName?: string,
+      voiceProfileId?: string,
+    ) =>
       request<BookOut>(`/books/${bookId}/pages/${pageId}/narrate`, {
         method: "POST",
         headers: { ...authed(token), "Content-Type": "application/json" },
-        body: JSON.stringify({ voice_name: voiceName ?? "Kore" }),
+        body: JSON.stringify(
+          voiceProfileId
+            ? { voice_profile_id: voiceProfileId }
+            : { voice_name: voiceName ?? "Kore" }
+        ),
       }),
 
-    narrateBook: (token: string, bookId: string, voiceName?: string) =>
+    narrateBook: (
+      token: string,
+      bookId: string,
+      voiceName?: string,
+      voiceProfileId?: string,
+    ) =>
       request<BookOut>(`/books/${bookId}/narrate`, {
         method: "POST",
         headers: { ...authed(token), "Content-Type": "application/json" },
-        body: JSON.stringify({ voice_name: voiceName ?? "Kore" }),
+        body: JSON.stringify(
+          voiceProfileId
+            ? { voice_profile_id: voiceProfileId }
+            : { voice_name: voiceName ?? "Kore" }
+        ),
       }),
 
     pageAudioUrl: (bookId: string, pageId: string) =>
       `${API_URL}/books/${bookId}/pages/${pageId}/audio`,
+  },
+
+  voices: {
+    list: (token: string) =>
+      request<VoiceProfile[]>("/voices", { headers: authed(token) }),
+
+    upload: (token: string, formData: FormData): Promise<VoiceProfile> =>
+      fetch(`${API_URL}/voices/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new ApiError(body.detail ?? "Upload failed", res.status);
+        }
+        return res.json();
+      }),
+
+    delete: (token: string, profileId: string) =>
+      request<void>(`/voices/${profileId}`, {
+        method: "DELETE",
+        headers: authed(token),
+      }),
   },
 };

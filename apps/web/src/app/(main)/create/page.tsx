@@ -18,6 +18,9 @@ import {
   ImageIcon,
   Mic,
   Users,
+  Pencil,
+  Plus,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -37,13 +40,18 @@ const STYLES = [
   { id: "papercut", label: "Papercut", img: "/assets/page3.jpg" },
 ];
 
-const TONES = [
-  "Funny", "Calm", "Adventurous", "Cozy", "Silly",
-  "Whimsical", "Magical", "Spooky", "Heartwarming",
-  "Educational", "Mysterious", "Epic",
+const TONES_PRESET = [
+  // Mood / tone
+  "Funny", "Silly", "Calm", "Cozy", "Heartwarming",
+  "Adventurous", "Epic", "Whimsical", "Magical",
+  "Mysterious", "Spooky", "Educational",
+  // Genre / theme
+  "Fantasy", "Fairy Tale", "Sci-Fi", "Nature",
+  "Friendship", "Family", "Courage", "Kindness",
+  "Animals", "Space", "Ocean", "Bedtime",
 ];
 
-const PAGE_COUNT_OPTIONS = [6, 8, 10, 12, 15, 20];
+const PAGE_COUNT_OPTIONS = [6, 8, 10, 12, 15, 20, 24, 30, 40];
 
 const GENERATION_STAGES = [
   "Enhancing your idea…",
@@ -51,16 +59,17 @@ const GENERATION_STAGES = [
   "Writing story beats…",
   "Writing pages…",
   "Polishing the prose…",
+  "Reviewing and improving…",
 ];
 
-// ── Standard generating overlay (existing wizard) ─────────────────────────────
+// ── Standard generating overlay ───────────────────────────────────────────────
 
 function GeneratingOverlay() {
   const [stageIdx, setStageIdx] = useState(0);
   const [progress, setProgress] = useState(4);
 
   useEffect(() => {
-    const stageMs = [8000, 15000, 20000, 60000, 20000];
+    const stageMs = [8000, 15000, 20000, 60000, 20000, 18000];
     let total = 0;
     const timers: ReturnType<typeof setTimeout>[] = [];
 
@@ -134,10 +143,10 @@ function GeneratingOverlay() {
 type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
 
 const ONE_CLICK_STAGES: { id: OneClickStage; icon: React.ReactNode; label: string }[] = [
-  { id: "writing",     icon: <Sparkles className="h-4 w-4" />,  label: "Writing"     },
-  { id: "characters",  icon: <Users className="h-4 w-4" />,     label: "Characters"  },
-  { id: "illustrating",icon: <ImageIcon className="h-4 w-4" />, label: "Illustrating"},
-  { id: "narrating",   icon: <Mic className="h-4 w-4" />,       label: "Narrating"   },
+  { id: "writing",      icon: <Sparkles className="h-4 w-4" />,  label: "Writing"      },
+  { id: "characters",   icon: <Users className="h-4 w-4" />,     label: "Characters"   },
+  { id: "illustrating", icon: <ImageIcon className="h-4 w-4" />, label: "Illustrating" },
+  { id: "narrating",    icon: <Mic className="h-4 w-4" />,       label: "Narrating"    },
 ];
 
 function OneClickOverlay({
@@ -210,7 +219,6 @@ function OneClickOverlay({
             animate={{ opacity: 1 }}
             className="flex w-full max-w-sm flex-col items-center gap-7 text-center"
           >
-            {/* Spinning icon */}
             <div className="relative grid h-24 w-24 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
               <Wand2 className="h-10 w-10 text-primary-foreground" strokeWidth={2} />
               <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
@@ -231,7 +239,6 @@ function OneClickOverlay({
               </AnimatePresence>
             </div>
 
-            {/* Overall progress bar */}
             <div className="w-full">
               <div className="h-3 overflow-hidden rounded-full bg-muted chunky-border">
                 <motion.div
@@ -242,7 +249,6 @@ function OneClickOverlay({
               </div>
             </div>
 
-            {/* Stage pills */}
             <div className="flex items-center gap-3">
               {ONE_CLICK_STAGES.map((s, i) => {
                 const done = i < stageIdx;
@@ -278,85 +284,94 @@ function OneClickOverlay({
   );
 }
 
-// ── Brief card ────────────────────────────────────────────────────────────────
+// ── Brief field row (single field with edit + regenerate) ─────────────────────
 
-function BriefCard({
-  brief,
-  selected,
-  onSelect,
+function BriefFieldRow({
+  label,
+  value,
+  multiline,
+  onEdit,
+  onRegenerate,
+  regenerating,
 }: {
-  brief: BriefOut;
-  selected: boolean;
-  onSelect: () => void;
+  label: string;
+  value: string;
+  multiline?: boolean;
+  onEdit: (newValue: string) => void;
+  onRegenerate: () => void;
+  regenerating: boolean;
 }) {
-  return (
-    <button
-      onClick={onSelect}
-      className={`w-full rounded-2xl p-4 text-left transition-all chunky-border ${
-        selected
-          ? "bg-primary text-primary-foreground chunky-shadow -translate-y-0.5"
-          : "bg-background hover:bg-highlight"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-display text-lg font-black leading-tight">{brief.title}</div>
-        {selected && (
-          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-foreground">
-            <Check className="h-3 w-3 text-primary" strokeWidth={3} />
-          </span>
-        )}
-      </div>
-      <p className={`mt-1 text-sm leading-snug ${selected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
-        {brief.logline}
-      </p>
-      <div className={`mt-2 text-xs font-bold ${selected ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-        {brief.narrative_structure}
-      </div>
-    </button>
-  );
-}
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
 
-// ── Brief edit panel ──────────────────────────────────────────────────────────
-
-function BriefEditor({
-  brief,
-  onChange,
-}: {
-  brief: BriefOut;
-  onChange: (updated: BriefOut) => void;
-}) {
-  const fields: { key: keyof BriefOut; label: string; multiline?: boolean }[] = [
-    { key: "title", label: "Title" },
-    { key: "logline", label: "Logline", multiline: true },
-    { key: "central_conflict", label: "Central conflict", multiline: true },
-    { key: "moral", label: "Moral" },
-    { key: "world", label: "World / Setting", multiline: true },
-  ];
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
 
   return (
-    <div className="mt-4 grid gap-3 rounded-2xl bg-card p-4 chunky-border">
-      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
-        Edit brief
-      </p>
-      {fields.map(({ key, label, multiline }) => (
-        <label key={key} className="block">
-          <div className="mb-1 text-xs font-bold text-muted-foreground">{label}</div>
+    <div className="rounded-2xl bg-background p-4 chunky-border">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {!editing && (
+            <button
+              onClick={() => { setDraft(value); setEditing(true); }}
+              className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform"
+              title="Edit"
+            >
+              <Pencil className="h-3 w-3" strokeWidth={2.5} />
+            </button>
+          )}
+          <button
+            onClick={onRegenerate}
+            disabled={regenerating}
+            className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50"
+            title="Regenerate this field"
+          >
+            {regenerating
+              ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+              : <RefreshCw className="h-3 w-3" strokeWidth={2.5} />
+            }
+          </button>
+        </div>
+      </div>
+
+      {editing ? (
+        <div>
           {multiline ? (
             <textarea
-              rows={2}
-              value={brief[key] as string}
-              onChange={(e) => onChange({ ...brief, [key]: e.target.value })}
-              className="w-full resize-none rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30"
+              rows={3}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="w-full resize-none rounded-xl bg-card px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30"
             />
           ) : (
             <input
-              value={brief[key] as string}
-              onChange={(e) => onChange({ ...brief, [key]: e.target.value })}
-              className="w-full rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="w-full rounded-xl bg-card px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30"
             />
           )}
-        </label>
-      ))}
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={() => { onEdit(draft); setEditing(false); }}
+              className="rounded-full bg-primary px-3 py-1 text-xs font-extrabold text-primary-foreground chunky-border"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-full bg-background px-3 py-1 text-xs font-extrabold chunky-border"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm font-semibold leading-snug">{value}</p>
+      )}
     </div>
   );
 }
@@ -373,8 +388,12 @@ export default function CreatePage() {
   const [prompt, setPrompt] = useState("");
   const [age, setAge] = useState("3-5");
   const [tone, setTone] = useState<string[]>(["Funny"]);
+  const [customTones, setCustomTones] = useState<string[]>([]);
+  const [customToneInput, setCustomToneInput] = useState("");
   const [safety, setSafety] = useState(true);
   const [pageCount, setPageCount] = useState(10);
+  const [isCustomPageCount, setIsCustomPageCount] = useState(false);
+  const [customPageCountInput, setCustomPageCountInput] = useState("");
   const [style, setStyle] = useState("watercolor");
   const [modelProvider, setModelProvider] = useState("gemini");
   const [modelName, setModelName] = useState("gemini-3.5-flash");
@@ -383,11 +402,10 @@ export default function CreatePage() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
 
-  // Brief generation
-  const [briefs, setBriefs] = useState<BriefOut[]>([]);
-  const [briefsLoading, setBriefsLoading] = useState(false);
-  const [selectedBriefIdx, setSelectedBriefIdx] = useState(0);
-  const [editedBrief, setEditedBrief] = useState<BriefOut | null>(null);
+  // Brief state
+  const [activeBrief, setActiveBrief] = useState<BriefOut | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [regenField, setRegenField] = useState<string | null>(null);
 
   // Draft & generation
   const [draft, setDraft] = useState<BookOut | null>(null);
@@ -405,7 +423,6 @@ export default function CreatePage() {
     api.books.models(token)
       .then((d) => {
         setProviders(d.providers);
-        // Auto-select first available provider + model
         const first = d.providers.find((p) => p.available);
         if (first) {
           setModelProvider(first.id);
@@ -416,14 +433,20 @@ export default function CreatePage() {
       .finally(() => setModelsLoading(false));
   }, [token]);
 
-  const activeBrief = editedBrief ?? briefs[selectedBriefIdx] ?? null;
+  const briefParams = {
+    raw_prompt: prompt,
+    age_range: age,
+    tone,
+    safety_mode: safety,
+    page_count: pageCount,
+    model_provider: modelProvider,
+    model_name: modelName,
+  };
 
-  async function fetchBriefs(existingDraft?: BookOut) {
+  async function fetchBrief(existingDraft?: BookOut) {
     if (!token) { toast.error("Please sign in first"); return false; }
-    setBriefsLoading(true);
-    setBriefs([]);
-    setEditedBrief(null);
-    setSelectedBriefIdx(0);
+    setBriefLoading(true);
+    setActiveBrief(null);
     try {
       if (!existingDraft && !draft) {
         const saved = await api.books.createDraft(token, {
@@ -438,26 +461,37 @@ export default function CreatePage() {
         setDraft(saved);
         setBook(saved);
       }
-      const res = await api.books.generateBriefs(token, {
-        raw_prompt: prompt,
-        age_range: age,
-        tone,
-        safety_mode: safety,
-        page_count: pageCount,
-        model_provider: modelProvider,
-        model_name: modelName,
-      });
-      setBriefs(res.briefs);
-      // Auto-select first brief
-      setSelectedBriefIdx(0);
-      if (res.briefs[0]) setEditedBrief(res.briefs[0]);
+      const brief = await api.books.generateBrief(token, briefParams);
+      setActiveBrief(brief);
       return true;
     } catch (err: any) {
-      toast.error(err.message ?? "Failed to generate briefs");
+      toast.error(err.message ?? "Failed to generate brief");
       return false;
     } finally {
-      setBriefsLoading(false);
+      setBriefLoading(false);
     }
+  }
+
+  async function regenerateField(field: keyof BriefOut) {
+    if (!token || !activeBrief) return;
+    setRegenField(field);
+    try {
+      const updated = await api.books.regenerateBriefField(token, {
+        ...briefParams,
+        current_brief: activeBrief,
+        field,
+      });
+      setActiveBrief(updated);
+    } catch (err: any) {
+      toast.error(err.message ?? `Failed to regenerate ${field}`);
+    } finally {
+      setRegenField(null);
+    }
+  }
+
+  function updateBriefField(field: keyof BriefOut, value: string) {
+    if (!activeBrief) return;
+    setActiveBrief({ ...activeBrief, [field]: value });
   }
 
   async function handleNext() {
@@ -468,11 +502,11 @@ export default function CreatePage() {
     }
     if (step === 1) {
       setStep(2);
-      await fetchBriefs();
+      await fetchBrief();
       return;
     }
     if (step === 2) {
-      if (!activeBrief) { toast.error("Pick a brief first"); return; }
+      if (!activeBrief) { toast.error("Generate a brief first"); return; }
       setStep(3);
       return;
     }
@@ -518,7 +552,6 @@ export default function CreatePage() {
     setOneClickProgress({ done: 0, total: 0 });
 
     try {
-      // 1. Create draft using the user's selected options from step 1
       const savedDraft = await api.books.createDraft(token, {
         raw_prompt: prompt,
         age_range: age,
@@ -530,17 +563,14 @@ export default function CreatePage() {
       });
       setBook(savedDraft);
 
-      // 2. Generate full book text (blocks until complete)
       const generated = await api.books.generate(token, savedDraft.id, "watercolor");
       setBook(generated);
 
-      // 3. Generate character reference sheets
       setOneClickStage("characters");
       setOneClickProgress({ done: 0, total: 0 });
       const withChars = await api.books.generateCharacterSheets(token, generated.id);
       setBook(withChars);
 
-      // 4. Illustrate every page
       setOneClickStage("illustrating");
       const pages = [...withChars.pages].sort((a, b) => a.order - b.order);
       setOneClickProgress({ done: 0, total: pages.length });
@@ -553,7 +583,6 @@ export default function CreatePage() {
         setOneClickProgress({ done: i + 1, total: pages.length });
       }
 
-      // 5. Narrate every page that has text
       setOneClickStage("narrating");
       const textPages = [...currentBook.pages]
         .sort((a, b) => a.order - b.order)
@@ -567,7 +596,6 @@ export default function CreatePage() {
         setOneClickProgress({ done: i + 1, total: textPages.length });
       }
 
-      // 6. Done — show completion screen
       setOneClickStage("done");
       setOneClickBook(currentBook);
 
@@ -585,16 +613,18 @@ export default function CreatePage() {
     if (step > 0) setStep(step - 1);
   }
 
-  function handleSelectBrief(idx: number) {
-    setSelectedBriefIdx(idx);
-    setEditedBrief(briefs[idx]);
-  }
-
   const canNext =
     (step === 0 && prompt.trim().length >= 10) ||
     step === 1 ||
-    (step === 2 && (briefs.length > 0 || briefsLoading)) ||
+    (step === 2 && (activeBrief !== null || briefLoading)) ||
     step === 3;
+
+  // Brief fields definition
+  const briefFields: { key: keyof BriefOut; label: string; multiline?: boolean }[] = [
+    { key: "title", label: "Title" },
+    { key: "description", label: "Story", multiline: true },
+    { key: "lesson", label: "Lesson" },
+  ];
 
   return (
     <>
@@ -658,7 +688,6 @@ export default function CreatePage() {
                         </button>
                       ))}
                     </div>
-
                   </div>
                 )}
 
@@ -695,28 +724,81 @@ export default function CreatePage() {
 
                     <div className="mt-6">
                       <div className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
-                        Tone
+                        Tone &amp; Genre
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {TONES.map((t) => {
+                        {[...TONES_PRESET, ...customTones].map((t) => {
                           const on = tone.includes(t);
+                          const isCustom = customTones.includes(t);
                           return (
                             <button
                               key={t}
                               onClick={() =>
                                 setTone(on ? tone.filter((x) => x !== t) : [...tone, t])
                               }
-                              className={`rounded-full px-4 py-2 text-sm font-bold chunky-border ${
+                              className={`group relative rounded-full px-4 py-2 text-sm font-bold chunky-border transition-transform hover:-translate-y-0.5 ${
                                 on
                                   ? "bg-accent text-accent-foreground chunky-shadow-sm"
                                   : "bg-background"
                               }`}
                             >
                               {t}
+                              {isCustom && (
+                                <span
+                                  role="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCustomTones(customTones.filter((c) => c !== t));
+                                    setTone(tone.filter((x) => x !== t));
+                                  }}
+                                  className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-foreground/15 text-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X className="h-2.5 w-2.5" strokeWidth={3} />
+                                </span>
+                              )}
                             </button>
                           );
                         })}
+                        {/* Custom tone input */}
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={customToneInput}
+                            onChange={(e) => setCustomToneInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && customToneInput.trim()) {
+                                const val = customToneInput.trim();
+                                if (!customTones.includes(val) && !TONES_PRESET.includes(val)) {
+                                  setCustomTones([...customTones, val]);
+                                  setTone([...tone, val]);
+                                }
+                                setCustomToneInput("");
+                              }
+                            }}
+                            placeholder="Add your own…"
+                            className="h-[38px] w-32 rounded-full bg-background px-3 text-sm font-bold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                          />
+                          <button
+                            onClick={() => {
+                              const val = customToneInput.trim();
+                              if (!val) return;
+                              if (!customTones.includes(val) && !TONES_PRESET.includes(val)) {
+                                setCustomTones([...customTones, val]);
+                                setTone([...tone, val]);
+                              }
+                              setCustomToneInput("");
+                            }}
+                            disabled={!customToneInput.trim()}
+                            className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-40 hover:-translate-y-0.5 transition-transform"
+                          >
+                            <Plus className="h-4 w-4" strokeWidth={3} />
+                          </button>
+                        </div>
                       </div>
+                      {tone.length > 0 && (
+                        <p className="mt-1.5 text-xs text-muted-foreground font-semibold">
+                          {tone.length} selected
+                        </p>
+                      )}
                     </div>
 
                     <div className="mt-6">
@@ -727,17 +809,53 @@ export default function CreatePage() {
                         {PAGE_COUNT_OPTIONS.map((n) => (
                           <button
                             key={n}
-                            onClick={() => setPageCount(n)}
-                            className={`rounded-xl px-4 py-2 text-sm font-extrabold chunky-border ${
-                              pageCount === n
+                            onClick={() => { setPageCount(n); setIsCustomPageCount(false); }}
+                            className={`rounded-xl px-4 py-2 text-sm font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${
+                              !isCustomPageCount && pageCount === n
                                 ? "bg-primary text-primary-foreground chunky-shadow-sm"
                                 : "bg-background"
                             }`}
                           >
-                            {n} pages
+                            {n}
                           </button>
                         ))}
+                        {/* Custom page count */}
+                        <button
+                          onClick={() => setIsCustomPageCount(true)}
+                          className={`rounded-xl px-4 py-2 text-sm font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${
+                            isCustomPageCount
+                              ? "bg-primary text-primary-foreground chunky-shadow-sm"
+                              : "bg-background"
+                          }`}
+                        >
+                          Custom
+                        </button>
                       </div>
+                      {isCustomPageCount && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={4}
+                            max={100}
+                            value={customPageCountInput}
+                            onChange={(e) => {
+                              setCustomPageCountInput(e.target.value);
+                              const n = parseInt(e.target.value, 10);
+                              if (!isNaN(n) && n >= 4 && n <= 100) setPageCount(n);
+                            }}
+                            placeholder="e.g. 18"
+                            className="w-28 rounded-xl bg-background px-3 py-2 text-sm font-extrabold chunky-border outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          <span className="text-sm font-bold text-muted-foreground">pages (4–100)</span>
+                        </div>
+                      )}
+                      <p className="mt-1.5 text-xs text-muted-foreground font-semibold">
+                        {isCustomPageCount && parseInt(customPageCountInput, 10) >= 4
+                          ? `${pageCount} pages selected`
+                          : !isCustomPageCount
+                          ? `${pageCount} pages selected`
+                          : "Enter a number between 4 and 100"}
+                      </p>
                     </div>
 
                     <button
@@ -888,56 +1006,55 @@ export default function CreatePage() {
                   </div>
                 )}
 
-                {/* ── Step 2: Brief options ── */}
+                {/* ── Step 2: Story brief ── */}
                 {step === 2 && (
                   <div>
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <h1 className="font-display text-4xl font-black md:text-5xl">
-                          Pick your brief
+                          Your story brief
                         </h1>
                         <p className="mt-2 text-muted-foreground">
-                          We generated 4 takes. Pick the one that feels right and edit it.
+                          Edit any field or regenerate parts you&apos;d like to change.
                         </p>
                       </div>
                       <button
-                        onClick={() => fetchBriefs(draft ?? undefined)}
-                        disabled={briefsLoading}
+                        onClick={() => fetchBrief(draft ?? undefined)}
+                        disabled={briefLoading}
                         className="flex shrink-0 items-center gap-1.5 rounded-full bg-background px-4 py-2 text-sm font-extrabold chunky-border disabled:opacity-50"
                       >
                         <RefreshCw
-                          className={`h-4 w-4 ${briefsLoading ? "animate-spin" : ""}`}
+                          className={`h-4 w-4 ${briefLoading ? "animate-spin" : ""}`}
                           strokeWidth={2.5}
                         />
-                        Regenerate
+                        Regenerate all
                       </button>
                     </div>
 
-                    {briefsLoading ? (
+                    {briefLoading ? (
                       <div className="mt-10 flex flex-col items-center gap-4">
                         <Loader2 className="h-10 w-10 animate-spin text-primary" />
                         <p className="font-bold text-muted-foreground">
-                          Generating 4 story briefs…
+                          Generating your story brief…
                         </p>
                       </div>
-                    ) : (
-                      <div className="mt-6">
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {briefs.map((b, i) => (
-                            <BriefCard
-                              key={i}
-                              brief={b}
-                              selected={selectedBriefIdx === i}
-                              onSelect={() => handleSelectBrief(i)}
-                            />
-                          ))}
-                        </div>
-                        {activeBrief && (
-                          <BriefEditor
-                            brief={activeBrief}
-                            onChange={setEditedBrief}
+                    ) : activeBrief ? (
+                      <div className="mt-6 grid gap-3">
+                        {briefFields.map(({ key, label, multiline }) => (
+                          <BriefFieldRow
+                            key={key}
+                            label={label}
+                            value={activeBrief[key] as string}
+                            multiline={multiline}
+                            onEdit={(v) => updateBriefField(key, v)}
+                            onRegenerate={() => regenerateField(key)}
+                            regenerating={regenField === key}
                           />
-                        )}
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-10 flex flex-col items-center gap-4 text-muted-foreground">
+                        <p className="font-bold">No brief yet — hit &quot;Regenerate all&quot; to generate one.</p>
                       </div>
                     )}
                   </div>
@@ -983,7 +1100,7 @@ export default function CreatePage() {
                           Your brief
                         </p>
                         <p className="mt-1 font-display text-xl font-black">{activeBrief.title}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">{activeBrief.logline}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{activeBrief.description}</p>
                         <div className="mt-2 flex flex-wrap gap-3 text-xs font-bold text-muted-foreground">
                           <span>Ages {age}</span>
                           <span>·</span>
@@ -1019,13 +1136,13 @@ export default function CreatePage() {
 
               <button
                 onClick={handleNext}
-                disabled={!canNext || briefsLoading}
+                disabled={!canNext || briefLoading}
                 className="inline-flex items-center gap-1.5 rounded-full bg-primary px-6 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0"
               >
                 {step === 3 ? (
                   <><Sparkles className="h-4 w-4" strokeWidth={3} /> Generate book</>
                 ) : step === 1 ? (
-                  <>Next — generate briefs <ArrowRight className="h-4 w-4" strokeWidth={3} /></>
+                  <>Next — generate brief <ArrowRight className="h-4 w-4" strokeWidth={3} /></>
                 ) : (
                   <>Next <ArrowRight className="h-4 w-4" strokeWidth={3} /></>
                 )}

@@ -7,9 +7,11 @@ import { useAuth } from "@/lib/auth-context";
 import { useState, useRef, useEffect } from "react";
 
 const navItems = [
-  { href: "/create", label: "Create" },
-  { href: "/library", label: "Library" },
-  { href: "/reader", label: "Reader" },
+  { href: "/create",  label: "Create"        },
+  { href: "/library", label: "Library"       },
+  { href: "/reader",  label: "Reader"        },
+  { href: "/voices",  label: "Voice Studio"  },
+  { href: "/kdp",     label: "Publish"       },
 ] as const;
 
 export function BookHeader() {

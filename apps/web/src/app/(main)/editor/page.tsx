@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, pageImageUrl, type PageOut, type BookOut } from "@/lib/api";
+import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { toast } from "sonner";
 
@@ -648,14 +648,21 @@ export default function EditorPage() {
   const [narratingBook, setNarratingBook] = useState(false);
   const [narrateProgress, setNarrateProgress] = useState<{ done: number; total: number } | null>(null);
   const [pageNarrateStatuses, setPageNarrateStatuses] = useState<Record<string, "idle" | "narrating" | "done" | "error">>({});
-  const [selectedVoice, setSelectedVoice] = useState("Kore");
+  // Voice selection — preset Gemini voices or cloned user profiles
+  type VoiceChoice =
+    | { type: "preset"; id: string }
+    | { type: "clone"; profileId: string; name: string };
+
+  const [selectedVoice, setSelectedVoice] = useState<VoiceChoice>({ type: "preset", id: "Kore" });
   const [availableVoices, setAvailableVoices] = useState<Array<{ id: string; description: string; is_default: boolean }>>([]);
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
 
   useEffect(() => {
     if (!token) return;
     api.books.listVoices(token).then((res) => {
       if (res.voices?.length) setAvailableVoices(res.voices);
     }).catch(() => {/* voices are a nice-to-have */});
+    api.voices.list(token).then(setVoiceProfiles).catch(() => {});
   }, [token]);
 
   // Per-page timers
@@ -734,19 +741,25 @@ export default function EditorPage() {
 
   async function handleNarrate() {
     if (!token || !book) return;
-    const textPages = book.pages.filter((p) => p.text && !p.has_audio);
-    if (textPages.length === 0) { toast("All pages are already narrated!"); return; }
+    // Always narrate all text pages with the currently selected voice
+    // (re-narrates even if audio already exists, so voice changes take effect)
+    const textPages = book.pages.filter((p) => p.text);
+    if (textPages.length === 0) { toast("No pages with text to narrate yet."); return; }
     setNarratingBook(true);
     setNarrateProgress({ done: 0, total: textPages.length });
     try {
       for (const page of textPages) {
-        const updated = await api.books.narratePage(token, book.id, page.id, selectedVoice);
+        const updated = await api.books.narratePage(
+          token, book.id, page.id,
+          selectedVoice.type === "preset" ? selectedVoice.id : undefined,
+          selectedVoice.type === "clone" ? selectedVoice.profileId : undefined,
+        );
         updateBook(updated);
         setNarrateProgress((p) => p ? { ...p, done: p.done + 1 } : null);
       }
       toast.success("Narration complete! Open the reader to listen.");
     } catch {
-      toast.error("Narration failed — check your Gemini API key supports TTS.");
+      toast.error("Narration failed — please try again.");
     } finally {
       setNarratingBook(false);
       setNarrateProgress(null);
@@ -757,7 +770,11 @@ export default function EditorPage() {
     if (!token || !book) return;
     setPageNarrateStatuses((s) => ({ ...s, [page.id]: "narrating" }));
     try {
-      const updated = await api.books.narratePage(token, book.id, page.id, selectedVoice);
+      const updated = await api.books.narratePage(
+        token, book.id, page.id,
+        selectedVoice.type === "preset" ? selectedVoice.id : undefined,
+        selectedVoice.type === "clone" ? selectedVoice.profileId : undefined,
+      );
       updateBook(updated);
       setPageNarrateStatuses((s) => ({ ...s, [page.id]: "done" }));
     } catch {
@@ -787,7 +804,7 @@ export default function EditorPage() {
           <div className="flex items-center gap-2">
             {illustratedCount > 0 && (
               <Link
-                href="/reader"
+                href="/reader?from=editor"
                 className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
               >
                 <Eye className="h-4 w-4" strokeWidth={2.5} />
@@ -928,24 +945,56 @@ export default function EditorPage() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {/* Voice picker */}
-            {availableVoices.length > 0 && (
+            {(availableVoices.length > 0 || voiceProfiles.length > 0) && (
               <select
-                value={selectedVoice}
-                onChange={(e) => setSelectedVoice(e.target.value)}
+                value={
+                  selectedVoice.type === "preset"
+                    ? `preset:${selectedVoice.id}`
+                    : `clone:${selectedVoice.profileId}`
+                }
+                onChange={(e) => {
+                  const [type, id] = e.target.value.split(":");
+                  if (type === "preset") {
+                    setSelectedVoice({ type: "preset", id });
+                  } else {
+                    const profile = voiceProfiles.find((p) => p.id === id);
+                    if (profile) setSelectedVoice({ type: "clone", profileId: id, name: profile.name });
+                  }
+                }}
                 disabled={narratingBook}
                 className="rounded-full border border-border bg-card px-3 py-2 text-xs font-bold chunky-border disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/40"
                 title="Select narrator voice"
               >
-                {availableVoices.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.id} — {v.description}
-                  </option>
-                ))}
+                {availableVoices.length > 0 && (
+                  <optgroup label="── Preset Voices ──">
+                    {availableVoices.map((v) => (
+                      <option key={v.id} value={`preset:${v.id}`}>
+                        {v.id} — {v.description}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {voiceProfiles.length > 0 && (
+                  <optgroup label="── Your Voices ──">
+                    {voiceProfiles.map((p) => (
+                      <option key={p.id} value={`clone:${p.id}`}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {voiceProfiles.length === 0 && (
+                  <optgroup label="──────────────────">
+                    <option disabled value="">
+                      + Create a voice in Voice Studio
+                    </option>
+                  </optgroup>
+                )}
               </select>
             )}
             <button
               onClick={handleNarrate}
-              disabled={narratingBook || allPages.filter((p) => p.text && !p.has_audio).length === 0}
+              disabled={narratingBook || allPages.filter((p) => p.text).length === 0}
               className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
             >
               {narratingBook ? (
@@ -956,7 +1005,11 @@ export default function EditorPage() {
               ) : (
                 <>
                   <Mic className="h-4 w-4" strokeWidth={2.5} />
-                  {allPages.filter((p) => p.has_audio).length > 0 ? "Narrate remaining" : "Narrate all pages"}
+                  {selectedVoice.type === "clone"
+                    ? `Narrate as ${selectedVoice.name}`
+                    : allPages.filter((p) => p.has_audio).length > 0
+                    ? "Re-narrate all"
+                    : "Narrate all pages"}
                 </>
               )}
             </button>

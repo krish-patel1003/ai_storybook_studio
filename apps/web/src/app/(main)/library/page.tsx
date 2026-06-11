@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -25,6 +25,34 @@ import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, type BookSummaryOut, type BookOut } from "@/lib/api";
 import { toast } from "sonner";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Fetches a protected cover image with auth and renders it
+function CoverImage({ path, token }: { path: string; token: string }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const prevUrl = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (cancelled || !blob) return;
+        const url = URL.createObjectURL(blob);
+        prevUrl.current = url;
+        setObjectUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (prevUrl.current) URL.revokeObjectURL(prevUrl.current);
+    };
+  }, [path, token]);
+
+  if (!objectUrl) return null;
+  return <img src={objectUrl} alt="Cover" className="h-full w-full object-cover" />;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -110,10 +138,11 @@ function DeleteDialog({
 }
 
 function BookCard({
-  book, onContinue, onPreview, onDelete, onToggleVisibility,
+  book, token, onContinue, onPreview, onDelete, onToggleVisibility,
   loadingContinue, loadingPreview, loadingVisibility,
 }: {
   book: BookSummaryOut;
+  token: string;
   onContinue: () => void;
   onPreview: () => void;
   onDelete: () => void;
@@ -139,9 +168,16 @@ function BookCard({
       animate={{ opacity: 1, y: 0 }}
       className="group flex flex-col rounded-3xl bg-card chunky-border chunky-shadow-sm overflow-hidden"
     >
-      {/* Card header / cover */}
-      <div className="relative flex h-32 items-center justify-center bg-primary/10 border-b-[2.5px] border-foreground">
-        <BookOpen className="h-14 w-14 text-primary/30" strokeWidth={1.5} />
+      {/* Card header / cover thumbnail */}
+      <div className="relative h-44 overflow-hidden border-b-[2.5px] border-foreground bg-primary/10">
+        {/* Cover image — fetched with auth */}
+        {book.cover_image_url ? (
+          <CoverImage path={book.cover_image_url} token={token} />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <BookOpen className="h-14 w-14 text-primary/30" strokeWidth={1.5} />
+          </div>
+        )}
 
         {/* Stage badge */}
         <div className="absolute top-3 right-3">
@@ -164,7 +200,7 @@ function BookCard({
 
         {/* Illustration progress strip */}
         {isComplete && book.page_count > 0 && (
-          <div className="absolute bottom-0 inset-x-0 h-1.5 bg-muted">
+          <div className="absolute bottom-0 inset-x-0 h-1.5 bg-black/20">
             <div
               className="h-full bg-primary transition-all duration-500"
               style={{ width: `${Math.round((book.illustrated_page_count / book.page_count) * 100)}%` }}
@@ -380,6 +416,7 @@ export default function LibraryPage() {
                 <BookCard
                   key={book.id}
                   book={book}
+                  token={token ?? ""}
                   onContinue={() => continueBook(book)}
                   onPreview={() => previewBook(book)}
                   onDelete={() => setDeleteTarget(book)}

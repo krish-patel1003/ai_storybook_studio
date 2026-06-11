@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { forwardRef, useRef, useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -16,28 +16,57 @@ const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
   { ssr: false }
 ) as React.ForwardRefExoticComponent<HTMLFlipBookProps & React.RefAttributes<HTMLFlipBookRef>>;
 
+// ── Font size options ─────────────────────────────────────────────────────────
+
+const FONT_SIZES = [
+  { id: "s",  label: "S",  rem: 1.35 },
+  { id: "m",  label: "M",  rem: 1.55 },
+  { id: "l",  label: "L",  rem: 1.8  },
+  { id: "xl", label: "XL", rem: 2.1  },
+] as const;
+
+type FontSizeId = typeof FONT_SIZES[number]["id"];
+
+function useReaderFontSize(): [FontSizeId, (s: FontSizeId) => void] {
+  const STORAGE_KEY = "reader-fontsize-v1";
+  const [size, setSizeState] = useState<FontSizeId>("l");
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY) as FontSizeId | null;
+    if (saved && FONT_SIZES.find((s) => s.id === saved)) setSizeState(saved);
+  }, []);
+  const setSize = useCallback((s: FontSizeId) => {
+    setSizeState(s);
+    localStorage.setItem(STORAGE_KEY, s);
+  }, []);
+  return [size, setSize];
+}
+
 // ── Font options ──────────────────────────────────────────────────────────────
 
 const FONTS = [
-  { id: "nunito",       label: "Nunito",        stack: '"Nunito", sans-serif',        sample: "Aa" },
-  { id: "patrick-hand", label: "Patrick Hand",  stack: '"Patrick Hand", cursive',     sample: "Aa" },
-  { id: "caveat",       label: "Caveat",         stack: '"Caveat", cursive',           sample: "Aa" },
-  { id: "merriweather", label: "Merriweather",   stack: '"Merriweather", serif',       sample: "Aa" },
-  { id: "quicksand",    label: "Quicksand",      stack: '"Quicksand", sans-serif',     sample: "Aa" },
+  { id: "unkempt",      label: "Unkempt",         stack: 'var(--font-unkempt), cursive',  weight: 400, sample: "Aa" },
+  { id: "mochibop",     label: "Mochibop",         stack: '"Mochiy Pop One", sans-serif', weight: 400, sample: "Aa" },
+  { id: "nunito",       label: "Nunito",           stack: '"Nunito", sans-serif',         weight: 600, sample: "Aa" },
+  { id: "patrick-hand", label: "Patrick Hand",    stack: '"Patrick Hand", cursive',      weight: 400, sample: "Aa" },
+  { id: "caveat",       label: "Caveat",           stack: '"Caveat", cursive',            weight: 700, sample: "Aa" },
+  { id: "merriweather", label: "Merriweather",     stack: '"Merriweather", serif',        weight: 700, sample: "Aa" },
+  { id: "quicksand",    label: "Quicksand",        stack: '"Quicksand", sans-serif',      weight: 600, sample: "Aa" },
 ] as const;
 
 type FontId = typeof FONTS[number]["id"];
 
 function useReaderFont(): [FontId, (f: FontId) => void] {
-  const [font, setFontState] = useState<FontId>("nunito");
+  // v3 key — forces Unkempt as default, ignores old "patrick-hand" saved preference
+  const STORAGE_KEY = "reader-font-v3";
+  const [font, setFontState] = useState<FontId>("unkempt");
   useEffect(() => {
-    const saved = localStorage.getItem("reader-font") as FontId | null;
+    const saved = localStorage.getItem(STORAGE_KEY) as FontId | null;
     if (saved && FONTS.find((f) => f.id === saved)) setFontState(saved);
   }, []);
   const setFont = useCallback((f: FontId) => {
     setFontState(f);
-    localStorage.setItem("reader-font", f);
-  }, []);
+    localStorage.setItem(STORAGE_KEY, f);
+  }, [STORAGE_KEY]);
   return [font, setFont];
 }
 
@@ -108,9 +137,9 @@ const CoverPage = forwardRef<
         <h1
           className="text-white leading-tight drop-shadow-lg"
           style={{
-            fontFamily: '"Fredoka", sans-serif',
-            fontWeight: 700,
-            fontSize: "clamp(1.4rem, 5vw, 2.2rem)",
+            fontFamily: 'var(--font-kranky), serif',
+            fontWeight: 400,
+            fontSize: "clamp(1.5rem, 5vw, 2.4rem)",
             textShadow: "0 2px 12px rgba(0,0,0,0.6)",
           }}
         >
@@ -138,39 +167,41 @@ CoverPage.displayName = "CoverPage";
 
 const StoryPage = forwardRef<
   HTMLDivElement,
-  { page: PageOut; bookId: string; token: string | null; fontStack: string }
->(({ page, bookId, token, fontStack }, ref) => {
+  { page: PageOut; bookId: string; token: string | null; fontStack: string; fontSize: number; fontWeight: number }
+>(({ page, bookId, token, fontStack, fontSize, fontWeight }, ref) => {
   const imgUrl = useAuthBlob(pageImageUrl(bookId, page.id), token, page.has_image);
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-shrink font if text overflows
+  // Auto-shrink font if text overflows the container
   useEffect(() => {
     const el = textRef.current;
     const container = containerRef.current;
     if (!el || !container || !page.text) return;
-    el.style.fontSize = "";
-    let size = parseFloat(getComputedStyle(el).fontSize);
-    const minSize = 8.5;
-    while (el.scrollHeight > container.clientHeight && size > minSize) {
-      size -= 0.5;
-      el.style.fontSize = `${size}px`;
+    el.style.fontSize = `${fontSize}rem`;
+    let px = fontSize * 16;
+    const minPx = 11;
+    while (el.scrollHeight > container.clientHeight && px > minPx) {
+      px -= 0.5;
+      el.style.fontSize = `${px}px`;
     }
-  }, [page.text, fontStack]);
+  }, [page.text, fontStack, fontSize]);
 
   // Text zone: where the text box sits (bottom of page).
-  // Gradient zone: taller than the text zone so the fade bleeds up into the image.
-  const textZone   = "36%";
-  const gradientZone = "52%";
+  // Gradient zone: just wide enough to blend the image into the text area —
+  // must NOT start so high that it hides meaningful illustration content.
+  const textZone     = "38%";
+  const gradientZone = "47%";
 
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
-      {/* Full-bleed illustration — sits behind everything */}
+      {/* Full-bleed illustration — sits behind everything, pinned to top so no white gap */}
       {imgUrl ? (
         <img
           src={imgUrl}
           alt={`Page ${page.order}`}
           className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: "center top" }}
           draggable={false}
         />
       ) : (
@@ -179,26 +210,26 @@ const StoryPage = forwardRef<
         </div>
       )}
 
-      {/* Gradient blending layer — starts above the text zone for a smooth fade */}
+      {/* Gradient blending layer — long, gradual fade for a natural picture-book look */}
       <div
         className="absolute inset-x-0 bottom-0 pointer-events-none"
         style={{
           height: gradientZone,
-          background: "linear-gradient(to bottom, transparent 0%, transparent 15%, rgba(250,248,243,0.45) 38%, rgba(250,248,243,0.88) 58%, rgba(250,248,243,0.97) 72%, #faf8f3 100%)",
+          background: "linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, #faf8f3 90%)",
         }}
       />
 
-      {/* Text area — sits at the bottom, inside the fully opaque part of the gradient */}
+      {/* Text area — vertically centred in the bottom zone so text fills the space naturally */}
       <div
         ref={containerRef}
-        className="absolute inset-x-0 bottom-0 overflow-hidden"
-        style={{ height: textZone, padding: "14px 18px 14px 18px" }}
+        className="absolute inset-x-0 bottom-0 flex items-center justify-center overflow-hidden"
+        style={{ height: textZone, padding: "8px 28px 24px 28px" }}
       >
         {page.text ? (
           <p
             ref={textRef}
-            className="leading-relaxed text-foreground font-bold"
-            style={{ fontFamily: fontStack, fontSize: "0.88rem" }}
+            className="text-foreground text-center w-full"
+            style={{ fontFamily: fontStack, fontSize: `${fontSize}rem`, fontWeight, lineHeight: 1.85 }}
           >
             {page.text}
           </p>
@@ -269,12 +300,35 @@ function FontPicker({ font, setFont }: { font: FontId; setFont: (f: FontId) => v
                 font === f.id ? "bg-primary text-primary-foreground" : "hover:bg-highlight"
               }`}
             >
-              <span className="text-lg w-6 shrink-0" style={{ fontFamily: f.stack }}>{f.sample}</span>
-              <span className="text-sm font-bold" style={{ fontFamily: f.stack }}>{f.label}</span>
+              <span className="text-lg w-6 shrink-0" style={{ fontFamily: f.stack, fontWeight: f.weight }}>{f.sample}</span>
+              <span className="text-sm" style={{ fontFamily: f.stack, fontWeight: f.weight }}>{f.label}</span>
             </button>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Font size picker ──────────────────────────────────────────────────────────
+
+function FontSizePicker({ size, setSize }: { size: FontSizeId; setSize: (s: FontSizeId) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-full bg-card px-1.5 h-8 chunky-border">
+      {FONT_SIZES.map((s) => (
+        <button
+          key={s.id}
+          onClick={() => setSize(s.id)}
+          title={`Font size ${s.label}`}
+          className={`h-6 w-7 rounded-full text-xs font-extrabold transition-all ${
+            size === s.id
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-highlight"
+          }`}
+        >
+          {s.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -294,7 +348,7 @@ function usePageAudio(
   currentPage: number,
   bookId: string,
   token: string | null,
-  bookRef: React.RefObject<HTMLFlipBookRef>,
+  bookRef: React.RefObject<HTMLFlipBookRef | null>,
 ) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -425,13 +479,22 @@ function usePageAudio(
 
 // ── Reader ────────────────────────────────────────────────────────────────────
 
-export default function ReaderPage() {
+import { Suspense } from "react";
+
+function ReaderInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { token, user } = useAuth();
   const { book } = useBook();
+
+  // Resolve where the back button should go
+  const fromParam = searchParams.get("from");
+  const backHref = fromParam === "editor" ? "/editor" : "/library";
+  const backLabel = fromParam === "editor" ? "Editor" : "Library";
   const bookRef = useRef<HTMLFlipBookRef>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [font, setFont] = useReaderFont();
+  const [fontSizeId, setFontSizeId] = useReaderFontSize();
 
   useEffect(() => {
     if (book === null) router.replace("/library");
@@ -444,7 +507,10 @@ export default function ReaderPage() {
     usePageAudio(pages, currentPage, book?.id ?? "", token, bookRef);
 
   const bookHasAnyAudio = pages.some((p) => p.has_audio);
-  const fontStack = FONTS.find((f) => f.id === font)?.stack ?? FONTS[0].stack;
+  const activeFont = FONTS.find((f) => f.id === font) ?? FONTS[0];
+  const fontStack  = activeFont.stack;
+  const fontWeight = activeFont.weight;
+  const fontSize   = FONT_SIZES.find((s) => s.id === fontSizeId)?.rem ?? 1.8;
   const penName = user?.pen_name ?? "";
 
   if (!book) return null;
@@ -460,16 +526,18 @@ export default function ReaderPage() {
       <div className="flex shrink-0 items-center justify-between border-b-[2px] border-foreground/20 px-5 py-2.5">
         <div className="flex items-center gap-3">
           <Link
-            href="/library"
-            className="rounded-full bg-card p-2 chunky-border transition-transform hover:-translate-y-0.5"
+            href={backHref}
+            className="flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5"
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={3} />
+            {backLabel}
           </Link>
           <span className="font-display text-base font-black md:text-lg">
             {book.brief?.title ?? book.title}
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <FontSizePicker size={fontSizeId} setSize={setFontSizeId} />
           <FontPicker font={font} setFont={setFont} />
           {bookHasAnyAudio && (
             <button
@@ -514,7 +582,7 @@ export default function ReaderPage() {
             page.is_cover ? (
               <CoverPage key={page.id} page={page} bookId={book.id} token={token} author={penName} fontStack={fontStack} />
             ) : (
-              <StoryPage key={page.id} page={page} bookId={book.id} token={token} fontStack={fontStack} />
+              <StoryPage key={page.id} page={page} bookId={book.id} token={token} fontStack={fontStack} fontSize={fontSize} fontWeight={fontWeight} />
             )
           )}
           <BackCover title={book.brief?.title ?? book.title} />
@@ -569,5 +637,13 @@ export default function ReaderPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function ReaderPage() {
+  return (
+    <Suspense>
+      <ReaderInner />
+    </Suspense>
   );
 }

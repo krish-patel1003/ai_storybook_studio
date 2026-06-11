@@ -21,12 +21,11 @@ class ArcStage(BaseModel):
 
 class StoryBrief(BaseModel):
     title: str
-    logline: str = Field(description="One sentence: the whole story compressed to its emotional core")
-    central_conflict: str = Field(description="The core dramatic tension the protagonist must navigate")
-    moral: str = Field(description="The emotional truth the reader arrives at — never stated directly in the story")
-    world: str = Field(description="Setting and atmosphere as rich prose — should suggest visual variety across pages")
-    narrative_structure: str = Field(description="The structure name the model chooses for this story — e.g. 'Hero's Journey', 'Circular Arc', 'Two-Beat Transformation'")
-    arc: list[ArcStage] = Field(description="Ordered list of arc stages — length and names determined by the story, not a fixed template")
+    description: str = Field(description="2–3 plain sentences describing what happens in the story from start to finish. No jargon. A parent should be able to read this and immediately know what the book is about.")
+    characters_intro: list[str] = Field(description="One line per character: 'Name – one or two plain traits'. Example: 'Olivia – cheerful and curious, always ready to try something new'")
+    themes: list[str] = Field(description="3–5 plain theme words or short phrases. Example: ['Friendship', 'Teamwork', 'Trying new things']")
+    lesson: str = Field(description="The lesson in one plain sentence a child would say out loud. Example: 'Friends can do amazing things when they help each other.'")
+    arc: list[ArcStage] = Field(description="Ordered list of arc stages. Names and count determined by the story. page_span values must sum to the requested page count.")
 
 
 # ── Stage 2: Characters ───────────────────────────────────────────────────────
@@ -97,7 +96,30 @@ class GeneratedPage(BaseModel):
     illustration_metadata: IllustrationMetadata
 
 
-# ── Stage 5: Recalibration ────────────────────────────────────────────────────
+# ── Stage 5: Text Polish ─────────────────────────────────────────────────────
+
+class PolishedText(BaseModel):
+    text: str = Field(description="The fully polished, humanised page text. Same meaning and scene as the input — just more alive.")
+
+
+# ── Stage 6: Auto-Review ─────────────────────────────────────────────────────
+
+class PageReview(BaseModel):
+    order: int = Field(description="Page order number (matches GeneratedPage.order)")
+    score: int = Field(description="Quality score 1-5: 5=publish-ready, 4=good, 3=needs work, 1-2=must rewrite")
+    issues: list[str] = Field(description="Concrete problems found — e.g. 'word too complex: peculiar', 'sentence too long (18 words)', 'emotion stated not shown'")
+    rewrite: str | None = Field(
+        default=None,
+        description="Full replacement text for this page. Only provided when score is 3 or below. "
+                    "Same scene, simpler words, shorter sentences. Output ONLY the text, no quotes or explanation."
+    )
+
+
+class BookReview(BaseModel):
+    page_reviews: list[PageReview] = Field(description="One entry per non-cover page in the book")
+
+
+# ── Stage 7: Recalibration ────────────────────────────────────────────────────
 
 class RecalibratedBeat(BaseModel):
     order: int

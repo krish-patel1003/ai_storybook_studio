@@ -1,7 +1,7 @@
 import uuid
 from typing import Sequence
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -13,8 +13,10 @@ from src.books.schemas import (
     AddPageIn,
     BookOut,
     BookSummaryOut,
+    BriefFieldRegenerateIn,
     BriefGenerateIn,
     BriefOptionsOut,
+    BriefOut,
     CreateBookIn,
     CreateDraftIn,
     GenerateIn,
@@ -28,7 +30,10 @@ from src.books.schemas import (
     UpdateBookIn,
     UpdatePageIn,
 )
+from src.books.kdp import KDPOut, KDPUpdateIn, generate_kdp_fields
+from src.config import settings
 from src.database import get_db
+from src.generation.gemini import GeminiClient
 from src.generation.constants import (
     DEFAULT_PAGE_COUNT,
     MAX_PAGE_COUNT,
@@ -78,27 +83,32 @@ async def list_models(user: User = Depends(current_user)) -> ModelsOut:
     )
 
 
-@router.post("/briefs/generate", response_model=BriefOptionsOut)
-async def generate_brief_options(
+@router.post("/briefs/generate", response_model=BriefOut)
+async def generate_brief(
     data: BriefGenerateIn,
     user: User = Depends(current_user),
-) -> BriefOptionsOut:
-    briefs = await service.generate_brief_options(data)
-    from src.books.schemas import BriefOut, ArcStageOut
-    return BriefOptionsOut(
-        briefs=[
-            BriefOut(
-                title=b.title,
-                logline=b.logline,
-                central_conflict=b.central_conflict,
-                moral=b.moral,
-                world=b.world,
-                narrative_structure=b.narrative_structure,
-                arc=[ArcStageOut(name=a.name, description=a.description, page_span=a.page_span) for a in b.arc],
-            )
-            for b in briefs
-        ]
+) -> BriefOut:
+    """Generate a single story brief from the user's prompt and settings."""
+    b = await service.generate_brief(data)
+    from src.books.schemas import ArcStageOut
+    return BriefOut(
+        title=b.title,
+        description=b.description,
+        characters_intro=b.characters_intro,
+        themes=b.themes,
+        lesson=b.lesson,
+        arc=[ArcStageOut(name=a.name, description=a.description, page_span=a.page_span) for a in b.arc],
     )
+
+
+@router.post("/briefs/regenerate-field", response_model=BriefOut)
+async def regenerate_brief_field(
+    data: BriefFieldRegenerateIn,
+    user: User = Depends(current_user),
+) -> BriefOut:
+    """Regenerate a single field of an existing brief, keeping everything else intact."""
+    merged = await service.regenerate_brief_field(data)
+    return BriefOut(**merged)
 
 
 @router.get("/page-count-options", response_model=PageCountOptionsOut)
@@ -125,12 +135,15 @@ async def create_book(
 async def list_books(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(current_user),
+    request: Request = None,
 ) -> list[BookSummaryOut]:
     rows = await service.list_books(db, user.id)
     result = []
-    for book, illustrated_count in rows:
+    for book, illustrated_count, cover_page_id in rows:
         summary = BookSummaryOut.model_validate(book)
         summary.illustrated_page_count = illustrated_count
+        if cover_page_id:
+            summary.cover_image_url = f"/books/{book.id}/pages/{cover_page_id}/image"
         result.append(summary)
     return result
 
@@ -200,6 +213,18 @@ async def get_public_page_image(
     return Response(content=data, media_type=content_type)
 
 
+@router.get("/voices", response_model=dict)
+async def list_voices(user: User = Depends(current_user)) -> dict:
+    """Return available TTS voices with descriptions."""
+    from src.generation.tts import AVAILABLE_VOICES, DEFAULT_VOICE
+    return {
+        "voices": [
+            {"id": k, "description": v, "is_default": k == DEFAULT_VOICE}
+            for k, v in AVAILABLE_VOICES.items()
+        ]
+    }
+
+
 @router.get("/{book_id}", response_model=BookOut)
 async def get_book(book: Book = Depends(owned_book)) -> BookOut:
     return BookOut.model_validate(book)
@@ -250,12 +275,18 @@ async def export_pdf(
     from src.books.export import build_pdf, EXPORT_FONTS, DEFAULT_EXPORT_FONT
     from fastapi.responses import Response as FastAPIResponse
 
+    import re as _re
     font_id = font if font in EXPORT_FONTS else DEFAULT_EXPORT_FONT
     export_pages = await service.build_export_pages(db, book)
     title = book.brief.get("title", book.title) if book.brief else book.title
     author = getattr(user, "pen_name", "") or ""
     pdf_bytes = await build_pdf(title, export_pages, author=author, font_id=font_id)
-    return FastAPIResponse(content=pdf_bytes, media_type="application/pdf")
+    safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
+    )
 
 
 @router.get("/{book_id}/export/epub")
@@ -265,6 +296,7 @@ async def export_epub(
     book: Book = Depends(owned_book),
     user: User = Depends(current_user),
 ) -> Response:
+    import re as _re
     from src.books import service
     from src.books.export import build_epub, EXPORT_FONTS, DEFAULT_EXPORT_FONT
     from fastapi.responses import Response as FastAPIResponse
@@ -274,7 +306,57 @@ async def export_epub(
     title = book.brief.get("title", book.title) if book.brief else book.title
     author = getattr(user, "pen_name", "") or ""
     epub_bytes = await build_epub(title, author or "AI Storybook Studio", export_pages, font_id=font_id)
-    return FastAPIResponse(content=epub_bytes, media_type="application/epub+zip")
+    safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
+    return FastAPIResponse(
+        content=epub_bytes,
+        media_type="application/epub+zip",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.epub"'},
+    )
+
+
+# ── KDP publishing assistant ──────────────────────────────────────────────────
+
+@router.get("/{book_id}/kdp", response_model=KDPOut)
+async def get_kdp_fields(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> KDPOut:
+    """Return KDP publishing fields for this book. Uses cached result if available."""
+    client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+    out = await generate_kdp_fields(book, user, client)
+    await db.commit()
+    return out
+
+
+@router.post("/{book_id}/kdp/regenerate", response_model=KDPOut)
+async def regenerate_kdp_fields(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> KDPOut:
+    """Force-regenerate KDP fields, overwriting any cached version."""
+    client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+    out = await generate_kdp_fields(book, user, client, force=True)
+    await db.commit()
+    return out
+
+
+@router.patch("/{book_id}/kdp", response_model=KDPOut)
+async def update_kdp_fields(
+    data: KDPUpdateIn,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> KDPOut:
+    """Merge partial edits into the stored KDP fields."""
+    from src.books.kdp import KDPOut as _KDPOut
+
+    current = dict(book.kdp_fields or {})
+    updates = data.model_dump(exclude_none=True)
+    current.update(updates)
+    book.kdp_fields = current
+    await db.commit()
+    return _KDPOut(**current, is_cached=True)
 
 
 @router.patch("/{book_id}/pages/{page_id}", response_model=BookOut)
@@ -385,17 +467,6 @@ async def get_page_image(
     return Response(content=data, media_type=content_type)
 
 
-@router.get("/voices", response_model=dict)
-async def list_voices(user: User = Depends(current_user)) -> dict:
-    """Return available TTS voices with descriptions."""
-    from src.generation.tts import AVAILABLE_VOICES, DEFAULT_VOICE
-    return {
-        "voices": [
-            {"id": k, "description": v, "is_default": k == DEFAULT_VOICE}
-            for k, v in AVAILABLE_VOICES.items()
-        ]
-    }
-
 
 @router.post("/{book_id}/pages/{page_id}/narrate", response_model=BookOut)
 async def narrate_page(
@@ -404,7 +475,11 @@ async def narrate_page(
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
 ) -> BookOut:
-    updated = await service.narrate_page(db, book.id, page_id, book.user_id, voice_name=data.voice_name)
+    updated = await service.narrate_page(
+        db, book.id, page_id, book.user_id,
+        voice_name=data.voice_name,
+        voice_profile_id=data.voice_profile_id,
+    )
     return BookOut.model_validate(updated)
 
 
@@ -415,7 +490,11 @@ async def narrate_book(
     book: Book = Depends(owned_book),
 ) -> BookOut:
     """Narrate all un-narrated pages in the book sequentially."""
-    updated = await service.narrate_book(db, book.id, book.user_id, voice_name=data.voice_name)
+    updated = await service.narrate_book(
+        db, book.id, book.user_id,
+        voice_name=data.voice_name,
+        voice_profile_id=data.voice_profile_id,
+    )
     return BookOut.model_validate(updated)
 
 

@@ -18,7 +18,7 @@ from src.generation.schemas import IllustrationMetadata
 class CreateBookIn(BaseModel):
     raw_prompt: str = Field(min_length=10, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
-    tone: list[str] = Field(default_factory=list, max_length=5)
+    tone: list[str] = Field(default_factory=list)
     art_style: str = Field(min_length=3, max_length=100)
     safety_mode: bool = True
     page_count: int = Field(
@@ -56,11 +56,10 @@ class ArcStageOut(BaseModel):
 
 class BriefOut(BaseModel):
     title: str
-    logline: str
-    central_conflict: str
-    moral: str
-    world: str
-    narrative_structure: str
+    description: str
+    characters_intro: list[str]
+    themes: list[str]
+    lesson: str
     arc: list[ArcStageOut]
 
 
@@ -143,6 +142,7 @@ class BookSummaryOut(BaseModel):
     visibility: str
     stage: GenerationStage
     illustrated_page_count: int = 0
+    cover_image_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -170,6 +170,18 @@ class BriefOptionsOut(BaseModel):
     briefs: list[BriefOut]
 
 
+class BriefFieldRegenerateIn(BaseModel):
+    raw_prompt: str = Field(min_length=10, max_length=2000)
+    age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
+    tone: list[str] = Field(default_factory=list)
+    safety_mode: bool = True
+    page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+    model_provider: str = "gemini"
+    model_name: str = "gemini-3.5-flash"
+    current_brief: BriefOut
+    field: str = Field(description="One of: title, description, characters_intro, themes, lesson")
+
+
 class ModelInfo(BaseModel):
     id: str
     name: str
@@ -193,7 +205,7 @@ class CreateDraftIn(BaseModel):
     """Saves a project record before full generation starts."""
     raw_prompt: str = Field(min_length=10, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
-    tone: list[str] = Field(default_factory=list, max_length=5)
+    tone: list[str] = Field(default_factory=list)
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
@@ -206,6 +218,7 @@ class GenerateIn(BaseModel):
 
 class NarrateIn(BaseModel):
     voice_name: str = "Kore"
+    voice_profile_id: uuid.UUID | None = None  # User's cloned voice — overrides voice_name when set
 
 
 class AddPageIn(BaseModel):

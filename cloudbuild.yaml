@@ -1,0 +1,17 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--platform=linux/amd64'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/ai-storybook-studio-496817/storybook/api:latest'
+      - '-f'
+      - 'infra/docker/api.Dockerfile'
+      - 'apps/api'
+
+images:
+  - 'us-central1-docker.pkg.dev/ai-storybook-studio-496817/storybook/api:latest'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

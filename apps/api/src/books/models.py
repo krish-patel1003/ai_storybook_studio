@@ -56,6 +56,9 @@ class Book(Base):
     # Generated content (stored as JSONB so no migration needed when schemas evolve)
     brief: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # KDP publishing fields — generated on demand, cached here
+    kdp_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
+
     # Visibility
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")
 

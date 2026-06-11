@@ -19,9 +19,9 @@ PAGE_SPLIT_THRESHOLD: Final[dict[str, int]] = {
 
 # ── Page count ────────────────────────────────────────────────────────────────
 DEFAULT_PAGE_COUNT: Final[int] = 10
-MIN_PAGE_COUNT: Final[int] = 6
-MAX_PAGE_COUNT: Final[int] = 20
-PAGE_COUNT_OPTIONS: Final[list[int]] = [6, 8, 10, 12, 15, 20]
+MIN_PAGE_COUNT: Final[int] = 4
+MAX_PAGE_COUNT: Final[int] = 100
+PAGE_COUNT_OPTIONS: Final[list[int]] = [6, 8, 10, 12, 15, 20, 24, 30, 40]
 
 # ── Gemini models ─────────────────────────────────────────────────────────────
 # Flash: fast, cheap — good for structured tasks (outline, enhance, recalibrate)
@@ -35,6 +35,7 @@ TEMP_CHARACTERS: Final[float] = 0.80   # character invention
 TEMP_OUTLINE: Final[float] = 0.75      # structural, still imaginative
 TEMP_PAGES: Final[float] = 0.90        # prose — needs most creative latitude
 TEMP_RECALIBRATE: Final[float] = 0.60  # editorial restructuring — more deterministic
+TEMP_REVIEW: Final[float] = 0.40       # review + rewrite — accuracy over creativity
 
 # ── Concurrency ───────────────────────────────────────────────────────────────
 # Max simultaneous Gemini calls during page text generation

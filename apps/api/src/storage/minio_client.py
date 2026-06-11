@@ -133,3 +133,33 @@ def download_audio(key: str) -> bytes:
     finally:
         response.close()
         response.release_conn()
+
+
+# ── Voice sample storage ──────────────────────────────────────────────────────
+
+def voice_sample_key(user_id: str, profile_id: str) -> str:
+    return f"voice-samples/{user_id}/{profile_id}.webm"
+
+
+def upload_voice_sample(user_id: str, profile_id: str, data: bytes, mime_type: str = "audio/webm") -> str:
+    """Upload a voice recording; returns the object key."""
+    from src.config import settings
+    ensure_bucket()
+    key = voice_sample_key(user_id, profile_id)
+    _client().put_object(
+        settings.MINIO_BUCKET,
+        key,
+        io.BytesIO(data),
+        length=len(data),
+        content_type=mime_type,
+    )
+    return key
+
+
+def delete_voice_sample(key: str) -> None:
+    """Delete a voice sample from MinIO (non-fatal if missing)."""
+    from src.config import settings
+    try:
+        _client().remove_object(settings.MINIO_BUCKET, key)
+    except S3Error:
+        pass

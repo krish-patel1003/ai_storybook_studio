@@ -25,7 +25,9 @@ from src.generation.stages.character_sheet import CharacterSheetStage, Generated
 from src.generation.stages.image import GeneratedImage, ImageStage
 from src.generation.stages.outline import OutlineStage
 from src.generation.stages.pages import PageStage
+from src.generation.stages.polish import PolishStage
 from src.generation.stages.recalibrate import RecalibrateStage
+from src.generation.stages.review import ReviewStage
 
 
 @dataclass
@@ -89,6 +91,8 @@ class StoryPipeline:
         self._characters = CharacterStage(client, model=quality)
         self._outline = OutlineStage(client, model=fast)
         self._pages = PageStage(client, model=quality)
+        self._polish = PolishStage(client, model=fast)
+        self._review = ReviewStage(client, model=fast)
         self._recalibrate = RecalibrateStage(client, model=fast)
         self._image = ImageStage(api_key=api_key)
         self._char_sheet = CharacterSheetStage(api_key=api_key)
@@ -121,6 +125,10 @@ class StoryPipeline:
             age_range=age_range,
             art_style=art_style,
         )
+        # Polish pass — second LLM call to humanise and improve prose quality
+        pages = await self._polish.run(pages=pages, age_range=age_range)
+        # Review pass — reads the full book, rewrites pages that are too complex or AI-sounding
+        pages = await self._review.run(pages=pages, age_range=age_range)
         return GenerationResult(
             brief=brief,
             characters=characters,
@@ -191,10 +199,12 @@ class StoryPipeline:
         target_beats = (
             [b for b in beats if b.order in orders] if orders else beats
         )
-        return await self._pages.run(
+        pages = await self._pages.run(
             brief=brief,
             characters=characters,
             beats=target_beats,
             age_range=age_range,
             art_style=art_style,
         )
+        pages = await self._polish.run(pages=pages, age_range=age_range)
+        return await self._review.run(pages=pages, age_range=age_range)

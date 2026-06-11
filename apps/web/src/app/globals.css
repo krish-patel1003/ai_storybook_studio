@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@700&family=Nunito:wght@400;600;800&family=Patrick+Hand&family=Caveat:wght@400;700&family=Merriweather:wght@400;700&family=Quicksand:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@700&family=Nunito:wght@400;600;800&family=Patrick+Hand&family=Caveat:wght@400;700&family=Merriweather:wght@400;700&family=Quicksand:wght@400;600;700&family=Mochiy+Pop+One&display=swap");
+/* Unkempt and Kranky are loaded via next/font/google in layout.tsx */
 
 @custom-variant dark (&:is(.dark *));
 
