@@ -107,17 +107,25 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => void }) {
   const [user, setUser] = useState("admin");
   const [pass, setPass] = useState("admin");
   const [err, setErr] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(false);
-    const res = await fetch(`${API}/admin/stats`, {
-      headers: { Authorization: `Basic ${btoa(`${user}:${pass}`)}` },
-    });
-    if (res.ok) {
-      onLogin(user, pass);
-    } else {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/admin/stats`, {
+        headers: { Authorization: `Basic ${btoa(`${user}:${pass}`)}` },
+      });
+      if (res.ok) {
+        onLogin(user, pass);
+      } else {
+        setErr(true);
+      }
+    } catch {
       setErr(true);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -154,9 +162,11 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => void }) {
           )}
           <button
             type="submit"
-            className="flex w-full items-center justify-center rounded-2xl bg-primary py-3 font-extrabold text-primary-foreground chunky-border chunky-shadow-sm"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3 font-extrabold text-primary-foreground chunky-border chunky-shadow-sm disabled:opacity-60"
           >
-            Sign in to dashboard
+            {loading && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />}
+            {loading ? "Signing in…" : "Sign in to dashboard"}
           </button>
         </form>
       </div>
