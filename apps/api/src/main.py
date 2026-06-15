@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.admin.router import router as admin_router
 from src.auth.router import router as auth_router
 from src.books.router import router as books_router
 from src.voices.router import router as voices_router
@@ -28,6 +29,7 @@ register_exception_handlers(app)
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(books_router, prefix="/books", tags=["Books"])
 app.include_router(voices_router, prefix="/voices", tags=["Voices"])
+app.include_router(admin_router, prefix="/admin", tags=["Admin"])
 
 
 @app.get("/health", include_in_schema=False)

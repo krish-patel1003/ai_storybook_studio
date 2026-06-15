@@ -46,5 +46,9 @@ class Config(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
 
+    # Admin dashboard
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin"
+
 
 settings = Config()

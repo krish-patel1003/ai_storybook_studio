@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_ROUTES = ["/auth/signin", "/auth/signup"];
-const PUBLIC_ROUTES = ["/auth/forgot-password", "/terms", "/privacy"];
+const PUBLIC_ROUTES = ["/auth/forgot-password", "/auth/check-email", "/auth/verify-email", "/terms", "/privacy", "/admin"];
 
 function isTokenValid(request: NextRequest): boolean {
   const token = request.cookies.get("sb_token")?.value;
