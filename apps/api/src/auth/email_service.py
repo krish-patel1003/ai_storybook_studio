@@ -151,7 +151,7 @@ def _build_verification_html(pen_name: str, verify_url: str) -> str:
           <tr>
             <td style="padding-top:24px;text-align:center;">
               <p style="margin:0;font-size:12px;color:#9CA3AF;">
-                © 2026 Storybook.Studio — Made with crayons &amp; code.
+                © 2026 Storybook.Studio — Made by Krish Patel at IRA CSULB
               </p>
             </td>
           </tr>
@@ -212,7 +212,7 @@ def _build_welcome_html(pen_name: str) -> str:
           <tr>
             <td style="padding-top:24px;text-align:center;">
               <p style="margin:0;font-size:12px;color:#9CA3AF;">
-                © 2026 Storybook.Studio — Made with crayons &amp; code.
+                © 2026 Storybook.Studio — Made by Krish Patel at IRA CSULB
               </p>
             </td>
           </tr>

@@ -158,7 +158,7 @@ export default function HomePage() {
       <footer className="border-t-[2.5px] border-foreground bg-foreground py-10 text-background">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-sm md:flex-row">
           <div className="font-display text-xl font-black">Storybook.Studio</div>
-          <div className="opacity-70">© {new Date().getFullYear()} — Made with crayons &amp; code.</div>
+          <div className="opacity-70">© {new Date().getFullYear()} — Made by Krish Patel at IRA CSULB</div>
         </div>
       </footer>
     </main>
