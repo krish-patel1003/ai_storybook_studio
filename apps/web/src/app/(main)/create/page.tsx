@@ -785,7 +785,7 @@ export default function CreatePage() {
               {/* ── Input state ── */}
               {flowState === "input" && (
                 <motion.div key="input" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }} className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
-                  <div className="max-w-2xl w-full mx-auto flex flex-col flex-1">
+                  <div className="w-full flex flex-col flex-1">
                     <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">
                       What&apos;s your story about?
                     </h1>
@@ -896,7 +896,7 @@ export default function CreatePage() {
               {/* ── Brief review state ── */}
               {flowState === "brief" && (
                 <motion.div key="brief" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.25 }} className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
-                  <div className="max-w-2xl w-full mx-auto">
+                  <div className="w-full">
                     {/* Back + header */}
                     <div className="flex items-start justify-between gap-4 mb-6">
                       <div>
