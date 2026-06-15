@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import and_, func, select
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -141,14 +141,12 @@ async def get_stats(
     ]
 
     # ── Books-per-day (last 14 days) ──────────────────────────────────────────
+    _day_col = cast(Book.created_at, Date).label("day")
     daily_rows = (await db.execute(
-        select(
-            func.date_trunc("day", Book.created_at).label("day"),
-            func.count(Book.id).label("n"),
-        )
+        select(_day_col, func.count(Book.id).label("n"))
         .where(Book.created_at >= _since(14))
-        .group_by(func.date_trunc("day", Book.created_at))
-        .order_by(func.date_trunc("day", Book.created_at))
+        .group_by(cast(Book.created_at, Date))
+        .order_by(cast(Book.created_at, Date))
     )).all()
     books_per_day = [{"day": r.day.strftime("%b %d"), "count": r.n} for r in daily_rows]
 
