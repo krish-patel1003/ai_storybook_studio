@@ -43,7 +43,7 @@ export default function SignUpPage() {
       try {
         await googleLogin(access_token);
         toast.success("Account created! Welcome to Storybook Studio.");
-        router.push("/");
+        window.location.href = "/";
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Google sign up failed");
       } finally {

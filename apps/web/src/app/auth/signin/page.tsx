@@ -31,7 +31,7 @@ export default function SignInPage() {
       try {
         await googleLogin(access_token);
         toast.success("Welcome back!");
-        router.push("/");
+        window.location.href = "/";
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Google sign in failed");
       } finally {
@@ -52,10 +52,9 @@ export default function SignInPage() {
     try {
       await login(data.email, data.password);
       toast.success("Welcome back!");
-      router.push("/");
+      window.location.href = "/";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sign in failed");
-    } finally {
       setIsLoading(false);
     }
   }
