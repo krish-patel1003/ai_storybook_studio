@@ -54,10 +54,17 @@ const TONES_PRESET = [
 
 const PAGE_COUNT_OPTIONS = [6, 8, 10, 12, 15, 20, 24, 30, 40];
 
-const PROMPT_MAX_WORDS = 80;
+const PROMPT_MAX_WORDS = 200;
 
 function wordCount(text: string) {
   return text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+}
+
+// Truncate to N words instead of rejecting — fixes copy-paste
+function truncateToWords(text: string, max: number): string {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= max) return text;
+  return words.slice(0, max).join(" ");
 }
 
 // ── Generation stage data ─────────────────────────────────────────────────────
@@ -797,7 +804,7 @@ export default function CreatePage() {
                     <div className="relative mt-6">
                       <textarea
                         value={prompt}
-                        onChange={(e) => { const val = e.target.value; if (wordCount(val) <= PROMPT_MAX_WORDS) setPrompt(val); }}
+                        onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))}
                         rows={6}
                         placeholder="A brave little fox who learns to share…"
                         className="w-full resize-none rounded-2xl bg-card p-5 pb-10 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30"
