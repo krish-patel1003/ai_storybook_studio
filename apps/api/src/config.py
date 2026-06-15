@@ -35,8 +35,11 @@ class Config(BaseSettings):
     MINIO_BUCKET: str = "illustrations"
     MINIO_SECURE: bool = False
 
-    # Email (Resend)
-    RESEND_API_KEY: str = ""
+    # Email (Gmail SMTP / Google Workspace SMTP)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""          # e.g. ira-tech@csulb.edu
+    SMTP_PASSWORD: str = ""      # Gmail App Password (16-char, no spaces)
     EMAIL_FROM: str = "Storybook.Studio <noreply@storybook.studio>"
     FRONTEND_URL: str = "https://ai-storybook-studio.vercel.app"
 
