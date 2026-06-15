@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
@@ -22,10 +22,16 @@ import {
   X,
   ChevronDown,
   SlidersHorizontal,
+  FileText,
+  Lightbulb,
+  Map,
+  RotateCcw,
+  CheckCheck,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, type BookOut, type BriefOut, type ProviderInfo } from "@/lib/api";
+import { api, type BookOut, type BriefOut, type PageOut, type ProviderInfo } from "@/lib/api";
 import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -53,134 +59,39 @@ const TONES_PRESET = [
 ];
 
 const PAGE_COUNT_OPTIONS = [6, 8, 10, 12, 15, 20, 24, 30, 40];
-
 const PROMPT_MAX_WORDS = 200;
 
 function wordCount(text: string) {
   return text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
 }
 
-// Truncate to N words instead of rejecting — fixes copy-paste
 function truncateToWords(text: string, max: number): string {
   const words = text.trim().split(/\s+/);
   if (words.length <= max) return text;
   return words.slice(0, max).join(" ");
 }
 
-// ── Generation stage data ─────────────────────────────────────────────────────
+// ── Elapsed timer ─────────────────────────────────────────────────────────────
 
-const GENERATION_STAGES: { label: string; hints: string[] }[] = [
-  {
-    label: "Enhancing your idea…",
-    hints: ["Sprinkling story magic ✨", "Thinking deeply about your world…", "Mapping out the adventure…"],
-  },
-  {
-    label: "Building characters…",
-    hints: ["Designing your heroes & villains…", "Giving everyone a personality…", "Deciding who needs a funny hat 🎩"],
-  },
-  {
-    label: "Writing story beats…",
-    hints: ["Planning the twists and turns…", "Making sure the ending lands…", "Adding a few surprises 🎉"],
-  },
-  {
-    label: "Writing pages…",
-    hints: ["Choosing every word carefully…", "Making it age-appropriate and fun…", "Finding the perfect sentences…"],
-  },
-  {
-    label: "Polishing the prose…",
-    hints: ["Smoothing out the rough edges…", "Reading it aloud (virtually)…", "Making it sound just right 🎶"],
-  },
-  {
-    label: "Reviewing and improving…",
-    hints: ["One final read-through…", "Adding the finishing touches…", "Almost there — nearly ready! 🚀"],
-  },
-];
-
-// ── Elapsed timer hook ────────────────────────────────────────────────────────
-
-function useElapsedTimer() {
+function useElapsedTimer(running = true) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
+    if (!running) return;
     const t = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [running]);
   const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
   const ss = String(elapsed % 60).padStart(2, "0");
   return `${mm}:${ss}`;
 }
 
-// ── Standard generating overlay ───────────────────────────────────────────────
-
-function GeneratingOverlay() {
-  const [stageIdx, setStageIdx] = useState(0);
-  const [hintIdx, setHintIdx] = useState(0);
-  const [progress, setProgress] = useState(4);
-  const timer = useElapsedTimer();
-
-  useEffect(() => {
-    const stageMs = [8000, 15000, 20000, 60000, 20000, 18000];
-    let total = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    stageMs.forEach((ms, i) => {
-      total += ms;
-      timers.push(setTimeout(() => {
-        if (i + 1 < GENERATION_STAGES.length) { setStageIdx(i + 1); setHintIdx(0); }
-      }, total - ms + 1000));
-    });
-    const tick = setInterval(() => setProgress((p) => Math.min(p + 0.5, 94)), 600);
-    const hintTick = setInterval(() => setHintIdx((h) => h + 1), 3000);
-    return () => { timers.forEach(clearTimeout); clearInterval(tick); clearInterval(hintTick); };
-  }, []);
-
-  const stage = GENERATION_STAGES[stageIdx];
-  const hint = stage.hints[hintIdx % stage.hints.length];
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur">
-      <div className="flex flex-col items-center gap-6 px-6 text-center">
-        <div className="relative grid h-24 w-24 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
-          <BookOpen className="h-10 w-10 text-primary-foreground" strokeWidth={2} />
-          <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
-        </div>
-        <div>
-          <h2 className="font-display text-3xl font-black">Writing your story…</h2>
-          <p className="mt-1 text-muted-foreground">This takes about a minute. Grab a snack 🍎</p>
-        </div>
-        <div className="w-80">
-          <div className="mb-2 flex items-center justify-between text-xs font-bold text-muted-foreground">
-            <AnimatePresence mode="wait">
-              <motion.span key={stageIdx} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>
-                {stage.label}
-              </motion.span>
-            </AnimatePresence>
-            <span className="font-mono tabular-nums">{timer}</span>
-          </div>
-          <div className="mb-3 h-3 overflow-hidden rounded-full bg-muted chunky-border">
-            <motion.div className="h-full rounded-full bg-primary" animate={{ width: `${progress}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
-          </div>
-          <AnimatePresence mode="wait">
-            <motion.p key={hint} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="text-sm font-bold text-muted-foreground">
-              {hint}
-            </motion.p>
-          </AnimatePresence>
-        </div>
-        <div className="mt-2 flex gap-2">
-          {GENERATION_STAGES.map((_, i) => (
-            <div key={i} className={`h-2 w-2 rounded-full transition-all ${i <= stageIdx ? "bg-primary" : "bg-muted"}`} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── One-click overlay ─────────────────────────────────────────────────────────
 
 const ONE_CLICK_HINTS: Record<string, string[]> = {
-  writing:      ["Crafting your story arc…", "Picking the perfect words…", "Making every page count…", "Weaving plot twists 🌀"],
+  writing:      ["Crafting your story arc…", "Picking the perfect words…", "Weaving plot twists 🌀"],
   characters:   ["Sketching character traits…", "Deciding who's the hero 🦊", "Giving everyone backstories…"],
-  illustrating: ["Painting the scenes…", "Adding colour and detail 🎨", "Making each page beautiful…", "Bringing characters to life…"],
-  narrating:    ["Finding the perfect voice 🎙️", "Adding emotion to each line…", "Recording the narration…"],
+  illustrating: ["Painting the scenes…", "Adding colour and detail 🎨", "Bringing characters to life…"],
+  narrating:    ["Finding the perfect voice 🎙️", "Adding emotion to each line…"],
 };
 
 type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
@@ -199,8 +110,7 @@ function OneClickOverlay({ stage, progress, book, onView }: {
   onView: () => void;
 }) {
   const [hintIdx, setHintIdx] = useState(0);
-  const timer = useElapsedTimer();
-
+  const timer = useElapsedTimer(stage !== "done");
   useEffect(() => { setHintIdx(0); }, [stage]);
   useEffect(() => {
     if (stage === "done") return;
@@ -210,20 +120,16 @@ function OneClickOverlay({ stage, progress, book, onView }: {
 
   const stageIdx = ONE_CLICK_STAGES.findIndex((s) => s.id === stage);
   const isDone = stage === "done";
-
   const overallPct = isDone ? 100
-    : stageIdx === 0 ? 10
-    : stageIdx === 1 ? 25
+    : stageIdx === 0 ? 10 : stageIdx === 1 ? 25
     : stageIdx === 2 ? 40 + (progress.total > 0 ? (progress.done / progress.total) * 30 : 0)
     : 70 + (progress.total > 0 ? (progress.done / progress.total) * 27 : 0);
-
   const stageLabel =
-    stage === "writing"      ? "Writing your story…"
+    stage === "writing" ? "Writing your story…"
     : stage === "characters" ? "Designing character sheets…"
-    : stage === "illustrating" ? `Illustrating pages…${progress.total > 0 ? ` (${progress.done} / ${progress.total})` : ""}`
-    : stage === "narrating"  ? `Adding narration…${progress.total > 0 ? ` (${progress.done} / ${progress.total})` : ""}`
+    : stage === "illustrating" ? `Illustrating pages…${progress.total > 0 ? ` (${progress.done}/${progress.total})` : ""}`
+    : stage === "narrating" ? `Adding narration…${progress.total > 0 ? ` (${progress.done}/${progress.total})` : ""}`
     : "Your book is ready!";
-
   const hints = ONE_CLICK_HINTS[stage] ?? [];
   const hint = hints[hintIdx % hints.length];
 
@@ -253,14 +159,10 @@ function OneClickOverlay({ stage, progress, book, onView }: {
             <div>
               <h2 className="font-display text-3xl font-black">Making your book…</h2>
               <AnimatePresence mode="wait">
-                <motion.p key={stageLabel} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="mt-1 text-sm font-extrabold text-foreground/80">
-                  {stageLabel}
-                </motion.p>
+                <motion.p key={stageLabel} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="mt-1 text-sm font-extrabold text-foreground/80">{stageLabel}</motion.p>
               </AnimatePresence>
               <AnimatePresence mode="wait">
-                <motion.p key={hint} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-1 text-xs text-muted-foreground">
-                  {hint}
-                </motion.p>
+                <motion.p key={hint} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-1 text-xs text-muted-foreground">{hint}</motion.p>
               </AnimatePresence>
             </div>
             <div className="w-full">
@@ -274,8 +176,7 @@ function OneClickOverlay({ stage, progress, book, onView }: {
             </div>
             <div className="flex items-center gap-3">
               {ONE_CLICK_STAGES.map((s, i) => {
-                const done = i < stageIdx;
-                const active = i === stageIdx;
+                const done = i < stageIdx; const active = i === stageIdx;
                 return (
                   <div key={s.id} className="flex flex-col items-center gap-1.5">
                     <div className={`flex h-9 w-9 items-center justify-center rounded-full chunky-border transition-all ${done ? "bg-primary text-primary-foreground" : active ? "bg-primary text-primary-foreground scale-110 chunky-shadow" : "bg-muted text-muted-foreground"}`}>
@@ -286,7 +187,6 @@ function OneClickOverlay({ stage, progress, book, onView }: {
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground">Sit back and relax — this takes a few minutes ✨</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -294,65 +194,15 @@ function OneClickOverlay({ stage, progress, book, onView }: {
   );
 }
 
-// ── Brief field row ───────────────────────────────────────────────────────────
-
-function BriefFieldRow({ label, value, multiline, onEdit, onRegenerate, regenerating }: {
-  label: string; value: string; multiline?: boolean;
-  onEdit: (v: string) => void; onRegenerate: () => void; regenerating: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  useEffect(() => { setDraft(value); }, [value]);
-
-  return (
-    <div className="rounded-2xl bg-background p-4 chunky-border">
-      <div className="flex items-center justify-between mb-2 gap-2">
-        <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">{label}</span>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {!editing && (
-            <button onClick={() => { setDraft(value); setEditing(true); }} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform" title="Edit">
-              <Pencil className="h-3 w-3" strokeWidth={2.5} />
-            </button>
-          )}
-          <button onClick={onRegenerate} disabled={regenerating} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50" title="Regenerate">
-            {regenerating ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <RefreshCw className="h-3 w-3" strokeWidth={2.5} />}
-          </button>
-        </div>
-      </div>
-      {editing ? (
-        <div>
-          {multiline
-            ? <textarea rows={3} value={draft} onChange={(e) => setDraft(e.target.value)} className="w-full resize-none rounded-xl bg-card px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30" />
-            : <input value={draft} onChange={(e) => setDraft(e.target.value)} className="w-full rounded-xl bg-card px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30" />
-          }
-          <div className="mt-2 flex gap-2">
-            <button onClick={() => { onEdit(draft); setEditing(false); }} className="rounded-full bg-primary px-3 py-1 text-xs font-extrabold text-primary-foreground chunky-border">Save</button>
-            <button onClick={() => setEditing(false)} className="rounded-full bg-background px-3 py-1 text-xs font-extrabold chunky-border">Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm font-semibold leading-snug">{value}</p>
-      )}
-    </div>
-  );
-}
-
-// ── Options panel (shared between sidebar + mobile accordion) ─────────────────
+// ── Options panel ─────────────────────────────────────────────────────────────
 
 function OptionsPanel({
-  age, setAge,
-  tone, setTone,
-  customTones, setCustomTones,
-  customToneInput, setCustomToneInput,
-  style, setStyle,
-  pageCount, setPageCount,
-  isCustomPageCount, setIsCustomPageCount,
-  customPageCountInput, setCustomPageCountInput,
-  safety, setSafety,
-  modelProvider, setModelProvider,
-  modelName, setModelName,
-  providers, modelsLoading,
-  prompt, onOneClick,
+  age, setAge, tone, setTone, customTones, setCustomTones,
+  customToneInput, setCustomToneInput, style, setStyle,
+  pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
+  customPageCountInput, setCustomPageCountInput, safety, setSafety,
+  modelProvider, setModelProvider, modelName, setModelName,
+  providers, modelsLoading, prompt, onOneClick, locked,
 }: {
   age: string; setAge: (v: string) => void;
   tone: string[]; setTone: (v: string[]) => void;
@@ -366,43 +216,39 @@ function OptionsPanel({
   modelProvider: string; setModelProvider: (v: string) => void;
   modelName: string; setModelName: (v: string) => void;
   providers: ProviderInfo[]; modelsLoading: boolean;
-  prompt: string; onOneClick: () => void;
+  prompt: string; onOneClick: () => void; locked?: boolean;
 }) {
   return (
-    <div className="space-y-6">
+    <div className={`space-y-5 ${locked ? "opacity-60 pointer-events-none select-none" : ""}`}>
+      {locked && (
+        <div className="rounded-xl bg-muted/60 px-3 py-2 text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+          <Check className="h-3 w-3" strokeWidth={3} /> Settings locked in
+        </div>
+      )}
 
       {/* Age range */}
       <div>
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Reading level</p>
         <div className="grid grid-cols-3 gap-2">
           {["3-5", "6-8", "9-11"].map((a) => (
-            <button key={a} onClick={() => setAge(a)} className={`rounded-xl px-3 py-2.5 text-sm font-extrabold chunky-border transition-all hover:-translate-y-0.5 ${age === a ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>
-              Ages {a}
-            </button>
+            <button key={a} onClick={() => setAge(a)} className={`rounded-xl px-3 py-2.5 text-sm font-extrabold chunky-border transition-all hover:-translate-y-0.5 ${age === a ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>Ages {a}</button>
           ))}
         </div>
       </div>
 
-      {/* Tone & genre */}
+      {/* Tone */}
       <div>
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Tone &amp; Genre</p>
         <div className="flex flex-wrap gap-1.5">
           {[...TONES_PRESET, ...customTones].map((t) => {
-            const on = tone.includes(t);
-            const isCustom = customTones.includes(t);
+            const on = tone.includes(t); const isCustom = customTones.includes(t);
             return (
-              <button
-                key={t}
-                onClick={() => setTone(on ? tone.filter((x) => x !== t) : [...tone, t])}
-                className={`group relative rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-transform hover:-translate-y-0.5 ${on ? "bg-accent text-accent-foreground chunky-shadow-sm" : "bg-background"}`}
-              >
+              <button key={t} onClick={() => setTone(on ? tone.filter((x) => x !== t) : [...tone, t])}
+                className={`group relative rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-transform hover:-translate-y-0.5 ${on ? "bg-accent text-accent-foreground chunky-shadow-sm" : "bg-background"}`}>
                 {t}
                 {isCustom && (
-                  <span
-                    role="button"
-                    onClick={(e) => { e.stopPropagation(); setCustomTones(customTones.filter((c) => c !== t)); setTone(tone.filter((x) => x !== t)); }}
-                    className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-foreground/15 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
+                  <span role="button" onClick={(e) => { e.stopPropagation(); setCustomTones(customTones.filter((c) => c !== t)); setTone(tone.filter((x) => x !== t)); }}
+                    className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-foreground/15 opacity-0 group-hover:opacity-100 transition-opacity">
                     <X className="h-2 w-2" strokeWidth={3} />
                   </span>
                 )}
@@ -410,29 +256,11 @@ function OptionsPanel({
             );
           })}
           <div className="flex items-center gap-1">
-            <input
-              value={customToneInput}
-              onChange={(e) => setCustomToneInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && customToneInput.trim()) {
-                  const val = customToneInput.trim();
-                  if (!customTones.includes(val) && !TONES_PRESET.includes(val)) { setCustomTones([...customTones, val]); setTone([...tone, val]); }
-                  setCustomToneInput("");
-                }
-              }}
-              placeholder="Custom…"
-              className="h-[30px] w-24 rounded-full bg-background px-2.5 text-xs font-bold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
-            />
-            <button
-              onClick={() => {
-                const val = customToneInput.trim();
-                if (!val) return;
-                if (!customTones.includes(val) && !TONES_PRESET.includes(val)) { setCustomTones([...customTones, val]); setTone([...tone, val]); }
-                setCustomToneInput("");
-              }}
-              disabled={!customToneInput.trim()}
-              className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-40"
-            >
+            <input value={customToneInput} onChange={(e) => setCustomToneInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && customToneInput.trim()) { const v = customToneInput.trim(); if (!customTones.includes(v) && !TONES_PRESET.includes(v)) { setCustomTones([...customTones, v]); setTone([...tone, v]); } setCustomToneInput(""); } }}
+              placeholder="Custom…" className="h-[30px] w-24 rounded-full bg-background px-2.5 text-xs font-bold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60" />
+            <button onClick={() => { const v = customToneInput.trim(); if (!v) return; if (!customTones.includes(v) && !TONES_PRESET.includes(v)) { setCustomTones([...customTones, v]); setTone([...tone, v]); } setCustomToneInput(""); }}
+              disabled={!customToneInput.trim()} className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-40">
               <Plus className="h-3 w-3" strokeWidth={3} />
             </button>
           </div>
@@ -452,8 +280,7 @@ function OptionsPanel({
                   <img src={s.img} alt={s.label} loading="lazy" className="h-full w-full object-cover" />
                 </div>
                 <div className={`flex items-center justify-between border-t-[2px] border-foreground px-2.5 py-1.5 text-xs font-extrabold ${on ? "bg-primary text-primary-foreground" : ""}`}>
-                  {s.label}
-                  {on && <Check className="h-3 w-3" strokeWidth={3} />}
+                  {s.label} {on && <Check className="h-3 w-3" strokeWidth={3} />}
                 </div>
               </button>
             );
@@ -466,13 +293,9 @@ function OptionsPanel({
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Page count</p>
         <div className="flex flex-wrap gap-1.5">
           {PAGE_COUNT_OPTIONS.map((n) => (
-            <button key={n} onClick={() => { setPageCount(n); setIsCustomPageCount(false); }} className={`rounded-lg px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${!isCustomPageCount && pageCount === n ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>
-              {n}
-            </button>
+            <button key={n} onClick={() => { setPageCount(n); setIsCustomPageCount(false); }} className={`rounded-lg px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${!isCustomPageCount && pageCount === n ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>{n}</button>
           ))}
-          <button onClick={() => setIsCustomPageCount(true)} className={`rounded-lg px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${isCustomPageCount ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>
-            Custom
-          </button>
+          <button onClick={() => setIsCustomPageCount(true)} className={`rounded-lg px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${isCustomPageCount ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>Custom</button>
         </div>
         {isCustomPageCount && (
           <div className="mt-2 flex items-center gap-2">
@@ -500,18 +323,10 @@ function OptionsPanel({
       <div>
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">AI model</p>
         {modelsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Detecting models…
-          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Detecting models…</div>
         ) : (
           <div className="space-y-2">
-            {(providers.length > 0 ? providers : [{
-              id: "gemini", name: "Google Gemini", description: "Cloud-hosted · High quality", available: true,
-              models: [
-                { id: "gemini-3.5-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" },
-                { id: "gemini-1.5-pro",   name: "Gemini Pro",   description: "Highest quality",  size: "cloud" },
-              ],
-            }]).map((provider) => (
+            {(providers.length > 0 ? providers : [{ id: "gemini", name: "Google Gemini", description: "Cloud-hosted", available: true, models: [{ id: "gemini-3.5-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" }, { id: "gemini-1.5-pro", name: "Gemini Pro", description: "Highest quality", size: "cloud" }] }]).map((provider) => (
               <div key={provider.id}>
                 <div className="mb-1 flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground">{provider.name}</span>
@@ -527,10 +342,7 @@ function OptionsPanel({
                         </div>
                         <div>
                           <div className="text-xs font-extrabold leading-tight">{m.name}</div>
-                          <div className={`text-[11px] mt-0.5 ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                            {m.description}
-                            {m.size && m.size !== "cloud" && <span className="ml-1 rounded-full bg-foreground/10 px-1.5 py-0.5">{m.size}</span>}
-                          </div>
+                          <div className={`text-[11px] mt-0.5 ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{m.description}</div>
                         </div>
                       </button>
                     );
@@ -542,49 +354,277 @@ function OptionsPanel({
         )}
       </div>
 
-      {/* One-click CTA */}
-      <div className="rounded-2xl bg-primary/5 p-4 chunky-border">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary chunky-border">
-            <Wand2 className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={2.5} />
+      {/* One-click */}
+      {!locked && (
+        <div className="rounded-2xl bg-primary/5 p-4 chunky-border">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary chunky-border">
+              <Wand2 className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold">Make it for me</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Writes, illustrates &amp; narrates your book automatically.</p>
+            </div>
+          </div>
+          <button onClick={onOneClick} disabled={prompt.trim().length < 10}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
+            <Wand2 className="h-4 w-4" strokeWidth={2.5} /> Fully automatic
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Brief summary sidebar (for pages review state) ────────────────────────────
+
+function BriefSummaryPanel({ brief, age, pageCount, style, modelName, modelProvider }: {
+  brief: BriefOut; age: string; pageCount: number; style: string; modelName: string; modelProvider: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Approved brief</p>
+        <div className="rounded-2xl bg-background p-4 chunky-border space-y-3">
+          <div>
+            <p className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Title</p>
+            <p className="mt-0.5 font-display text-base font-black">{brief.title}</p>
           </div>
           <div>
-            <p className="text-sm font-extrabold">Make it for me</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Writes, illustrates &amp; narrates your entire book automatically.</p>
+            <p className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Story</p>
+            <p className="mt-0.5 text-xs font-semibold text-foreground/80 leading-relaxed">{brief.description}</p>
+          </div>
+          <div>
+            <p className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider">Lesson</p>
+            <p className="mt-0.5 text-xs font-semibold text-foreground/80">{brief.lesson}</p>
+          </div>
+          {brief.themes.length > 0 && (
+            <div>
+              <p className="text-xs font-extrabold text-muted-foreground uppercase tracking-wider mb-1">Themes</p>
+              <div className="flex flex-wrap gap-1">
+                {brief.themes.map((t) => <span key={t} className="rounded-full bg-card px-2 py-0.5 text-xs font-bold chunky-border">{t}</span>)}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="rounded-2xl bg-background p-4 chunky-border">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Settings</p>
+        <div className="space-y-1.5 text-xs font-semibold text-muted-foreground">
+          <div className="flex justify-between"><span>Reading level</span><span className="font-bold text-foreground">Ages {age}</span></div>
+          <div className="flex justify-between"><span>Pages</span><span className="font-bold text-foreground">{pageCount}</span></div>
+          <div className="flex justify-between"><span>Art style</span><span className="font-bold text-foreground capitalize">{style}</span></div>
+          <div className="flex justify-between"><span>Model</span><span className="font-bold text-foreground flex items-center gap-1">{modelProvider === "ollama" ? <Cpu className="h-3 w-3" /> : <Cloud className="h-3 w-3" />}{modelName}</span></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Inline editable field ─────────────────────────────────────────────────────
+
+function EditableField({ label, value, multiline, onSave, onRegenerate, regenerating }: {
+  label: string; value: string; multiline?: boolean;
+  onSave: (v: string) => void; onRegenerate?: () => void; regenerating?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+
+  return (
+    <div className="rounded-2xl bg-background p-4 chunky-border">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">{label}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {!editing && (
+            <button onClick={() => { setDraft(value); setEditing(true); }} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform" title="Edit">
+              <Pencil className="h-3 w-3" strokeWidth={2.5} />
+            </button>
+          )}
+          {onRegenerate && (
+            <button onClick={onRegenerate} disabled={regenerating} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50" title="Regenerate">
+              {regenerating ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <RefreshCw className="h-3 w-3" strokeWidth={2.5} />}
+            </button>
+          )}
+        </div>
+      </div>
+      {editing ? (
+        <div>
+          {multiline
+            ? <textarea rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} className="w-full resize-none rounded-xl bg-card px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30" />
+            : <input value={draft} onChange={(e) => setDraft(e.target.value)} className="w-full rounded-xl bg-card px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30" />
+          }
+          <div className="mt-2 flex gap-2">
+            <button onClick={() => { onSave(draft); setEditing(false); }} className="rounded-full bg-primary px-3 py-1 text-xs font-extrabold text-primary-foreground chunky-border">Save</button>
+            <button onClick={() => setEditing(false)} className="rounded-full bg-background px-3 py-1 text-xs font-extrabold chunky-border">Cancel</button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {[
-            { icon: <Sparkles className="h-3 w-3" />, label: "Story written" },
-            { icon: <ImageIcon className="h-3 w-3" />, label: "Illustrated" },
-            { icon: <Mic className="h-3 w-3" />, label: "Narrated" },
-          ].map(({ icon, label }) => (
-            <span key={label} className="inline-flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs font-bold chunky-border">{icon} {label}</span>
-          ))}
+      ) : (
+        <p className="text-sm font-semibold leading-snug">{value}</p>
+      )}
+    </div>
+  );
+}
+
+// ── Page review card ──────────────────────────────────────────────────────────
+
+function PageReviewCard({ page, bookId, token, onUpdate }: {
+  page: PageOut; bookId: string; token: string;
+  onUpdate: (updated: BookOut) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(page.text ?? "");
+  const [saving, setSaving] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => { setDraft(page.text ?? ""); }, [page.text]);
+
+  async function handleSave() {
+    if (!draft.trim()) return;
+    setSaving(true);
+    try {
+      const updated = await api.books.updatePage(token, bookId, page.id, { text: draft });
+      onUpdate(updated);
+      setEditing(false);
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRegenerate() {
+    setRegenerating(true);
+    try {
+      const updated = await api.books.regeneratePage(token, bookId, page.id);
+      onUpdate(updated);
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to regenerate");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  const roleColor: Record<string, string> = {
+    hook: "bg-yellow-100 text-yellow-800",
+    rising_action: "bg-blue-100 text-blue-800",
+    climax: "bg-red-100 text-red-800",
+    resolution: "bg-green-100 text-green-800",
+    conclusion: "bg-purple-100 text-purple-800",
+  };
+
+  return (
+    <div className="rounded-2xl bg-background chunky-border overflow-hidden">
+      {/* Page header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b-[2px] border-foreground bg-card">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground chunky-border">
+            {page.is_cover ? "C" : page.order}
+          </span>
+          <div>
+            <span className="text-sm font-extrabold">{page.is_cover ? "Cover" : `Page ${page.order}`}</span>
+            {page.beat && <span className="ml-2 text-xs text-muted-foreground font-semibold">{page.beat}</span>}
+          </div>
+          {page.narrative_role && (
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${roleColor[page.narrative_role] ?? "bg-muted text-muted-foreground"}`}>
+              {page.narrative_role.replace(/_/g, " ")}
+            </span>
+          )}
         </div>
-        <button
-          onClick={onOneClick}
-          disabled={prompt.trim().length < 10}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0"
-        >
-          <Wand2 className="h-4 w-4" strokeWidth={2.5} />
-          Fully automatic
-        </button>
+        <div className="flex items-center gap-1.5">
+          {!editing && (
+            <button onClick={() => { setDraft(page.text ?? ""); setEditing(true); setTimeout(() => textareaRef.current?.focus(), 50); }}
+              className="rounded-full bg-background px-2.5 py-1 text-xs font-bold chunky-border hover:-translate-y-0.5 transition-transform flex items-center gap-1">
+              <Pencil className="h-3 w-3" strokeWidth={2.5} /> Edit
+            </button>
+          )}
+          <button onClick={handleRegenerate} disabled={regenerating || editing}
+            className="rounded-full bg-background px-2.5 py-1 text-xs font-bold chunky-border hover:-translate-y-0.5 transition-transform flex items-center gap-1 disabled:opacity-50">
+            {regenerating ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <RotateCcw className="h-3 w-3" strokeWidth={2.5} />}
+            {regenerating ? "Rewriting…" : "Regenerate"}
+          </button>
+        </div>
       </div>
+
+      {/* Page text */}
+      <div className="p-4">
+        {editing ? (
+          <div>
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={5}
+              className="w-full resize-none rounded-xl bg-card px-3 py-2.5 text-sm font-semibold leading-relaxed chunky-border outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <div className="mt-2 flex gap-2">
+              <button onClick={handleSave} disabled={saving}
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border disabled:opacity-50">
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={3} />}
+                {saving ? "Saving…" : "Save changes"}
+              </button>
+              <button onClick={() => { setEditing(false); setDraft(page.text ?? ""); }} className="rounded-full bg-background px-3 py-1.5 text-xs font-extrabold chunky-border">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm font-semibold leading-relaxed text-foreground/90">
+            {page.text ?? <span className="text-muted-foreground italic">No text generated</span>}
+          </p>
+        )}
+
+        {/* Metadata chips */}
+        {(page.emotional_note || page.setting_note || (page.characters_present?.length ?? 0) > 0) && (
+          <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-bold text-muted-foreground border-t-[1.5px] border-foreground/10 pt-3">
+            {page.setting_note && <span className="rounded-full bg-card px-2 py-0.5 chunky-border">📍 {page.setting_note}</span>}
+            {page.emotional_note && <span className="rounded-full bg-card px-2 py-0.5 chunky-border">💭 {page.emotional_note}</span>}
+            {page.characters_present?.map((c) => <span key={c} className="rounded-full bg-card px-2 py-0.5 chunky-border">👤 {c}</span>)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Step progress indicator ───────────────────────────────────────────────────
+
+const STEPS = [
+  { id: "input",   label: "Prompt"  },
+  { id: "brief",   label: "Brief"   },
+  { id: "writing", label: "Writing" },
+  { id: "pages",   label: "Review"  },
+];
+
+type FlowState = "input" | "brief" | "writing" | "pages";
+
+function StepBar({ current }: { current: FlowState }) {
+  const idx = STEPS.findIndex((s) => s.id === current);
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      {STEPS.map((s, i) => {
+        const done = i < idx; const active = i === idx;
+        return (
+          <div key={s.id} className="flex items-center gap-1">
+            <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-extrabold transition-all chunky-border ${active ? "bg-primary text-primary-foreground" : done ? "bg-foreground text-background" : "bg-card text-muted-foreground"}`}>
+              {done ? <Check className="h-3 w-3" strokeWidth={3} /> : <span className="tabular-nums">{i + 1}</span>}
+              <span className="hidden sm:inline">{s.label}</span>
+            </div>
+            {i < STEPS.length - 1 && <ChevronRight className={`h-3 w-3 shrink-0 ${i < idx ? "text-foreground" : "text-muted-foreground/40"}`} strokeWidth={2.5} />}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type FlowState = "input" | "enhancing" | "brief";
-
 export default function CreatePage() {
   const router = useRouter();
   const { token } = useAuth();
   const { setBook } = useBook();
 
-  // Prompt + options
+  // Prompt + settings
   const [prompt, setPrompt] = useState("");
   const [age, setAge] = useState("3-5");
   const [tone, setTone] = useState<string[]>(["Funny"]);
@@ -598,11 +638,11 @@ export default function CreatePage() {
   const [modelProvider, setModelProvider] = useState("gemini");
   const [modelName, setModelName] = useState("gemini-3.5-flash");
 
-  // Flow state
+  // Flow
   const [flowState, setFlowState] = useState<FlowState>("input");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Model discovery
+  // Models
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
 
@@ -611,9 +651,9 @@ export default function CreatePage() {
   const [briefLoading, setBriefLoading] = useState(false);
   const [regenField, setRegenField] = useState<string | null>(null);
 
-  // Draft & generation
+  // Book + pages
   const [draft, setDraft] = useState<BookOut | null>(null);
-  const [generating, setGenerating] = useState(false);
+  const [currentBook, setCurrentBook] = useState<BookOut | null>(null);
 
   // One-click
   const [oneClickRunning, setOneClickRunning] = useState(false);
@@ -635,21 +675,20 @@ export default function CreatePage() {
   }, [token]);
 
   const briefParams = {
-    raw_prompt: prompt,
-    age_range: age,
-    tone,
-    safety_mode: safety,
-    page_count: pageCount,
-    model_provider: modelProvider,
-    model_name: modelName,
+    raw_prompt: prompt, age_range: age, tone, safety_mode: safety,
+    page_count: pageCount, model_provider: modelProvider, model_name: modelName,
   };
 
-  async function fetchBrief(existingDraft?: BookOut) {
-    if (!token) { toast.error("Please sign in first"); return false; }
+  // ── Step 1 → 2: Generate brief ─────────────────────────────────────────────
+
+  async function handleGenerateBrief() {
+    if (!token) { toast.error("Please sign in first"); return; }
+    if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
     setBriefLoading(true);
     setActiveBrief(null);
+    setFlowState("brief");
     try {
-      if (!existingDraft && !draft) {
+      if (!draft) {
         const saved = await api.books.createDraft(token, {
           raw_prompt: prompt, age_range: age, tone, safety_mode: safety,
           page_count: pageCount, model_provider: modelProvider, model_name: modelName,
@@ -659,10 +698,9 @@ export default function CreatePage() {
       }
       const brief = await api.books.generateBrief(token, briefParams);
       setActiveBrief(brief);
-      return true;
     } catch (err: any) {
       toast.error(err.message ?? "Failed to generate brief");
-      return false;
+      setFlowState("input");
     } finally {
       setBriefLoading(false);
     }
@@ -670,12 +708,12 @@ export default function CreatePage() {
 
   async function regenerateField(field: keyof BriefOut) {
     if (!token || !activeBrief) return;
-    setRegenField(field);
+    setRegenField(field as string);
     try {
-      const updated = await api.books.regenerateBriefField(token, { ...briefParams, current_brief: activeBrief, field });
+      const updated = await api.books.regenerateBriefField(token, { ...briefParams, current_brief: activeBrief, field: field as string });
       setActiveBrief(updated);
     } catch (err: any) {
-      toast.error(err.message ?? `Failed to regenerate ${field}`);
+      toast.error(err.message ?? "Failed to regenerate");
     } finally {
       setRegenField(null);
     }
@@ -686,20 +724,13 @@ export default function CreatePage() {
     setActiveBrief({ ...activeBrief, [field]: value });
   }
 
-  async function handleEnhance() {
-    if (!token) { toast.error("Please sign in first"); return; }
-    if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
-    setFlowState("enhancing");
-    const ok = await fetchBrief();
-    setFlowState(ok ? "brief" : "input");
-  }
+  // ── Step 2 → 3 → 4: Write pages ────────────────────────────────────────────
 
-  async function generateBook() {
-    if (!token) { toast.error("Please sign in first"); return; }
-    if (!activeBrief) return;
-    setGenerating(true);
+  async function handleWritePages() {
+    if (!token || !activeBrief) return;
+    setFlowState("writing");
     try {
-      let book;
+      let book: BookOut;
       if (draft) {
         book = await api.books.generate(token, draft.id, style);
       } else {
@@ -708,52 +739,51 @@ export default function CreatePage() {
           safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName,
         });
       }
+      setCurrentBook(book);
       setBook(book);
-      router.push("/outline");
+      setFlowState("pages");
     } catch (err: any) {
-      toast.error(err.message ?? "Generation failed. Please try again.");
-      setGenerating(false);
+      toast.error(err.message ?? "Writing failed. Please try again.");
+      setFlowState("brief");
     }
   }
+
+  // ── Step 4 → editor ────────────────────────────────────────────────────────
+
+  function handleApprovePages() {
+    router.push("/outline");
+  }
+
+  // ── One-click ──────────────────────────────────────────────────────────────
 
   async function handleOneClick() {
     if (!token) { toast.error("Please sign in first"); return; }
     if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
-    setOneClickRunning(true);
-    setOneClickStage("writing");
-    setOneClickProgress({ done: 0, total: 0 });
+    setOneClickRunning(true); setOneClickStage("writing"); setOneClickProgress({ done: 0, total: 0 });
     try {
-      const savedDraft = await api.books.createDraft(token, {
-        raw_prompt: prompt, age_range: age,
-        tone: tone.length > 0 ? tone : ["Whimsical"],
-        safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName,
-      });
+      const savedDraft = await api.books.createDraft(token, { raw_prompt: prompt, age_range: age, tone: tone.length > 0 ? tone : ["Whimsical"], safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName });
       setBook(savedDraft);
       const generated = await api.books.generate(token, savedDraft.id, style);
       setBook(generated);
-      setOneClickStage("characters");
-      setOneClickProgress({ done: 0, total: 0 });
+      setOneClickStage("characters"); setOneClickProgress({ done: 0, total: 0 });
       const withChars = await api.books.generateCharacterSheets(token, generated.id);
       setBook(withChars);
       setOneClickStage("illustrating");
       const pages = [...withChars.pages].sort((a, b) => a.order - b.order);
       setOneClickProgress({ done: 0, total: pages.length });
-      let currentBook = withChars;
+      let cur = withChars;
       for (let i = 0; i < pages.length; i++) {
-        const updated = await api.books.illustratePage(token, withChars.id, pages[i].id);
-        setBook(updated); currentBook = updated;
-        setOneClickProgress({ done: i + 1, total: pages.length });
+        const u = await api.books.illustratePage(token, withChars.id, pages[i].id);
+        setBook(u); cur = u; setOneClickProgress({ done: i + 1, total: pages.length });
       }
       setOneClickStage("narrating");
-      const textPages = [...currentBook.pages].sort((a, b) => a.order - b.order).filter((p) => p.text);
+      const textPages = [...cur.pages].sort((a, b) => a.order - b.order).filter((p) => p.text);
       setOneClickProgress({ done: 0, total: textPages.length });
       for (let i = 0; i < textPages.length; i++) {
-        const updated = await api.books.narratePage(token, currentBook.id, textPages[i].id);
-        setBook(updated); currentBook = updated;
-        setOneClickProgress({ done: i + 1, total: textPages.length });
+        const u = await api.books.narratePage(token, cur.id, textPages[i].id);
+        setBook(u); cur = u; setOneClickProgress({ done: i + 1, total: textPages.length });
       }
-      setOneClickStage("done");
-      setOneClickBook(currentBook);
+      setOneClickStage("done"); setOneClickBook(cur);
     } catch (err: any) {
       toast.error(err.message ?? "Something went wrong. Please try again.");
       setOneClickRunning(false);
@@ -769,264 +799,308 @@ export default function CreatePage() {
     providers, modelsLoading, prompt, onOneClick: handleOneClick,
   };
 
-  const briefFields: { key: keyof BriefOut; label: string; multiline?: boolean }[] = [
-    { key: "title", label: "Title" },
-    { key: "description", label: "Story", multiline: true },
-    { key: "lesson", label: "Lesson" },
-  ];
+  const sortedPages = currentBook
+    ? [...currentBook.pages].sort((a, b) => a.order - b.order)
+    : [];
 
   return (
     <>
-      {generating && <GeneratingOverlay />}
       {oneClickRunning && (
         <OneClickOverlay stage={oneClickStage} progress={oneClickProgress} book={oneClickBook} onView={() => router.push("/reader")} />
       )}
 
-      <main className="flex h-[calc(100vh-4rem)] overflow-hidden">
+      <main className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
 
-        {/* ── Left pane ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-            <AnimatePresence mode="wait">
+        {/* ── Top bar ─────────────────────────────────────────────────────── */}
+        <div className="flex shrink-0 items-center justify-between border-b-[2.5px] border-foreground bg-background px-6 py-3">
+          <StepBar current={flowState} />
+          {flowState !== "input" && (
+            <button
+              onClick={() => setFlowState(flowState === "pages" ? "brief" : "input")}
+              className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
+            >
+              <ArrowLeft className="h-3 w-3" strokeWidth={3} />
+              {flowState === "pages" ? "Edit brief" : "Edit prompt"}
+            </button>
+          )}
+        </div>
 
-              {/* ── Input state ── */}
-              {flowState === "input" && (
-                <motion.div key="input" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }} className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
-                  <div className="w-full flex flex-col flex-1">
-                    <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">
-                      What&apos;s your story about?
-                    </h1>
-                    <p className="mt-2 text-muted-foreground">
-                      One sentence is enough — we&apos;ll build the rest.
-                    </p>
+        {/* ── Body ────────────────────────────────────────────────────────── */}
+        <div className="flex flex-1 overflow-hidden">
 
-                    {/* Textarea */}
+          {/* Left pane */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto">
+              <AnimatePresence mode="wait">
+
+                {/* ── INPUT ── */}
+                {flowState === "input" && (
+                  <motion.div key="input" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}
+                    className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
+                    <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
+                    <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
+
                     <div className="relative mt-6">
-                      <textarea
-                        value={prompt}
-                        onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))}
-                        rows={6}
+                      <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
                         placeholder="A brave little fox who learns to share…"
-                        className="w-full resize-none rounded-2xl bg-card p-5 pb-10 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30"
-                      />
+                        className="w-full resize-none rounded-2xl bg-card p-5 pb-10 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30" />
                       <div className="absolute bottom-3 right-4 flex items-center gap-2">
-                        <span className={`text-xs font-bold tabular-nums transition-colors ${
-                          wordCount(prompt) >= PROMPT_MAX_WORDS ? "text-destructive"
-                          : wordCount(prompt) >= PROMPT_MAX_WORDS * 0.85 ? "text-amber-500"
-                          : "text-muted-foreground"
-                        }`}>
+                        <span className={`text-xs font-bold tabular-nums transition-colors ${wordCount(prompt) >= PROMPT_MAX_WORDS ? "text-destructive" : wordCount(prompt) >= PROMPT_MAX_WORDS * 0.85 ? "text-amber-500" : "text-muted-foreground"}`}>
                           {wordCount(prompt)} / {PROMPT_MAX_WORDS} words
                         </span>
-                        {prompt.trim().length > 0 && (
-                          <span className="text-xs text-muted-foreground/50">· {prompt.trim().length} chars</span>
-                        )}
+                        {prompt.trim().length > 0 && <span className="text-xs text-muted-foreground/50">· {prompt.trim().length} chars</span>}
                       </div>
                     </div>
 
-                    {/* Examples */}
                     <div className="mt-3 flex flex-wrap gap-2">
                       {EXAMPLES.map((ex) => (
-                        <button key={ex} onClick={() => setPrompt(ex)} className="rounded-full bg-card px-3 py-1.5 text-sm font-bold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-                          ✦ {ex}
-                        </button>
+                        <button key={ex} onClick={() => setPrompt(ex)} className="rounded-full bg-card px-3 py-1.5 text-sm font-bold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">✦ {ex}</button>
                       ))}
                     </div>
 
-                    {/* CTAs */}
-                    <div className="mt-8 flex flex-col gap-3">
-                      <button
-                        onClick={handleEnhance}
-                        disabled={prompt.trim().length < 10}
-                        className="flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0"
-                      >
-                        <Sparkles className="h-5 w-5" strokeWidth={2.5} />
-                        Enhance &amp; preview story →
+                    <div className="mt-8">
+                      <button onClick={handleGenerateBrief} disabled={prompt.trim().length < 10}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
+                        <Sparkles className="h-5 w-5" strokeWidth={2.5} /> Generate story brief →
                       </button>
-                      <p className="text-center text-xs text-muted-foreground">
-                        AI will expand your idea into a full brief — you can edit before generating.
-                      </p>
+                      <p className="mt-2 text-center text-xs text-muted-foreground">AI builds a title, story arc &amp; characters for you to review first.</p>
                     </div>
 
-                    {/* Mobile settings toggle */}
+                    {/* Mobile settings */}
                     <div className="mt-6 lg:hidden">
-                      <button
-                        onClick={() => setSettingsOpen((o) => !o)}
-                        className="flex w-full items-center justify-between rounded-2xl bg-card px-4 py-3 font-extrabold chunky-border"
-                      >
-                        <div className="flex items-center gap-2">
-                          <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
-                          Story settings
-                        </div>
-                        <ChevronDown className={`h-4 w-4 transition-transform ${settingsOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
-                      </button>
-                      <AnimatePresence>
-                        {settingsOpen && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.25 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
-                              <OptionsPanel {...optionsProps} />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* ── Enhancing state ── */}
-              {flowState === "enhancing" && (
-                <motion.div key="enhancing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex min-h-full items-center justify-center px-6 py-10">
-                  <div className="flex flex-col items-center gap-5 text-center max-w-sm">
-                    <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
-                      <Sparkles className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
-                      <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
-                    </div>
-                    <div>
-                      <h2 className="font-display text-3xl font-black">Enhancing your idea…</h2>
-                      <p className="mt-1.5 text-muted-foreground text-sm">
-                        Building a title, story summary &amp; lesson for you to review.
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-card px-4 py-3 chunky-border text-sm text-muted-foreground font-semibold max-w-xs">
-                      &ldquo;{prompt.trim().substring(0, 80)}{prompt.trim().length > 80 ? "…" : ""}&rdquo;
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* ── Brief review state ── */}
-              {flowState === "brief" && (
-                <motion.div key="brief" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.25 }} className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
-                  <div className="w-full">
-                    {/* Back + header */}
-                    <div className="flex items-start justify-between gap-4 mb-6">
-                      <div>
-                        <button
-                          onClick={() => setFlowState("input")}
-                          className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
-                        >
-                          <ArrowLeft className="h-3 w-3" strokeWidth={3} /> Edit prompt
-                        </button>
-                        <h1 className="font-display text-3xl font-black md:text-4xl">Your story brief</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Edit any field or regenerate — then generate your book.
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => fetchBrief(draft ?? undefined)}
-                        disabled={briefLoading}
-                        className="shrink-0 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-xs font-extrabold chunky-border disabled:opacity-50 hover:-translate-y-0.5 transition-transform"
-                      >
-                        <RefreshCw className={`h-3.5 w-3.5 ${briefLoading ? "animate-spin" : ""}`} strokeWidth={2.5} />
-                        Regenerate all
-                      </button>
-                    </div>
-
-                    {/* Original prompt pill */}
-                    <div className="mb-5 rounded-xl bg-muted/60 px-4 py-2.5 chunky-border">
-                      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-0.5">Your prompt</p>
-                      <p className="text-sm font-semibold text-foreground/80">{prompt}</p>
-                    </div>
-
-                    {/* Brief fields */}
-                    {briefLoading ? (
-                      <div className="flex flex-col items-center gap-4 py-12">
-                        <Loader2 className="h-9 w-9 animate-spin text-primary" />
-                        <p className="font-bold text-muted-foreground">Regenerating brief…</p>
-                      </div>
-                    ) : activeBrief ? (
-                      <div className="grid gap-3">
-                        {briefFields.map(({ key, label, multiline }) => (
-                          <BriefFieldRow
-                            key={key}
-                            label={label}
-                            value={activeBrief[key] as string}
-                            multiline={multiline}
-                            onEdit={(v) => updateBriefField(key, v)}
-                            onRegenerate={() => regenerateField(key)}
-                            regenerating={regenField === key}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {/* Settings summary pill */}
-                    {activeBrief && (
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-muted-foreground">
-                        <span className="rounded-full bg-card px-3 py-1 chunky-border">Ages {age}</span>
-                        <span className="rounded-full bg-card px-3 py-1 chunky-border">{pageCount} pages</span>
-                        <span className="rounded-full bg-card px-3 py-1 chunky-border capitalize">{style}</span>
-                        <span className="rounded-full bg-card px-3 py-1 chunky-border flex items-center gap-1">
-                          {modelProvider === "ollama" ? <Cpu className="h-3 w-3" /> : <Cloud className="h-3 w-3" />}
-                          {modelName}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Generate CTA */}
-                    <div className="mt-6">
-                      <button
-                        onClick={generateBook}
-                        disabled={!activeBrief || briefLoading}
-                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0"
-                      >
-                        <BookOpen className="h-5 w-5" strokeWidth={2} />
-                        Generate my book →
-                      </button>
-                      <p className="mt-2 text-center text-xs text-muted-foreground">
-                        Takes about a minute · You&apos;ll be able to illustrate &amp; narrate next.
-                      </p>
-                    </div>
-
-                    {/* Mobile settings toggle (brief view) */}
-                    <div className="mt-6 lg:hidden">
-                      <button
-                        onClick={() => setSettingsOpen((o) => !o)}
-                        className="flex w-full items-center justify-between rounded-2xl bg-card px-4 py-3 font-extrabold chunky-border"
-                      >
-                        <div className="flex items-center gap-2">
-                          <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
-                          Story settings
-                        </div>
+                      <button onClick={() => setSettingsOpen((o) => !o)} className="flex w-full items-center justify-between rounded-2xl bg-card px-4 py-3 font-extrabold chunky-border">
+                        <div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} /> Story settings</div>
                         <ChevronDown className={`h-4 w-4 transition-transform ${settingsOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
                       </button>
                       <AnimatePresence>
                         {settingsOpen && (
                           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
-                            <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
-                              <OptionsPanel {...optionsProps} />
-                            </div>
+                            <div className="mt-3 rounded-2xl bg-card p-4 chunky-border"><OptionsPanel {...optionsProps} /></div>
                           </motion.div>
                         )}
                       </AnimatePresence>
                     </div>
-                  </div>
-                </motion.div>
-              )}
+                  </motion.div>
+                )}
 
-            </AnimatePresence>
-          </div>
-        </div>
+                {/* ── BRIEF ── */}
+                {flowState === "brief" && (
+                  <motion.div key="brief" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.22 }}
+                    className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
 
-        {/* ── Right pane — options (desktop only) ───────────────────────────── */}
-        <div className="hidden lg:flex w-[360px] xl:w-[400px] shrink-0 flex-col overflow-y-auto border-l-[2.5px] border-foreground bg-card/40">
-          <div className="sticky top-0 z-10 border-b-[2px] border-foreground bg-card/90 backdrop-blur px-5 py-3.5">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
-              <span className="font-display text-sm font-black uppercase tracking-wide">Story settings</span>
+                    <div className="flex items-start justify-between gap-4 mb-2">
+                      <div>
+                        <h1 className="font-display text-3xl font-black md:text-4xl">Story brief</h1>
+                        <p className="mt-1 text-sm text-muted-foreground">Review, edit, or regenerate any field — then write the pages.</p>
+                      </div>
+                      {!briefLoading && activeBrief && (
+                        <button onClick={() => { setActiveBrief(null); setBriefLoading(true); api.books.generateBrief(token!, briefParams).then(setActiveBrief).catch((e) => toast.error(e.message ?? "Failed")).finally(() => setBriefLoading(false)); }}
+                          disabled={briefLoading}
+                          className="shrink-0 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50">
+                          <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Regenerate all
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Prompt pill */}
+                    <div className="mb-5 rounded-xl bg-muted/60 px-4 py-2.5 chunky-border">
+                      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-0.5">Your prompt</p>
+                      <p className="text-sm font-semibold text-foreground/80">{prompt}</p>
+                    </div>
+
+                    {briefLoading ? (
+                      <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
+                        <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow">
+                          <Sparkles className="h-7 w-7 text-primary-foreground" strokeWidth={1.5} />
+                          <span className="absolute -right-1.5 -top-1.5 h-4 w-4 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+                        </div>
+                        <div className="text-center">
+                          <p className="font-display text-xl font-black">Building your brief…</p>
+                          <p className="mt-1 text-sm text-muted-foreground">Crafting title, arc, characters &amp; themes</p>
+                        </div>
+                      </div>
+                    ) : activeBrief ? (
+                      <div className="space-y-3">
+                        {/* Title */}
+                        <EditableField label="Title" value={activeBrief.title}
+                          onSave={(v) => updateBriefField("title", v)}
+                          onRegenerate={() => regenerateField("title")} regenerating={regenField === "title"} />
+
+                        {/* Description */}
+                        <EditableField label="Story" value={activeBrief.description} multiline
+                          onSave={(v) => updateBriefField("description", v)}
+                          onRegenerate={() => regenerateField("description")} regenerating={regenField === "description"} />
+
+                        {/* Lesson */}
+                        <EditableField label="Lesson / Moral" value={activeBrief.lesson}
+                          onSave={(v) => updateBriefField("lesson", v)}
+                          onRegenerate={() => regenerateField("lesson")} regenerating={regenField === "lesson"} />
+
+                        {/* Characters */}
+                        {activeBrief.characters_intro?.length > 0 && (
+                          <div className="rounded-2xl bg-background p-4 chunky-border">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                              <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Characters</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              {activeBrief.characters_intro.map((c, i) => (
+                                <div key={i} className="flex items-start gap-2 rounded-xl bg-card px-3 py-2 chunky-border">
+                                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">{i + 1}</span>
+                                  <p className="text-sm font-semibold leading-snug">{c}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Themes */}
+                        {activeBrief.themes?.length > 0 && (
+                          <div className="rounded-2xl bg-background p-4 chunky-border">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                              <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {activeBrief.themes.map((t) => <span key={t} className="rounded-full bg-card px-3 py-1 text-xs font-bold chunky-border">{t}</span>)}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Story arc */}
+                        {activeBrief.arc?.length > 0 && (
+                          <div className="rounded-2xl bg-background p-4 chunky-border">
+                            <div className="flex items-center gap-1.5 mb-3">
+                              <Map className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                              <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Story arc</span>
+                            </div>
+                            <div className="space-y-2">
+                              {activeBrief.arc.map((stage, i) => (
+                                <div key={i} className="flex gap-3 items-start">
+                                  <div className="flex flex-col items-center shrink-0">
+                                    <div className="grid h-6 w-6 place-items-center rounded-full bg-primary text-[10px] font-black text-primary-foreground chunky-border">{i + 1}</div>
+                                    {i < activeBrief.arc.length - 1 && <div className="w-0.5 flex-1 min-h-[12px] bg-foreground/20 mt-1" />}
+                                  </div>
+                                  <div className="pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-extrabold">{stage.name}</p>
+                                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">{stage.page_span} pages</span>
+                                    </div>
+                                    <p className="mt-0.5 text-xs text-muted-foreground font-semibold">{stage.description}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* CTA */}
+                        <div className="pt-2">
+                          <button onClick={handleWritePages}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
+                            <FileText className="h-5 w-5" strokeWidth={2} /> Write the pages →
+                          </button>
+                          <p className="mt-2 text-center text-xs text-muted-foreground">AI writes every page — you&apos;ll review &amp; edit before anything is illustrated.</p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </motion.div>
+                )}
+
+                {/* ── WRITING ── */}
+                {flowState === "writing" && (
+                  <motion.div key="writing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex min-h-full items-center justify-center px-6 py-10">
+                    <div className="flex flex-col items-center gap-5 text-center max-w-sm">
+                      <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
+                        <FileText className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
+                        <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+                      </div>
+                      <div>
+                        <h2 className="font-display text-3xl font-black">Writing your pages…</h2>
+                        <p className="mt-1.5 text-sm text-muted-foreground">Turning your brief into a full story, page by page.</p>
+                      </div>
+                      {activeBrief && (
+                        <div className="rounded-2xl bg-card px-4 py-3 chunky-border text-left w-full">
+                          <p className="font-display text-base font-black">{activeBrief.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground font-semibold line-clamp-2">{activeBrief.description}</p>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ── PAGES REVIEW ── */}
+                {flowState === "pages" && currentBook && (
+                  <motion.div key="pages" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
+                    className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
+
+                    <div className="flex items-start justify-between gap-4 mb-6">
+                      <div>
+                        <h1 className="font-display text-3xl font-black md:text-4xl">Review your pages</h1>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Edit or regenerate any page before illustrating. <span className="font-bold">{sortedPages.length} pages</span> generated.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleWritePages}
+                        className="shrink-0 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
+                        title="Regenerate all pages"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.5} /> Rewrite all
+                      </button>
+                    </div>
+
+                    {/* Page cards */}
+                    <div className="space-y-3">
+                      {sortedPages.map((page) => (
+                        <PageReviewCard
+                          key={page.id}
+                          page={page}
+                          bookId={currentBook.id}
+                          token={token!}
+                          onUpdate={(updated) => { setCurrentBook(updated); setBook(updated); }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Approve CTA */}
+                    <div className="mt-6 space-y-3">
+                      <button onClick={handleApprovePages}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
+                        <CheckCheck className="h-5 w-5" strokeWidth={2.5} /> Approve &amp; go to editor →
+                      </button>
+                      <p className="text-center text-xs text-muted-foreground">You can still edit pages in the editor. Next: add illustrations &amp; narration.</p>
+                    </div>
+                  </motion.div>
+                )}
+
+              </AnimatePresence>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-5 py-5">
-            <OptionsPanel {...optionsProps} />
-          </div>
-        </div>
 
+          {/* ── Right pane ─────────────────────────────────────────────────── */}
+          <div className="hidden lg:flex w-[360px] xl:w-[400px] shrink-0 flex-col overflow-y-auto border-l-[2.5px] border-foreground bg-card/40">
+            <div className="sticky top-0 z-10 border-b-[2px] border-foreground bg-card/90 backdrop-blur px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
+                <span className="font-display text-sm font-black uppercase tracking-wide">
+                  {flowState === "pages" ? "Brief & settings" : "Story settings"}
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-5">
+              {flowState === "pages" && activeBrief ? (
+                <BriefSummaryPanel
+                  brief={activeBrief} age={age} pageCount={pageCount}
+                  style={style} modelName={modelName} modelProvider={modelProvider}
+                />
+              ) : (
+                <OptionsPanel {...optionsProps} locked={flowState === "writing"} />
+              )}
+            </div>
+          </div>
+
+        </div>
       </main>
     </>
   );

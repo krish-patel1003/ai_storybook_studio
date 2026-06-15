@@ -178,6 +178,7 @@ export interface UpdatePageIn {
   emotional_note?: string;
   setting_note?: string;
   is_locked?: boolean;
+  text?: string;
 }
 
 export interface AddPageIn {

@@ -31,11 +31,12 @@ class CreateBookIn(BaseModel):
 
 
 class UpdatePageIn(BaseModel):
-    """User editing a beat on the /outline screen."""
+    """User editing a page on the /outline or review screen."""
     beat: str | None = Field(default=None, min_length=5)
     emotional_note: str | None = None
     setting_note: str | None = None
     is_locked: bool | None = None
+    text: str | None = None
 
 
 class RecalibrateIn(BaseModel):

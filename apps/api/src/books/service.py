@@ -288,6 +288,8 @@ async def update_page(
         page.setting_note = data.setting_note
     if data.is_locked is not None:
         page.is_locked = data.is_locked
+    if data.text is not None:
+        page.text = data.text
 
     await db.commit()
     return await get_book(db, book_id, user_id)
