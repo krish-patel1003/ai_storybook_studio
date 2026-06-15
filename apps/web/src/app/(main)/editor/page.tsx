@@ -499,9 +499,9 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
     try {
       const title = book.brief?.title ?? book.title;
       await downloadFile(api.books.exportEpub(token, book.id, exportFont), `${title}.epub`);
-      toast.success("EPUB downloaded!");
+      toast.success("Kindle edition downloaded!");
     } catch {
-      toast.error("EPUB export failed");
+      toast.error("Kindle export failed");
     } finally {
       setDownloadingEpub(false);
     }
@@ -546,7 +546,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
             </button>
           </div>
 
-          {/* Font picker — applies to both PDF and EPUB */}
+          {/* Font picker — applies to both PDF and Kindle edition */}
           {exportFonts.length > 0 && (
             <div className="rounded-2xl bg-background p-4 chunky-border">
               <p className="mb-2 text-sm font-extrabold">Story font</p>
@@ -588,15 +588,15 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
             </button>
           </div>
 
-          {/* EPUB */}
+          {/* Amazon Kindle */}
           <div className="rounded-2xl bg-background p-4 chunky-border">
             <div className="flex items-start gap-3">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-highlight chunky-border">
                 <Download className="h-5 w-5 text-foreground" strokeWidth={2.5} />
               </div>
               <div className="flex-1">
-                <p className="font-display text-base font-black">Download EPUB</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Kindle-ready. Send to your device via email.</p>
+                <p className="font-display text-base font-black">Amazon Kindle Ready</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Upload directly to KDP or send to your device.</p>
               </div>
             </div>
             <button
@@ -604,7 +604,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
               disabled={downloadingEpub}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-2.5 text-sm font-extrabold text-background chunky-border disabled:opacity-60"
             >
-              {downloadingEpub ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download EPUB</>}
+              {downloadingEpub ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download Kindle Edition</>}
             </button>
           </div>
 

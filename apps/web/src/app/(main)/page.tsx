@@ -27,7 +27,7 @@ export default function HomePage() {
               hand-illustrated pages, and a print-ready PDF — in minutes.
             </p>
             <p className="mt-3 inline-flex w-fit items-center gap-2 rounded-full bg-highlight px-3 py-1 text-sm font-extrabold text-foreground chunky-border">
-              ✦ Publish-ready PDF &amp; EPUB export
+              ✦ Publish-ready PDF &amp; Amazon Kindle Ready
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
@@ -82,7 +82,7 @@ export default function HomePage() {
       <section className="border-y-[2.5px] border-foreground bg-card">
         <div className="mx-auto max-w-7xl px-4 py-16">
           <h2 className="text-center font-display text-4xl font-black md:text-5xl">
-            From idea to bedtime, in 3 steps
+            From idea to illustrated storybook, in 3 steps
           </h2>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {[
@@ -103,7 +103,7 @@ export default function HomePage() {
               {
                 icon: BookMarked,
                 title: "3. Publish",
-                desc: "Read it interactively, share a link, or export a Kindle-ready PDF & EPUB.",
+                desc: "Read it interactively, share a link, or export a print-ready PDF & Amazon Kindle edition.",
                 bg: "bg-accent",
                 fg: "text-accent-foreground",
               },

@@ -13,6 +13,8 @@ from src.auth.schemas import (
     RegisterIn,
     TokenRefreshIn,
     UserResponse,
+    VerifyEmailIn,
+    ResendVerificationIn,
 )
 from src.database import get_db
 
@@ -21,15 +23,37 @@ router = APIRouter()
 
 @router.post(
     "/register",
-    response_model=AuthTokens,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new author account",
 )
 async def register(
     data: RegisterIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> AuthTokens:
+) -> dict:
     return await service.register(data.pen_name, data.email, data.password, db)
+
+
+@router.post(
+    "/verify-email",
+    response_model=AuthTokens,
+    summary="Verify email address with token from email link",
+)
+async def verify_email(
+    data: VerifyEmailIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AuthTokens:
+    return await service.verify_email(data.token, db)
+
+
+@router.post(
+    "/resend-verification",
+    summary="Resend email verification link",
+)
+async def resend_verification(
+    data: ResendVerificationIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    return await service.resend_verification(data.email, db)
 
 
 @router.post(

@@ -49,3 +49,11 @@ class AuthTokens(CustomModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class VerifyEmailIn(CustomModel):
+    token: str
+
+
+class ResendVerificationIn(CustomModel):
+    email: EmailStr

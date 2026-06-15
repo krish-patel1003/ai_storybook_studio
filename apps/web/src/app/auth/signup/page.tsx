@@ -66,8 +66,12 @@ export default function SignUpPage() {
     setIsLoading(true);
     try {
       await registerUser(data.penName, data.email, data.password);
-      toast.success("Account created! Welcome to Storybook Studio.");
-      router.push("/");
+      if (isMock) {
+        toast.success("Account created! Welcome to Storybook Studio.");
+        router.push("/");
+      } else {
+        router.push(`/auth/check-email?email=${encodeURIComponent(data.email)}`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sign up failed");
     } finally {

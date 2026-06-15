@@ -278,9 +278,21 @@ export const api = {
       }),
 
     register: (pen_name: string, email: string, password: string) =>
-      request<AuthTokens>("/auth/register", {
+      request<{ message: string }>("/auth/register", {
         method: "POST",
         body: JSON.stringify({ pen_name, email, password }),
+      }),
+
+    verifyEmail: (token: string) =>
+      request<AuthTokens>("/auth/verify-email", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+
+    resendVerification: (email: string) =>
+      request<{ message: string }>("/auth/resend-verification", {
+        method: "POST",
+        body: JSON.stringify({ email }),
       }),
 
     google: (token: string) =>

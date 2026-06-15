@@ -32,12 +32,12 @@ const formats = [
   },
   {
     id: "epub",
-    title: "EPUB · Kindle",
-    desc: "Reflowable e-book, ready to upload to Kindle Direct Publishing.",
+    title: "Amazon Kindle Ready",
+    desc: "Reflowable e-book ready to upload to Kindle Direct Publishing (KDP).",
     icon: BookOpen,
     bg: "bg-accent",
     fg: "text-accent-foreground",
-    cta: "Download EPUB",
+    cta: "Download Kindle Edition",
   },
 ];
 

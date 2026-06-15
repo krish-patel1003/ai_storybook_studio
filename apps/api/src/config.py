@@ -35,5 +35,13 @@ class Config(BaseSettings):
     MINIO_BUCKET: str = "illustrations"
     MINIO_SECURE: bool = False
 
+    # Email (Resend)
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "Storybook.Studio <noreply@storybook.studio>"
+    FRONTEND_URL: str = "https://ai-storybook-studio.vercel.app"
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+
 
 settings = Config()

@@ -114,7 +114,7 @@ export function BookHeader() {
                     </div>
 
                     <Link
-                      href="/books"
+                      href="/library"
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-bold transition-colors hover:bg-highlight"
                     >

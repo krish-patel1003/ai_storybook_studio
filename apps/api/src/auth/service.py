@@ -1,6 +1,9 @@
+import hashlib
+import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,22 +26,90 @@ from src.auth.utils import (
 )
 
 
-async def register(pen_name: str, email: str, password: str, db: AsyncSession) -> AuthTokens:
+def _generate_verification_token() -> str:
+    return hashlib.sha256(os.urandom(32)).hexdigest()
+
+
+async def register(pen_name: str, email: str, password: str, db: AsyncSession) -> dict:
     existing = await db.scalar(select(User).where(User.email == email))
     if existing:
         raise EmailAlreadyTaken()
 
+    token = _generate_verification_token()
     user = User(
         pen_name=pen_name,
         email=email,
         password_hash=hash_password(password),
+        is_email_verified=False,
+        email_verification_token=token,
+        email_verification_expires_at=datetime.now(UTC) + timedelta(hours=24),
     )
     db.add(user)
-    await db.flush()  # get user.id without committing yet
+    await db.commit()
+
+    # Send verification email (non-blocking — failure doesn't break registration)
+    try:
+        from src.auth.email_service import send_verification_email
+        await send_verification_email(email, pen_name, token)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Failed to send verification email to %s", email)
+
+    return {"message": "Registration successful. Please check your email to verify your account."}
+
+
+async def verify_email(token: str, db: AsyncSession) -> AuthTokens:
+    user = await db.scalar(
+        select(User).where(User.email_verification_token == token)
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token.",
+        )
+    if user.email_verification_expires_at and user.email_verification_expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification link has expired. Please request a new one.",
+        )
+    user.is_email_verified = True
+    user.email_verification_token = None
+    user.email_verification_expires_at = None
 
     tokens = await _issue_tokens(user, db)
     await db.commit()
+
+    # Send welcome email
+    try:
+        from src.auth.email_service import send_welcome_email
+        await send_welcome_email(user.email, user.pen_name)
+    except Exception:
+        pass
+
     return tokens
+
+
+async def resend_verification(email: str, db: AsyncSession) -> dict:
+    user = await db.scalar(select(User).where(User.email == email))
+    if not user:
+        # Don't reveal whether email exists
+        return {"message": "If that email is registered, a new verification link has been sent."}
+    if user.is_email_verified:
+        return {"message": "Your email is already verified. You can sign in."}
+
+    token = _generate_verification_token()
+    user.email_verification_token = token
+    user.email_verification_expires_at = datetime.now(UTC) + timedelta(hours=24)
+    await db.commit()
+
+    try:
+        from src.auth.email_service import send_verification_email
+        await send_verification_email(email, user.pen_name, token)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Failed to resend verification email to %s", email)
+
+    return {"message": "If that email is registered, a new verification link has been sent."}
 
 
 async def authenticate(email: str, password: str, db: AsyncSession) -> AuthTokens:
@@ -76,12 +147,18 @@ async def google_auth(id_token_str: str, db: AsyncSession) -> AuthTokens:
             user.google_id = google_id
         if avatar_url and not user.avatar_url:
             user.avatar_url = avatar_url
+        # Google has verified this email
+        if not user.is_email_verified:
+            user.is_email_verified = True
+            user.email_verification_token = None
+            user.email_verification_expires_at = None
     else:
         user = User(
             pen_name=name,
             email=email,
             google_id=google_id,
             avatar_url=avatar_url,
+            is_email_verified=True,  # Google already verified it
         )
         db.add(user)
         await db.flush()

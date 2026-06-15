@@ -161,10 +161,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isMock, persist]);
 
   const register = useCallback(async (penName: string, email: string, password: string) => {
-    const result = isMock
-      ? await mockRegister(penName, email, password)
-      : await api.auth.register(penName, email, password);
-    persist(result.access_token, result.refresh_token, result.user);
+    if (isMock) {
+      const result = await mockRegister(penName, email, password);
+      persist(result.access_token, result.refresh_token, result.user);
+      return;
+    }
+    // Real registration: backend sends verification email, no tokens yet
+    await api.auth.register(penName, email, password);
   }, [isMock, persist]);
 
   const googleLogin = useCallback(async (accessToken: string) => {
