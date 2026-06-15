@@ -53,20 +53,83 @@ const TONES_PRESET = [
 
 const PAGE_COUNT_OPTIONS = [6, 8, 10, 12, 15, 20, 24, 30, 40];
 
-const GENERATION_STAGES = [
-  "Enhancing your idea…",
-  "Building characters…",
-  "Writing story beats…",
-  "Writing pages…",
-  "Polishing the prose…",
-  "Reviewing and improving…",
+const PROMPT_MAX_WORDS = 80;
+
+function wordCount(text: string) {
+  return text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+}
+
+const GENERATION_STAGES: { label: string; hints: string[] }[] = [
+  {
+    label: "Enhancing your idea…",
+    hints: [
+      "Sprinkling story magic ✨",
+      "Thinking deeply about your world…",
+      "Mapping out the adventure…",
+    ],
+  },
+  {
+    label: "Building characters…",
+    hints: [
+      "Designing your heroes & villains…",
+      "Giving everyone a personality…",
+      "Deciding who needs a funny hat 🎩",
+    ],
+  },
+  {
+    label: "Writing story beats…",
+    hints: [
+      "Planning the twists and turns…",
+      "Making sure the ending lands…",
+      "Adding a few surprises 🎉",
+    ],
+  },
+  {
+    label: "Writing pages…",
+    hints: [
+      "Choosing every word carefully…",
+      "Making it age-appropriate and fun…",
+      "Finding the perfect sentences…",
+    ],
+  },
+  {
+    label: "Polishing the prose…",
+    hints: [
+      "Smoothing out the rough edges…",
+      "Reading it aloud (virtually)…",
+      "Making it sound just right 🎶",
+    ],
+  },
+  {
+    label: "Reviewing and improving…",
+    hints: [
+      "One final read-through…",
+      "Adding the finishing touches…",
+      "Almost there — nearly ready! 🚀",
+    ],
+  },
 ];
+
+// ── Shared timer hook ─────────────────────────────────────────────────────────
+
+function useElapsedTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+  const ss = String(elapsed % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
 
 // ── Standard generating overlay ───────────────────────────────────────────────
 
 function GeneratingOverlay() {
   const [stageIdx, setStageIdx] = useState(0);
+  const [hintIdx, setHintIdx] = useState(0);
   const [progress, setProgress] = useState(4);
+  const timer = useElapsedTimer();
 
   useEffect(() => {
     const stageMs = [8000, 15000, 20000, 60000, 20000, 18000];
@@ -77,7 +140,10 @@ function GeneratingOverlay() {
       total += ms;
       timers.push(
         setTimeout(() => {
-          if (i + 1 < GENERATION_STAGES.length) setStageIdx(i + 1);
+          if (i + 1 < GENERATION_STAGES.length) {
+            setStageIdx(i + 1);
+            setHintIdx(0);
+          }
         }, total - ms + 1000)
       );
     });
@@ -86,11 +152,20 @@ function GeneratingOverlay() {
       setProgress((p) => Math.min(p + 0.5, 94));
     }, 600);
 
+    // Rotate hints every 3 s
+    const hintTick = setInterval(() => {
+      setHintIdx((h) => h + 1);
+    }, 3000);
+
     return () => {
       timers.forEach(clearTimeout);
       clearInterval(tick);
+      clearInterval(hintTick);
     };
   }, []);
+
+  const stage = GENERATION_STAGES[stageIdx];
+  const hint = stage.hints[hintIdx % stage.hints.length];
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur">
@@ -104,6 +179,19 @@ function GeneratingOverlay() {
           <p className="mt-1 text-muted-foreground">This takes about a minute. Grab a snack 🍎</p>
         </div>
         <div className="w-80">
+          <div className="mb-2 flex items-center justify-between text-xs font-bold text-muted-foreground">
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={stageIdx}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+              >
+                {stage.label}
+              </motion.span>
+            </AnimatePresence>
+            <span className="font-mono tabular-nums">{timer}</span>
+          </div>
           <div className="mb-3 h-3 overflow-hidden rounded-full bg-muted chunky-border">
             <motion.div
               className="h-full rounded-full bg-primary"
@@ -113,13 +201,13 @@ function GeneratingOverlay() {
           </div>
           <AnimatePresence mode="wait">
             <motion.p
-              key={stageIdx}
+              key={hint}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               className="text-sm font-bold text-muted-foreground"
             >
-              {GENERATION_STAGES[stageIdx]}
+              {hint}
             </motion.p>
           </AnimatePresence>
         </div>
@@ -139,6 +227,35 @@ function GeneratingOverlay() {
 }
 
 // ── One-click overlay ─────────────────────────────────────────────────────────
+
+const ONE_CLICK_HINTS: Record<string, string[]> = {
+  writing: [
+    "Crafting your story arc…",
+    "Picking the perfect words…",
+    "Making every page count…",
+    "Weaving plot twists 🌀",
+    "Writing dialogue that pops…",
+  ],
+  characters: [
+    "Sketching character traits…",
+    "Deciding who's the hero 🦊",
+    "Giving everyone backstories…",
+    "Picking names and personalities…",
+  ],
+  illustrating: [
+    "Painting the scenes…",
+    "Adding colour and detail 🎨",
+    "Making each page beautiful…",
+    "Bringing the characters to life…",
+    "Rendering the world you imagined…",
+  ],
+  narrating: [
+    "Finding the perfect voice 🎙️",
+    "Adding emotion to each line…",
+    "Recording the narration…",
+    "Making it sound like a real story…",
+  ],
+};
 
 type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
 
@@ -160,6 +277,19 @@ function OneClickOverlay({
   book: BookOut | null;
   onView: () => void;
 }) {
+  const [hintIdx, setHintIdx] = useState(0);
+  const timer = useElapsedTimer();
+
+  // Reset hint index when stage changes
+  useEffect(() => { setHintIdx(0); }, [stage]);
+
+  // Rotate hints every 3 s
+  useEffect(() => {
+    if (stage === "done") return;
+    const t = setInterval(() => setHintIdx((h) => h + 1), 3000);
+    return () => clearInterval(t);
+  }, [stage]);
+
   const stageIdx = ONE_CLICK_STAGES.findIndex((s) => s.id === stage);
   const isDone = stage === "done";
 
@@ -173,16 +303,15 @@ function OneClickOverlay({
     ? 40 + (progress.total > 0 ? (progress.done / progress.total) * 30 : 0)
     : 70 + (progress.total > 0 ? (progress.done / progress.total) * 27 : 0);
 
-  const statusLabel =
-    stage === "writing"
-      ? "Writing your story…"
-      : stage === "characters"
-      ? "Designing character sheets…"
-      : stage === "illustrating"
-      ? `Illustrating pages… ${progress.total > 0 ? `(${progress.done} / ${progress.total})` : ""}`
-      : stage === "narrating"
-      ? `Adding narration… ${progress.total > 0 ? `(${progress.done} / ${progress.total})` : ""}`
-      : "Your book is ready!";
+  const stageLabel =
+    stage === "writing"      ? "Writing your story…"
+    : stage === "characters" ? "Designing character sheets…"
+    : stage === "illustrating" ? `Illustrating pages…${progress.total > 0 ? ` (${progress.done} / ${progress.total})` : ""}`
+    : stage === "narrating"  ? `Adding narration…${progress.total > 0 ? ` (${progress.done} / ${progress.total})` : ""}`
+    : "Your book is ready!";
+
+  const hints = ONE_CLICK_HINTS[stage] ?? [];
+  const hint = hints[hintIdx % hints.length];
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur px-6">
@@ -204,6 +333,7 @@ function OneClickOverlay({
                   {book.brief?.title ?? book.title}
                 </p>
               )}
+              <p className="mt-1 text-sm text-muted-foreground">Completed in {timer} ✦</p>
             </div>
             <button
               onClick={onView}
@@ -217,7 +347,7 @@ function OneClickOverlay({
             key="progress"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex w-full max-w-sm flex-col items-center gap-7 text-center"
+            className="flex w-full max-w-sm flex-col items-center gap-6 text-center"
           >
             <div className="relative grid h-24 w-24 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
               <Wand2 className="h-10 w-10 text-primary-foreground" strokeWidth={2} />
@@ -228,18 +358,33 @@ function OneClickOverlay({
               <h2 className="font-display text-3xl font-black">Making your book…</h2>
               <AnimatePresence mode="wait">
                 <motion.p
-                  key={statusLabel}
+                  key={stageLabel}
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -5 }}
-                  className="mt-2 text-sm font-bold text-muted-foreground"
+                  className="mt-1 text-sm font-extrabold text-foreground/80"
                 >
-                  {statusLabel}
+                  {stageLabel}
+                </motion.p>
+              </AnimatePresence>
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={hint}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="mt-1 text-xs text-muted-foreground"
+                >
+                  {hint}
                 </motion.p>
               </AnimatePresence>
             </div>
 
             <div className="w-full">
+              <div className="mb-1.5 flex justify-between text-xs font-bold text-muted-foreground">
+                <span>{Math.round(overallPct)}% complete</span>
+                <span className="font-mono tabular-nums">{timer}</span>
+              </div>
               <div className="h-3 overflow-hidden rounded-full bg-muted chunky-border">
                 <motion.div
                   className="h-full rounded-full bg-primary"
@@ -275,7 +420,7 @@ function OneClickOverlay({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              This takes a few minutes — sit back and relax ✨
+              Sit back and relax — this takes a few minutes ✨
             </p>
           </motion.div>
         )}
@@ -670,13 +815,38 @@ export default function CreatePage() {
                     <p className="mt-2 text-muted-foreground">
                       One line is enough — we&apos;ll build the rest.
                     </p>
-                    <textarea
-                      value={prompt}
-                      onChange={(e) => setPrompt(e.target.value)}
-                      rows={5}
-                      placeholder="A brave little fox who learns to share…"
-                      className="mt-6 w-full resize-none rounded-2xl bg-background p-5 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30"
-                    />
+                    <div className="relative mt-6">
+                      <textarea
+                        value={prompt}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          // Enforce word limit
+                          if (wordCount(val) <= PROMPT_MAX_WORDS) setPrompt(val);
+                        }}
+                        rows={5}
+                        placeholder="A brave little fox who learns to share…"
+                        className="w-full resize-none rounded-2xl bg-background p-5 pb-10 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30"
+                      />
+                      {/* Word counter */}
+                      <div className="absolute bottom-3 right-4 flex items-center gap-2">
+                        <span
+                          className={`text-xs font-bold tabular-nums transition-colors ${
+                            wordCount(prompt) >= PROMPT_MAX_WORDS
+                              ? "text-destructive"
+                              : wordCount(prompt) >= PROMPT_MAX_WORDS * 0.85
+                              ? "text-amber-500"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {wordCount(prompt)} / {PROMPT_MAX_WORDS} words
+                        </span>
+                        {prompt.trim().length > 0 && (
+                          <span className="text-xs text-muted-foreground/60">
+                            · {prompt.trim().length} chars
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {EXAMPLES.map((ex) => (
                         <button
