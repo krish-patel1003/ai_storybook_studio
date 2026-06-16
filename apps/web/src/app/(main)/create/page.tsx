@@ -376,6 +376,54 @@ function OptionsPanel({
   );
 }
 
+// ── Locked settings summary (brief + writing states) ─────────────────────────
+
+function LockedSettingsSummary({ age, tone, style, pageCount, safety, modelName, modelProvider, onEdit }: {
+  age: string; tone: string[]; style: string; pageCount: number; safety: boolean;
+  modelName: string; modelProvider: string; onEdit: () => void;
+}) {
+  const styleLabel = { watercolor: "Watercolor", crayon: "Crayon", flat: "Flat", papercut: "Papercut" }[style] ?? style;
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-background p-4 chunky-border space-y-3">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Locked settings</p>
+
+        {[
+          { label: "Reading level", value: `Ages ${age}` },
+          { label: "Pages", value: `${pageCount} pages` },
+          { label: "Art style", value: styleLabel },
+          { label: "Safety", value: safety ? "On" : "Off" },
+          { label: "Model", value: modelName },
+        ].map(({ label, value }) => (
+          <div key={label} className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground font-semibold">{label}</span>
+            <span className="font-extrabold">{value}</span>
+          </div>
+        ))}
+
+        {tone.length > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground font-semibold mb-1.5">Tone</p>
+            <div className="flex flex-wrap gap-1">
+              {tone.slice(0, 6).map((t) => (
+                <span key={t} className="rounded-full bg-accent/60 px-2.5 py-0.5 text-xs font-bold">{t}</span>
+              ))}
+              {tone.length > 6 && <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">+{tone.length - 6}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={onEdit}
+        className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
+      >
+        <ArrowLeft className="h-3 w-3" strokeWidth={3} /> Edit prompt &amp; settings
+      </button>
+    </div>
+  );
+}
+
 // ── Brief summary sidebar (for pages review state) ────────────────────────────
 
 function BriefSummaryPanel({ brief, age, pageCount, style, modelName, modelProvider }: {
@@ -875,7 +923,9 @@ export default function CreatePage() {
                       <AnimatePresence>
                         {settingsOpen && (
                           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
-                            <div className="mt-3 rounded-2xl bg-card p-4 chunky-border"><OptionsPanel {...optionsProps} /></div>
+                            <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
+                              <OptionsPanel {...optionsProps} />
+                            </div>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -1002,6 +1052,23 @@ export default function CreatePage() {
                           </button>
                           <p className="mt-2 text-center text-xs text-muted-foreground">AI writes every page — you&apos;ll review &amp; edit before anything is illustrated.</p>
                         </div>
+
+                        {/* Mobile: locked settings summary */}
+                        <div className="lg:hidden mt-2">
+                          <button onClick={() => setSettingsOpen((o) => !o)} className="flex w-full items-center justify-between rounded-2xl bg-card px-4 py-3 font-extrabold chunky-border">
+                            <div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} /> Settings used</div>
+                            <ChevronDown className={`h-4 w-4 transition-transform ${settingsOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
+                          </button>
+                          <AnimatePresence>
+                            {settingsOpen && (
+                              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
+                                <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
+                                  <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} modelName={modelName} modelProvider={modelProvider} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       </div>
                     ) : null}
                   </motion.div>
@@ -1084,7 +1151,9 @@ export default function CreatePage() {
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
                 <span className="font-display text-sm font-black uppercase tracking-wide">
-                  {flowState === "pages" ? "Brief & settings" : "Story settings"}
+                  {flowState === "input" ? "Story settings"
+                    : flowState === "pages" ? "Brief & settings"
+                    : "Settings"}
                 </span>
               </div>
             </div>
@@ -1094,8 +1163,14 @@ export default function CreatePage() {
                   brief={activeBrief} age={age} pageCount={pageCount}
                   style={style} modelName={modelName} modelProvider={modelProvider}
                 />
+              ) : flowState === "brief" || flowState === "writing" ? (
+                <LockedSettingsSummary
+                  age={age} tone={tone} style={style} pageCount={pageCount}
+                  safety={safety} modelName={modelName} modelProvider={modelProvider}
+                  onEdit={() => setFlowState("input")}
+                />
               ) : (
-                <OptionsPanel {...optionsProps} locked={flowState === "writing"} />
+                <OptionsPanel {...optionsProps} />
               )}
             </div>
           </div>
