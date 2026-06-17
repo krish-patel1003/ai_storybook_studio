@@ -236,9 +236,9 @@ function OptionsPanel({
         </div>
       </div>
 
-      {/* Tone */}
+      {/* Themes */}
       <div>
-        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Tone &amp; Genre</p>
+        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes &amp; Tone</p>
         <div className="flex flex-wrap gap-1.5">
           {[...TONES_PRESET, ...customTones].map((t) => {
             const on = tone.includes(t); const isCustom = customTones.includes(t);
@@ -265,7 +265,7 @@ function OptionsPanel({
             </button>
           </div>
         </div>
-        {tone.length > 0 && <p className="mt-1 text-xs text-muted-foreground font-semibold">{tone.length} selected</p>}
+        {tone.length > 0 && <p className="mt-1 text-xs text-muted-foreground font-semibold">{tone.length} theme{tone.length !== 1 ? "s" : ""} selected</p>}
       </div>
 
       {/* Art style */}
@@ -403,7 +403,7 @@ function LockedSettingsSummary({ age, tone, style, pageCount, safety, modelName,
 
         {tone.length > 0 && (
           <div>
-            <p className="text-xs text-muted-foreground font-semibold mb-1.5">Tone</p>
+            <p className="text-xs text-muted-foreground font-semibold mb-1.5">Themes</p>
             <div className="flex flex-wrap gap-1">
               {tone.slice(0, 6).map((t) => (
                 <span key={t} className="rounded-full bg-accent/60 px-2.5 py-0.5 text-xs font-bold">{t}</span>
@@ -717,13 +717,16 @@ function EnhancedPromptReview({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {expanded.themes.length > 0 && (
           <div className="rounded-2xl bg-background p-4 chunky-border">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-              <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</p>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</p>
+              </div>
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary">✦ added to settings</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {expanded.themes.map((t) => (
-                <span key={t} className="rounded-full bg-card px-2.5 py-0.5 text-xs font-bold chunky-border">{t}</span>
+                <span key={t} className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold chunky-border">{t}</span>
               ))}
             </div>
           </div>
@@ -877,6 +880,16 @@ export default function CreatePage() {
         raw_prompt: prompt, age_range: age, tone, safety_mode: safety, page_count: pageCount,
       });
       setExpandedPrompt(result);
+      // Auto-add AI-generated themes into the tone selection (merge, no duplicates)
+      if (result.themes.length > 0) {
+        setTone((prev) => {
+          const merged = [...prev];
+          for (const t of result.themes) {
+            if (!merged.includes(t)) merged.push(t);
+          }
+          return merged;
+        });
+      }
       setFlowState("enhanced");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to expand prompt");
