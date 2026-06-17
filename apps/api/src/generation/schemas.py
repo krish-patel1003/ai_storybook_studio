@@ -11,6 +11,28 @@ Design principle: schema defines *structure*, Gemini authors *content*.
 from pydantic import BaseModel, Field
 
 
+# ── Stage 0: Prompt Expansion (user-facing preview before the brief) ──────────
+
+class ExpandedPrompt(BaseModel):
+    title: str = Field(description="A compelling, specific title for this story")
+    story_concept: str = Field(
+        description="2–3 vivid paragraphs describing the story, who it follows, what they do, "
+                    "and how it ends. Write it the way you'd pitch it to a publisher — exciting, warm, specific."
+    )
+    key_characters: list[str] = Field(
+        description="One line per character: 'Name – personality and role in the story'. 2–4 characters only."
+    )
+    story_highlights: list[str] = Field(
+        description="6–8 key scene highlights that show the most exciting or heartwarming moments of the story. "
+                    "Concrete and specific — each one should make the reader want to see that page."
+    )
+    themes: list[str] = Field(description="4–6 core themes as short phrases, e.g. 'Friendship', 'Trying again'")
+    visual_style: str = Field(
+        description="Art direction in one sentence — style, mood, and colour palette. "
+                    "E.g. 'Warm Pixar-style 3D animation with golden-hour lighting and bright summer colours.'"
+    )
+
+
 # ── Stage 1: Prompt Enhancement ───────────────────────────────────────────────
 
 class ArcStage(BaseModel):

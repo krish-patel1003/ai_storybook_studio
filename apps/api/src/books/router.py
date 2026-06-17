@@ -19,6 +19,8 @@ from src.books.schemas import (
     BriefOut,
     CreateBookIn,
     CreateDraftIn,
+    ExpandPromptIn,
+    ExpandedPromptOut,
     GenerateIn,
     ModelInfo,
     ModelsOut,
@@ -80,6 +82,23 @@ async def list_models(user: User = Depends(current_user)) -> ModelsOut:
                 models=ollama_models,
             ),
         ]
+    )
+
+
+@router.post("/prompts/expand", response_model=ExpandedPromptOut)
+async def expand_prompt(
+    data: ExpandPromptIn,
+    user: User = Depends(current_user),
+) -> ExpandedPromptOut:
+    """Expand a short user prompt into a rich story concept (title, concept, characters, highlights, themes, visual style)."""
+    result = await service.expand_prompt(data)
+    return ExpandedPromptOut(
+        title=result.title,
+        story_concept=result.story_concept,
+        key_characters=result.key_characters,
+        story_highlights=result.story_highlights,
+        themes=result.themes,
+        visual_style=result.visual_style,
     )
 
 

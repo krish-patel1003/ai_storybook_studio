@@ -126,6 +126,27 @@ export interface BookSummaryOut {
   updated_at: string;
 }
 
+// ── Prompt expansion types ────────────────────────────────────────────────────
+
+export interface ExpandPromptIn {
+  raw_prompt: string;
+  age_range: string;
+  tone: string[];
+  safety_mode: boolean;
+  page_count: number;
+  model_provider?: string;
+  model_name?: string;
+}
+
+export interface ExpandedPromptOut {
+  title: string;
+  story_concept: string;
+  key_characters: string[];
+  story_highlights: string[];
+  themes: string[];
+  visual_style: string;
+}
+
 // ── Request types ─────────────────────────────────────────────────────────────
 
 export interface BriefGenerateIn {
@@ -316,6 +337,13 @@ export const api = {
   },
 
   books: {
+    expandPrompt: (token: string, data: ExpandPromptIn) =>
+      request<ExpandedPromptOut>("/books/prompts/expand", {
+        method: "POST",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
     generateBrief: (token: string, data: BriefGenerateIn) =>
       request<BriefOut>("/books/briefs/generate", {
         method: "POST",

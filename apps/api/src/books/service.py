@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from src.auth.models import User
 from src.books.models import Book, Character, GenerationStage, Page
-from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
+from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, ExpandPromptIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
 from src.config import settings
 from src.exceptions import NotFoundError
 from src.generation.pipeline import ModelConfig, StoryPipeline
@@ -40,6 +40,19 @@ def _pipeline(model_config: ModelConfig | None = None) -> StoryPipeline:
 
 
 # ── Read helpers ──────────────────────────────────────────────────────────────
+
+async def expand_prompt(data: ExpandPromptIn):
+    """Expand a short user prompt into a rich story concept via ExpandStage."""
+    cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
+    pipeline = _pipeline(cfg)
+    return await pipeline._expand.run(
+        raw_prompt=data.raw_prompt,
+        age_range=data.age_range,
+        tone=data.tone,
+        safety=data.safety_mode,
+        page_count=data.page_count,
+    )
+
 
 async def generate_brief(data: BriefGenerateIn):
     """Generate a single story brief via EnhanceStage."""

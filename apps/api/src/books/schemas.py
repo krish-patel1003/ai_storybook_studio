@@ -157,6 +157,25 @@ class PageCountOptionsOut(BaseModel):
     max: int
 
 
+class ExpandPromptIn(BaseModel):
+    raw_prompt: str = Field(min_length=3, max_length=2000)
+    age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
+    tone: list[str] = Field(default_factory=list)
+    safety_mode: bool = True
+    page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+    model_provider: str = "gemini"
+    model_name: str = "gemini-2.0-flash"
+
+
+class ExpandedPromptOut(BaseModel):
+    title: str
+    story_concept: str
+    key_characters: list[str]
+    story_highlights: list[str]
+    themes: list[str]
+    visual_style: str
+
+
 class BriefGenerateIn(BaseModel):
     raw_prompt: str = Field(min_length=10, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")

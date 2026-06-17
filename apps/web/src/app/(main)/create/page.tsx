@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, type BookOut, type BriefOut, type PageOut, type ProviderInfo } from "@/lib/api";
+import { api, type BookOut, type BriefOut, type ExpandedPromptOut, type PageOut, type ProviderInfo } from "@/lib/api";
 import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -634,19 +634,152 @@ function PageReviewCard({ page, bookId, token, onUpdate }: {
   );
 }
 
+// ── Enhanced prompt review panel ─────────────────────────────────────────────
+
+function EnhancedPromptReview({
+  expanded,
+  loading,
+  onRegenerate,
+  onApprove,
+}: {
+  expanded: ExpandedPromptOut | null;
+  loading: boolean;
+  onRegenerate: () => void;
+  onApprove: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 py-20 text-center">
+        <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
+          <Wand2 className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
+          <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+        </div>
+        <div>
+          <p className="font-display text-2xl font-black">Expanding your idea…</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">Adding characters, scenes &amp; visual style</p>
+        </div>
+      </div>
+    );
+  }
+  if (!expanded) return null;
+
+  return (
+    <div className="space-y-4">
+      {/* Title */}
+      <div className="rounded-2xl bg-background p-4 chunky-border">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Suggested title</p>
+        <p className="font-display text-2xl font-black">{expanded.title}</p>
+      </div>
+
+      {/* Story concept */}
+      <div className="rounded-2xl bg-background p-4 chunky-border">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Story concept</p>
+        <p className="text-sm font-semibold leading-relaxed text-foreground/80">{expanded.story_concept}</p>
+      </div>
+
+      {/* Characters */}
+      {expanded.key_characters.length > 0 && (
+        <div className="rounded-2xl bg-background p-4 chunky-border">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Characters</p>
+          </div>
+          <div className="space-y-1.5">
+            {expanded.key_characters.map((c, i) => (
+              <div key={i} className="flex items-start gap-2 rounded-xl bg-card px-3 py-2 chunky-border">
+                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">{i + 1}</span>
+                <p className="text-sm font-semibold leading-snug">{c}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scene highlights */}
+      {expanded.story_highlights.length > 0 && (
+        <div className="rounded-2xl bg-background p-4 chunky-border">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Sparkles className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Scene highlights</p>
+          </div>
+          <div className="space-y-1.5">
+            {expanded.story_highlights.map((h, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                <p className="text-sm font-semibold leading-snug text-foreground/80">{h}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Themes + visual style */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {expanded.themes.length > 0 && (
+          <div className="rounded-2xl bg-background p-4 chunky-border">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+              <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {expanded.themes.map((t) => (
+                <span key={t} className="rounded-full bg-card px-2.5 py-0.5 text-xs font-bold chunky-border">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="rounded-2xl bg-background p-4 chunky-border">
+          <div className="flex items-center gap-1.5 mb-2">
+            <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Visual style</p>
+          </div>
+          <p className="text-xs font-semibold leading-relaxed text-foreground/80">{expanded.visual_style}</p>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-1">
+        <button
+          onClick={onRegenerate}
+          className="flex items-center gap-1.5 rounded-2xl bg-card px-4 py-3 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
+        >
+          <RefreshCw className="h-4 w-4" strokeWidth={2.5} /> Try again
+        </button>
+        <button
+          onClick={onApprove}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform"
+        >
+          <Sparkles className="h-4 w-4" strokeWidth={2.5} /> Generate brief →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Step progress indicator ───────────────────────────────────────────────────
 
+// Maps flow states to visual step index (0-based)
+// enhancing/enhanced → step 1 (Concept)
+// brief              → step 2 (Brief)
+// writing/pages      → step 3 (Review)
 const STEPS = [
   { id: "input",   label: "Prompt"  },
+  { id: "concept", label: "Concept" },
   { id: "brief",   label: "Brief"   },
-  { id: "writing", label: "Writing" },
-  { id: "pages",   label: "Review"  },
+  { id: "review",  label: "Review"  },
 ];
 
-type FlowState = "input" | "brief" | "writing" | "pages";
+type FlowState = "input" | "enhancing" | "enhanced" | "brief" | "writing" | "pages";
+
+function flowToStepIdx(state: FlowState): number {
+  if (state === "input")     return 0;
+  if (state === "enhancing" || state === "enhanced") return 1;
+  if (state === "brief")     return 2;
+  return 3; // writing | pages
+}
 
 function StepBar({ current }: { current: FlowState }) {
-  const idx = STEPS.findIndex((s) => s.id === current);
+  const idx = flowToStepIdx(current);
   return (
     <div className="flex items-center gap-1 shrink-0">
       {STEPS.map((s, i) => {
@@ -690,6 +823,10 @@ export default function CreatePage() {
   const [flowState, setFlowState] = useState<FlowState>("input");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Expanded prompt (concept step)
+  const [expandedPrompt, setExpandedPrompt] = useState<ExpandedPromptOut | null>(null);
+  const [expandLoading, setExpandLoading] = useState(false);
+
   // Models
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -727,11 +864,32 @@ export default function CreatePage() {
     page_count: pageCount, model_provider: modelProvider, model_name: modelName,
   };
 
-  // ── Step 1 → 2: Generate brief ─────────────────────────────────────────────
+  // ── Step 1 → 2: Expand prompt ─────────────────────────────────────────────
+
+  async function handleExpandPrompt() {
+    if (!token) { toast.error("Please sign in first"); return; }
+    if (prompt.trim().length < 3) { toast.error("Tell us a bit more about your story"); return; }
+    setExpandLoading(true);
+    setExpandedPrompt(null);
+    setFlowState("enhancing");
+    try {
+      const result = await api.books.expandPrompt(token, {
+        raw_prompt: prompt, age_range: age, tone, safety_mode: safety, page_count: pageCount,
+      });
+      setExpandedPrompt(result);
+      setFlowState("enhanced");
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to expand prompt");
+      setFlowState("input");
+    } finally {
+      setExpandLoading(false);
+    }
+  }
+
+  // ── Step 2 → 3: Generate brief ─────────────────────────────────────────────
 
   async function handleGenerateBrief() {
     if (!token) { toast.error("Please sign in first"); return; }
-    if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
     setBriefLoading(true);
     setActiveBrief(null);
     setFlowState("brief");
@@ -748,7 +906,7 @@ export default function CreatePage() {
       setActiveBrief(brief);
     } catch (err: any) {
       toast.error(err.message ?? "Failed to generate brief");
-      setFlowState("input");
+      setFlowState("enhanced");
     } finally {
       setBriefLoading(false);
     }
@@ -864,11 +1022,18 @@ export default function CreatePage() {
           <StepBar current={flowState} />
           {flowState !== "input" && (
             <button
-              onClick={() => setFlowState(flowState === "pages" ? "brief" : "input")}
+              onClick={() => {
+                if (flowState === "pages") setFlowState("brief");
+                else if (flowState === "brief" || flowState === "writing") setFlowState("enhanced");
+                else setFlowState("input");
+              }}
               className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
             >
               <ArrowLeft className="h-3 w-3" strokeWidth={3} />
-              {flowState === "pages" ? "Edit brief" : "Edit prompt"}
+              {flowState === "pages" ? "Edit brief"
+               : flowState === "brief" ? "Edit concept"
+               : flowState === "enhanced" || flowState === "enhancing" ? "Edit prompt"
+               : "Edit"}
             </button>
           )}
         </div>
@@ -907,11 +1072,11 @@ export default function CreatePage() {
                     </div>
 
                     <div className="mt-8">
-                      <button onClick={handleGenerateBrief} disabled={prompt.trim().length < 10}
+                      <button onClick={handleExpandPrompt} disabled={prompt.trim().length < 3}
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
-                        <Sparkles className="h-5 w-5" strokeWidth={2.5} /> Generate story brief →
+                        <Wand2 className="h-5 w-5" strokeWidth={2.5} /> Enhance my story →
                       </button>
-                      <p className="mt-2 text-center text-xs text-muted-foreground">AI builds a title, story arc &amp; characters for you to review first.</p>
+                      <p className="mt-2 text-center text-xs text-muted-foreground">AI expands your idea into a full story concept — review before generating.</p>
                     </div>
 
                     {/* Mobile settings */}
@@ -925,6 +1090,50 @@ export default function CreatePage() {
                           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
                             <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
                               <OptionsPanel {...optionsProps} />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* ── ENHANCING / ENHANCED ── */}
+                {(flowState === "enhancing" || flowState === "enhanced") && (
+                  <motion.div key="enhanced" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.22 }}
+                    className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
+
+                    <div className="flex items-start justify-between gap-4 mb-2">
+                      <div>
+                        <h1 className="font-display text-3xl font-black md:text-4xl">Your story concept</h1>
+                        <p className="mt-1 text-sm text-muted-foreground">Review the expanded concept — regenerate if needed, then generate the brief.</p>
+                      </div>
+                    </div>
+
+                    {/* Original prompt pill */}
+                    <div className="mb-5 rounded-xl bg-muted/60 px-4 py-2.5 chunky-border">
+                      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-0.5">Your idea</p>
+                      <p className="text-sm font-semibold text-foreground/80">{prompt}</p>
+                    </div>
+
+                    <EnhancedPromptReview
+                      expanded={expandedPrompt}
+                      loading={expandLoading}
+                      onRegenerate={handleExpandPrompt}
+                      onApprove={handleGenerateBrief}
+                    />
+
+                    {/* Mobile: locked settings */}
+                    <div className="mt-6 lg:hidden">
+                      <button onClick={() => setSettingsOpen((o) => !o)} className="flex w-full items-center justify-between rounded-2xl bg-card px-4 py-3 font-extrabold chunky-border">
+                        <div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} /> Settings used</div>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${settingsOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
+                      </button>
+                      <AnimatePresence>
+                        {settingsOpen && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
+                            <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
+                              <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} modelName={modelName} modelProvider={modelProvider} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
                             </div>
                           </motion.div>
                         )}
@@ -1153,7 +1362,7 @@ export default function CreatePage() {
                 <span className="font-display text-sm font-black uppercase tracking-wide">
                   {flowState === "input" ? "Story settings"
                     : flowState === "pages" ? "Brief & settings"
-                    : "Settings"}
+                    : "Settings locked"}
                 </span>
               </div>
             </div>
@@ -1163,14 +1372,14 @@ export default function CreatePage() {
                   brief={activeBrief} age={age} pageCount={pageCount}
                   style={style} modelName={modelName} modelProvider={modelProvider}
                 />
-              ) : flowState === "brief" || flowState === "writing" ? (
+              ) : flowState === "input" ? (
+                <OptionsPanel {...optionsProps} />
+              ) : (
                 <LockedSettingsSummary
                   age={age} tone={tone} style={style} pageCount={pageCount}
                   safety={safety} modelName={modelName} modelProvider={modelProvider}
                   onEdit={() => setFlowState("input")}
                 />
-              ) : (
-                <OptionsPanel {...optionsProps} />
               )}
             </div>
           </div>
