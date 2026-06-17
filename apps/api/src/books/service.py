@@ -55,15 +55,29 @@ async def expand_prompt(data: ExpandPromptIn):
 
 
 async def generate_brief(data: BriefGenerateIn):
-    """Generate a single story brief via EnhanceStage."""
+    """Generate a single story brief via EnhanceStage, optionally grounded in an expanded concept."""
+    from src.generation.schemas import ExpandedPrompt as ExpandedPromptSchema
     cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
     pipeline = _pipeline(cfg)
+    # Convert ExpandedPromptOut (Pydantic schema from books) → ExpandedPrompt (generation schema)
+    expanded = None
+    if data.expanded_concept:
+        ec = data.expanded_concept
+        expanded = ExpandedPromptSchema(
+            title=ec.title,
+            story_concept=ec.story_concept,
+            key_characters=ec.key_characters,
+            story_highlights=ec.story_highlights,
+            themes=ec.themes,
+            visual_style=ec.visual_style,
+        )
     return await pipeline._enhance.run(
         raw_prompt=data.raw_prompt,
         age_range=data.age_range,
         tone=data.tone,
         safety=data.safety_mode,
         page_count=data.page_count,
+        expanded_concept=expanded,
     )
 
 

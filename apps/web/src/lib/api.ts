@@ -157,6 +157,7 @@ export interface BriefGenerateIn {
   page_count: number;
   model_provider: string;
   model_name: string;
+  expanded_concept?: ExpandedPromptOut;
 }
 
 export interface BriefFieldRegenerateIn extends BriefGenerateIn {

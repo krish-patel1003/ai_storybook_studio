@@ -184,6 +184,7 @@ class BriefGenerateIn(BaseModel):
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
     model_name: str = "gemini-3.5-flash"
+    expanded_concept: ExpandedPromptOut | None = None
 
 
 class BriefOptionsOut(BaseModel):

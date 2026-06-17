@@ -865,6 +865,7 @@ export default function CreatePage() {
   const briefParams = {
     raw_prompt: prompt, age_range: age, tone, safety_mode: safety,
     page_count: pageCount, model_provider: modelProvider, model_name: modelName,
+    expanded_concept: expandedPrompt ?? undefined,
   };
 
   // ── Step 1 → 2: Expand prompt ─────────────────────────────────────────────
