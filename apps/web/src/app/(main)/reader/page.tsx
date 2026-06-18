@@ -212,6 +212,25 @@ const StoryPage = forwardRef<
         )}
       </div>
 
+      {/* Chapter label — top right, from narrative role */}
+      {page.narrative_role && (
+        <div className="absolute top-3 right-3 select-none pointer-events-none max-w-[55%] text-right">
+          <span
+            style={{
+              fontFamily: fontStack,
+              fontSize: "0.6rem",
+              fontWeight: 400,
+              letterSpacing: "0.06em",
+              color: "rgba(255,255,255,0.72)",
+              textShadow: "0 1px 4px rgba(0,0,0,0.55)",
+              lineHeight: 1.3,
+            }}
+          >
+            {page.narrative_role}
+          </span>
+        </div>
+      )}
+
       {/* Page number — subtle, bottom right */}
       <div className="absolute bottom-1.5 right-3 text-[10px] font-bold text-foreground/30 select-none">
         {page.order}
