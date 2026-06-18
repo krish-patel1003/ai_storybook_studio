@@ -27,7 +27,7 @@ PAGE_COUNT_OPTIONS: Final[list[int]] = [6, 8, 10, 12, 15, 20, 24, 30, 40]
 # Flash: fast, cheap — good for structured tasks (outline, enhance, recalibrate)
 # Pro:   richer creative writing — better for character & page text generation
 GEMINI_FLASH: Final[str] = "gemini-3.5-flash"
-GEMINI_PRO: Final[str] = "gemini-3.5-flash"
+GEMINI_PRO: Final[str] = "gemini-3.1-pro-preview"
 
 # ── Generation temperatures ───────────────────────────────────────────────────
 TEMP_ENHANCE: Final[float] = 0.85      # creative brief expansion
