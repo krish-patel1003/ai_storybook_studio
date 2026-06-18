@@ -226,6 +226,41 @@ class PagePatch(BaseModel):
     new_text: str = Field(description="Complete replacement text for this page — same scene, adds the missing content naturally woven in")
 
 
+# ── Simplified pipeline: BriefStage ──────────────────────────────────────────
+
+class PagePlan(BaseModel):
+    order: int = Field(description="Page position — 0 is always the cover")
+    narrative_role: str = Field(description="Short structural label — e.g. 'opening', 'rising action', 'climax', 'resolution', 'vocabulary recap'")
+    summary: str = Field(description="One sentence: exactly what happens on this page")
+    emotional_note: str = Field(description="Tone instruction for the prose writer — e.g. 'warm and excited', 'quietly hopeful', 'triumphant'")
+    characters_present: list[str] = Field(description="Character names who appear on this page")
+    setting: str = Field(description="Where and when — short phrase, e.g. 'the swimming pool, midday'")
+
+class StoryPlan(BaseModel):
+    title: str = Field(description="Final book title")
+    characters: list[CharacterSheet] = Field(description="Full cast with visual anchors for illustration consistency. Only recurring characters.")
+    pages: list[PagePlan] = Field(description="All pages in order, starting with cover at order=0")
+
+
+# ── Simplified pipeline: ReviewLoopStage ─────────────────────────────────────
+
+class RequirementScore(BaseModel):
+    requirement: str = Field(description="Original requirement text, copied verbatim")
+    met: bool = Field(description="True if fully and clearly satisfied in the book as written")
+    gap: str | None = Field(default=None, description="If not met: exactly what is missing or insufficient")
+
+class PageScore(BaseModel):
+    order: int = Field(description="Page order number")
+    prose_score: int = Field(description="Prose quality 1-10: 10=perfect for age group, 7=good, 5=needs work, below 5=must rewrite")
+    issues: list[str] = Field(default_factory=list, description="Specific problems: vocabulary too hard, sentence too long, emotion stated not shown, etc.")
+    rewrite: str | None = Field(default=None, description="Complete replacement page text — only provided when prose_score < 6. Same scene, better writing.")
+
+class BookScore(BaseModel):
+    overall_score: int = Field(description="Overall quality 1-10 averaging requirement fulfillment and prose quality")
+    requirement_scores: list[RequirementScore] = Field(default_factory=list)
+    page_scores: list[PageScore] = Field(description="One entry per non-cover page")
+
+
 class NewPage(BaseModel):
     after_order: int = Field(description="Insert this page immediately after the page with this order number")
     narrative_role: str

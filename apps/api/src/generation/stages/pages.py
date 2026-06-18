@@ -14,7 +14,7 @@ from src.generation.prompts.system import PAGES, _AGE_VOICE
 from src.generation.schemas import (
     CharacterSheet,
     GeneratedPage,
-    StoryBeat,
+    PagePlan,
     StoryBrief,
 )
 
@@ -29,41 +29,39 @@ class PageStage:
         self,
         brief: StoryBrief,
         characters: list[CharacterSheet],
-        beats: list[StoryBeat],
+        plans: list[PagePlan],  # was: beats: list[StoryBeat]
         age_range: str,
         art_style: str,
     ) -> list[GeneratedPage]:
         char_map = {c.name: c for c in characters}
-        ordered = sorted(beats, key=lambda b: b.order)
+        ordered = sorted(plans, key=lambda p: p.order)
         word_min, word_max = WORD_LIMITS.get(age_range, (45, 70))
 
-        # Map each beat to the requirements it owns by scanning requirement text
-        # for keywords from the beat description
-        req_assignments = _assign_requirements_to_beats(brief.requirements, ordered)
+        req_assignments = _assign_requirements_to_plans(brief.requirements, ordered)
 
         tasks = [
             self._generate_page(
-                beat=beat,
+                plan=plan,
                 brief=brief,
                 char_map=char_map,
-                all_beats=ordered,
+                all_plans=ordered,
                 age_range=age_range,
                 art_style=art_style,
                 word_min=word_min,
                 word_max=word_max,
-                page_requirements=req_assignments.get(beat.order, []),
+                page_requirements=req_assignments.get(plan.order, []),
             )
-            for beat in ordered
+            for plan in ordered
         ]
         return await asyncio.gather(*tasks)
 
     async def _generate_page(
         self,
         *,
-        beat: StoryBeat,
+        plan: PagePlan,
         brief: StoryBrief,
         char_map: dict[str, CharacterSheet],
-        all_beats: list[StoryBeat],
+        all_plans: list[PagePlan],
         age_range: str,
         art_style: str,
         word_min: int,
@@ -72,10 +70,10 @@ class PageStage:
     ) -> GeneratedPage:
         async with self._sem:
             prompt = _build_page_prompt(
-                beat=beat,
+                plan=plan,
                 brief=brief,
                 char_map=char_map,
-                all_beats=all_beats,
+                all_plans=all_plans,
                 age_range=age_range,
                 art_style=art_style,
                 word_min=word_min,
@@ -123,58 +121,58 @@ def _build_page_system(age_range: str, word_min: int, word_max: int) -> str:
     )
 
 
-def _assign_requirements_to_beats(
+def _assign_requirements_to_plans(
     requirements: list[str],
-    beats: list[StoryBeat],
+    plans: list[PagePlan],
 ) -> dict[int, list[str]]:
     """
-    Heuristically assign requirements to beats so each page's prompt can
+    Heuristically assign requirements to page plans so each page's prompt can
     remind the LLM of what it must deliver.
 
-    Strategy: for each requirement, find the beat whose description most
+    Strategy: for each requirement, find the plan whose description most
     closely matches keywords in the requirement (e.g. "Hindi", "swimming",
-    "vocab recap", "final"). If no good match, assign to the last content beat.
-    Multiple requirements can land on the same beat.
+    "vocab recap", "final"). If no good match, assign to the last content plan.
+    Multiple requirements can land on the same plan.
     """
-    if not requirements or not beats:
+    if not requirements or not plans:
         return {}
 
     import re
 
-    content_beats = [b for b in beats if not b.order == 0]  # exclude cover
-    if not content_beats:
+    content_plans = [p for p in plans if p.order != 0]  # exclude cover
+    if not content_plans:
         return {}
 
     assignments: dict[int, list[str]] = {}
 
-    def _score(req: str, beat: StoryBeat) -> int:
+    def _score(req: str, plan: PagePlan) -> int:
         req_lower = req.lower()
-        beat_text = (beat.beat + " " + beat.narrative_role + " " + beat.setting_note).lower()
+        plan_text = (plan.summary + " " + plan.narrative_role + " " + plan.setting).lower()
         score = 0
         # Extract significant words from the requirement (3+ chars, not stopwords)
         stopwords = {"the", "and", "for", "with", "that", "this", "each", "page", "must", "will",
                      "from", "into", "its", "their", "they", "have", "has", "all", "any"}
         words = [w for w in re.findall(r"[a-z]+", req_lower) if len(w) >= 3 and w not in stopwords]
         for word in words:
-            if word in beat_text:
+            if word in plan_text:
                 score += 1
         return score
 
     for req in requirements:
         req_lower = req.lower()
-        # Special case: "final page", "last page", "recap" → assign to last content beat
+        # Special case: "final page", "last page", "recap" → assign to last content plan
         if any(kw in req_lower for kw in ("final page", "last page", "recap", "vocabulary list", "word list")):
-            last_beat = content_beats[-1]
-            assignments.setdefault(last_beat.order, []).append(req)
+            last_plan = content_plans[-1]
+            assignments.setdefault(last_plan.order, []).append(req)
             continue
 
-        # Find best matching beat
-        scored = [(b, _score(req, b)) for b in content_beats]
+        # Find best matching plan
+        scored = [(p, _score(req, p)) for p in content_plans]
         scored.sort(key=lambda x: -x[1])
-        best_beat, best_score = scored[0]
+        best_plan, best_score = scored[0]
 
-        # Only assign if there's a meaningful match; otherwise assign to last beat
-        target = best_beat if best_score >= 1 else content_beats[-1]
+        # Only assign if there's a meaningful match; otherwise assign to last plan
+        target = best_plan if best_score >= 1 else content_plans[-1]
         assignments.setdefault(target.order, []).append(req)
 
     return assignments
@@ -182,10 +180,10 @@ def _assign_requirements_to_beats(
 
 def _build_page_prompt(
     *,
-    beat: StoryBeat,
+    plan: PagePlan,
     brief: StoryBrief,
     char_map: dict[str, CharacterSheet],
-    all_beats: list[StoryBeat],
+    all_plans: list[PagePlan],
     age_range: str,
     art_style: str,
     word_min: int,
@@ -193,22 +191,23 @@ def _build_page_prompt(
     page_requirements: list[str] | None = None,
 ) -> str:
     anchor_lines = []
-    for name in beat.characters_present:
+    for name in plan.characters_present:
         if char := char_map.get(name):
             anchors = ", ".join(char.visual_anchors)
             anchor_lines.append(f"  {name}: {anchors}")
     anchors_block = "\n".join(anchor_lines) if anchor_lines else "  (no named characters)"
 
-    prev_context = ""
-    if beat.order > 1:
-        prev_beat = next((b for b in all_beats if b.order == beat.order - 1), None)
-        if prev_beat:
-            prev_context = (
-                f"\nPrevious page beat (for prose continuity): \"{prev_beat.beat}\"\n"
-            )
+    # Show previous and next page summaries for narrative continuity
+    context_lines = []
+    for p in sorted(all_plans, key=lambda x: x.order):
+        if p.order == plan.order:
+            continue
+        if abs(p.order - plan.order) <= 2:
+            context_lines.append(f"  Page {p.order}: {p.summary}")
+    context_block = "\n".join(context_lines) if context_lines else "  (none)"
 
     must_deliver_block = ""
-    if page_requirements and beat.order != 0:
+    if page_requirements and plan.order != 0:
         items = "\n".join(f"  ★ {r}" for r in page_requirements)
         must_deliver_block = f"""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -216,39 +215,35 @@ MUST DELIVER ON THIS PAGE — non-negotiable
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {items}
 
-These are hard requirements. Your page text MUST satisfy every item above.
-For vocabulary words: introduce the word naturally (in dialogue or narration),
-then immediately follow with the English meaning.
+Hard requirements. Your page text MUST satisfy every item above.
+For vocabulary words: introduce the word in dialogue/narration,
+immediately follow with the English meaning.
 Good: Coach Carlos blows bubbles. "Burbujas!" he calls — that means bubbles.
-Do NOT skip or defer any item to a later page.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
     return f"""\
-Story brief (for prose consistency):
-  Title: {brief.title}
-  Story: {brief.description}
-  Lesson (never state this directly): {brief.lesson}
+Story: {brief.title} — {brief.description}
+Lesson (never state directly): {brief.lesson}
 
-Character visual anchors for this page (inject ALL into assembled_prompt):
+Character visual anchors for this page:
 {anchors_block}
 
 Art style: {art_style}
 
-All beats (for narrative context — write only THIS page):
-{json.dumps([b.model_dump() for b in all_beats], indent=2)}
-{prev_context}{must_deliver_block}
-NOW WRITE PAGE {beat.order}:
-  Beat: "{beat.beat}"
-  Narrative role: {beat.narrative_role}
-  Emotional note: {beat.emotional_note}
-  Characters present: {", ".join(beat.characters_present) or "none"}
-  Setting: {beat.setting_note}
-  Is cover: {"yes. Write the title only. No body text at all." if beat.order == 0 else "no"}
+Nearby pages (for continuity — write THIS page only):
+{context_block}
+{must_deliver_block}
+NOW WRITE PAGE {plan.order}:
+  What happens: {plan.summary}
+  Role: {plan.narrative_role}
+  Tone: {plan.emotional_note}
+  Characters: {", ".join(plan.characters_present) or "none"}
+  Setting: {plan.setting}
+  Is cover: {"yes — title only, no body text" if plan.order == 0 else "no"}
 
 Write the page text ({word_min}–{word_max} words) and full illustration_metadata.
-The assembled_prompt in illustration_metadata must include the art style "{art_style}" \
-and all visual anchors listed above.
+assembled_prompt must include art style "{art_style}" and all visual anchors above.
 """
 
 

@@ -1,5 +1,5 @@
 """
-StoryPipeline — orchestrates the five generation stages.
+StoryPipeline — orchestrates the four generation stages.
 
 Accepts a ModelConfig that selects the provider (Gemini or Ollama) and the
 specific model name. Provider-specific model routing (fast vs quality stages)
@@ -19,17 +19,14 @@ from src.generation.schemas import (
     StoryBeat,
     StoryBrief,
 )
-from src.generation.stages.characters import CharacterStage
+from src.generation.stages.brief import BriefStage
+from src.generation.stages.character_sheet import CharacterSheetStage, GeneratedCharacterSheet
 from src.generation.stages.enhance import EnhanceStage
 from src.generation.stages.expand import BrainstormStage, ExpandStage
-from src.generation.stages.character_sheet import CharacterSheetStage, GeneratedCharacterSheet
-from src.generation.stages.fulfillment import FulfillmentStage
 from src.generation.stages.image import GeneratedImage, ImageStage
-from src.generation.stages.outline import OutlineStage
 from src.generation.stages.pages import PageStage
-from src.generation.stages.polish import PolishStage
 from src.generation.stages.recalibrate import RecalibrateStage
-from src.generation.stages.review import ReviewStage
+from src.generation.stages.review_loop import ReviewLoopStage
 
 
 @dataclass
@@ -92,12 +89,9 @@ class StoryPipeline:
         self._brainstorm = BrainstormStage(client, model=fast)
         self._expand = ExpandStage(client, model=fast)
         self._enhance = EnhanceStage(client, model=fast)
-        self._characters = CharacterStage(client, model=quality)
-        self._outline = OutlineStage(client, model=fast)
+        self._brief = BriefStage(client, model=fast)
         self._pages = PageStage(client, model=quality)
-        self._polish = PolishStage(client, model=fast)
-        self._review = ReviewStage(client, model=fast)
-        self._fulfillment = FulfillmentStage(client, model=fast)
+        self._review_loop = ReviewLoopStage(client, model=fast)
         self._recalibrate = RecalibrateStage(client, model=fast)
         self._image = ImageStage(api_key=api_key)
         self._char_sheet = CharacterSheetStage(api_key=api_key)
@@ -112,6 +106,7 @@ class StoryPipeline:
         safety: bool,
         page_count: int,
     ) -> GenerationResult:
+        # Stage 1: Enhance prompt + extract requirements
         brief = await self._enhance.run(
             raw_prompt=raw_prompt,
             age_range=age_range,
@@ -119,28 +114,46 @@ class StoryPipeline:
             safety=safety,
             page_count=page_count,
         )
-        characters = await self._characters.run(brief=brief, art_style=art_style)
-        beats = await self._outline.run(
-            brief=brief, characters=characters, page_count=page_count
+
+        # Stage 2: Write story plan (characters + page-by-page plan)
+        plan = await self._brief.run(
+            brief=brief,
+            page_count=page_count,
+            art_style=art_style,
         )
+
+        # Map PagePlan → StoryBeat for GenerationResult compatibility
+        beats = [
+            StoryBeat(
+                order=p.order,
+                narrative_role=p.narrative_role,
+                beat=p.summary,
+                emotional_note=p.emotional_note,
+                characters_present=p.characters_present,
+                setting_note=p.setting,
+            )
+            for p in plan.pages
+        ]
+
+        # Stage 3: Write pages from the plan
         pages = await self._pages.run(
             brief=brief,
-            characters=characters,
-            beats=beats,
+            characters=plan.characters,
+            plans=plan.pages,
             age_range=age_range,
             art_style=art_style,
         )
-        # Polish pass — second LLM call to humanise and improve prose quality
-        pages = await self._polish.run(pages=pages, age_range=age_range)
-        # Review pass — reads the full book, rewrites pages that are too complex or AI-sounding
-        pages = await self._review.run(pages=pages, age_range=age_range)
-        # Fulfillment pass — audits requirement compliance, patches or adds pages as needed
-        pages = await self._fulfillment.run(
-            pages=pages, brief=brief, age_range=age_range, art_style=art_style
+
+        # Stage 4: Score + iterative rewrite loop
+        pages = await self._review_loop.run(
+            pages=pages,
+            brief=brief,
+            age_range=age_range,
         )
+
         return GenerationResult(
             brief=brief,
-            characters=characters,
+            characters=plan.characters,
             beats=beats,
             pages=sorted(pages, key=lambda p: p.order),
         )
@@ -205,15 +218,27 @@ class StoryPipeline:
         art_style: str,
         orders: set[int] | None = None,
     ) -> list[GeneratedPage]:
+        from src.generation.schemas import PagePlan
         target_beats = (
             [b for b in beats if b.order in orders] if orders else beats
         )
+        # Convert StoryBeat → PagePlan for the simplified PageStage
+        plans = [
+            PagePlan(
+                order=b.order,
+                narrative_role=b.narrative_role,
+                summary=b.beat,
+                emotional_note=b.emotional_note,
+                characters_present=b.characters_present,
+                setting=b.setting_note,
+            )
+            for b in target_beats
+        ]
         pages = await self._pages.run(
             brief=brief,
             characters=characters,
-            beats=target_beats,
+            plans=plans,
             age_range=age_range,
             art_style=art_style,
         )
-        pages = await self._polish.run(pages=pages, age_range=age_range)
-        return await self._review.run(pages=pages, age_range=age_range)
+        return await self._review_loop.run(pages=pages, brief=brief, age_range=age_range)
