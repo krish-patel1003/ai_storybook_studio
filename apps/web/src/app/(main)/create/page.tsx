@@ -84,6 +84,90 @@ function useElapsedTimer(running = true) {
   return `${mm}:${ss}`;
 }
 
+// ── Writing spinner messages ──────────────────────────────────────────────────
+
+const STATIC_WRITING_MSGS = [
+  "Sharpening pencils…",
+  "Sprinkling story dust…",
+  "Untangling plot knots…",
+  "Finding the perfect words…",
+  "Deciding what happens next…",
+  "Adding a surprise on page 3…",
+  "Making sure the ending lands…",
+  "Checking for plot holes…",
+  "Giving the villain a bad day…",
+  "Making the hero earn it…",
+  "Adding a twist nobody saw coming…",
+  "Polishing every sentence…",
+  "Double-checking the pacing…",
+  "Setting the scene just right…",
+];
+
+function buildWritingMessages(brief: BriefOut | null): string[] {
+  const msgs = [...STATIC_WRITING_MSGS];
+  if (!brief) return msgs;
+
+  // Dynamic: character-based
+  const chars = brief.characters_intro ?? [];
+  if (chars.length > 0) {
+    const first = chars[0].split(" ")[0];
+    msgs.push(`Introducing ${first} to the world…`);
+    msgs.push(`Figuring out what ${first} does on page one…`);
+    if (chars.length > 1) {
+      const second = chars[1].split(" ")[0];
+      msgs.push(`Writing the moment ${first} meets ${second}…`);
+      msgs.push(`Giving ${second} something important to do…`);
+    }
+    if (chars.length > 2) {
+      const third = chars[2].split(" ")[0];
+      msgs.push(`Making sure ${third} gets their moment…`);
+    }
+  }
+
+  // Dynamic: theme-based
+  const themes = brief.themes ?? [];
+  if (themes.length > 0) {
+    msgs.push(`Weaving in a little "${themes[0]}"…`);
+    if (themes.length > 1) msgs.push(`Hiding a "${themes[1]}" moment mid-story…`);
+  }
+
+  // Dynamic: title/lesson
+  if (brief.title) {
+    msgs.push(`Crafting "${brief.title}" page by page…`);
+  }
+  if (brief.lesson) {
+    msgs.push(`Sneaking in the lesson: ${brief.lesson.slice(0, 40)}${brief.lesson.length > 40 ? "…" : ""}`);
+  }
+
+  // Dynamic: arc stages
+  const arc = brief.arc ?? [];
+  if (arc.length > 0) {
+    msgs.push(`Writing the ${arc[0].name} section…`);
+    if (arc.length > 1) msgs.push(`Hitting the "${arc[1].name}" beat…`);
+  }
+
+  return msgs;
+}
+
+function useWritingMessages(brief: BriefOut | null, intervalMs = 2400) {
+  const [idx, setIdx] = useState(0);
+  const msgs = useRef<string[]>([]);
+
+  useEffect(() => {
+    msgs.current = buildWritingMessages(brief).sort(() => Math.random() - 0.5);
+    setIdx(0);
+  }, [brief]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIdx((i) => (i + 1) % (msgs.current.length || 1));
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+
+  return msgs.current[idx] ?? "Writing your pages…";
+}
+
 // ── One-click overlay ─────────────────────────────────────────────────────────
 
 const ONE_CLICK_HINTS: Record<string, string[]> = {
@@ -1028,6 +1112,8 @@ export default function CreatePage() {
     providers, modelsLoading, prompt, onOneClick: handleOneClick,
   };
 
+  const writingMessage = useWritingMessages(activeBrief);
+
   const sortedPages = currentBook
     ? [...currentBook.pages].sort((a, b) => a.order - b.order)
     : [];
@@ -1340,14 +1426,25 @@ export default function CreatePage() {
                 {/* ── WRITING ── */}
                 {flowState === "writing" && (
                   <motion.div key="writing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex min-h-full items-center justify-center px-6 py-10">
-                    <div className="flex flex-col items-center gap-5 text-center max-w-sm">
+                    <div className="flex flex-col items-center gap-6 text-center max-w-sm">
                       <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
                         <FileText className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
                         <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
                       </div>
                       <div>
                         <h2 className="font-display text-3xl font-black">Writing your pages…</h2>
-                        <p className="mt-1.5 text-sm text-muted-foreground">Turning your brief into a full story, page by page.</p>
+                        <AnimatePresence mode="wait">
+                          <motion.p
+                            key={writingMessage}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.35 }}
+                            className="mt-2 text-sm font-semibold text-muted-foreground min-h-[1.25rem]"
+                          >
+                            {writingMessage}
+                          </motion.p>
+                        </AnimatePresence>
                       </div>
                       {activeBrief && (
                         <div className="rounded-2xl bg-card px-4 py-3 chunky-border text-left w-full">
