@@ -78,6 +78,17 @@ If satisfying all requirements needs more than {page_count} content pages, add t
 Requirements take priority over page count.
 """
 
+    arc_block = ""
+    if brief.arc:
+        lines = []
+        cumulative = 1  # content pages start at order 1 (order 0 is cover)
+        for i, stage in enumerate(brief.arc, 1):
+            end = cumulative + stage.page_span - 1
+            page_range = f"page {cumulative}" if stage.page_span == 1 else f"pages {cumulative}–{end}"
+            lines.append(f"  {i}. \"{stage.name}\" ({page_range}): {stage.description}")
+            cumulative += stage.page_span
+        arc_block = "\nStory arc (follow this structure — each section maps to the page count shown):\n" + "\n".join(lines) + "\n"
+
     return f"""\
 Story brief:
   Title: {brief.title}
@@ -85,7 +96,7 @@ Story brief:
   Lesson: {brief.lesson}
   Characters: {", ".join(brief.characters_intro)}
   Themes: {", ".join(brief.themes)}
-
+{arc_block}
 Art style: {art_style}
 Target: {page_count} content pages + 1 cover = {page_count + 1} pages total (order 0 through {page_count}).
 {requirements_block}

@@ -15,6 +15,7 @@ from src.generation.ollama_client import OllamaClient
 from src.generation.schemas import (
     CharacterSheet,
     GeneratedPage,
+    PagePlan,
     RecalibratedOutline,
     StoryBeat,
     StoryBrief,
@@ -75,6 +76,28 @@ def _build_stages(
     return client, GEMINI_FLASH, GEMINI_PRO
 
 
+def _apply_arc_headings(pages: list[PagePlan], brief: StoryBrief) -> None:
+    """Overwrite each content page's narrative_role with its arc stage name.
+
+    The arc defines named sections (e.g. "A Big Summer Plan") each spanning a
+    number of pages (page_span). Content pages (order > 0) are assigned in order;
+    any overflow pages added for requirements inherit the last stage's name.
+    """
+    if not brief.arc:
+        return
+    content = sorted((p for p in pages if p.order > 0), key=lambda p: p.order)
+    idx = 0
+    for stage in brief.arc:
+        for _ in range(stage.page_span):
+            if idx < len(content):
+                content[idx].narrative_role = stage.name
+            idx += 1
+    last_name = brief.arc[-1].name
+    while idx < len(content):
+        content[idx].narrative_role = last_name
+        idx += 1
+
+
 class StoryPipeline:
     def __init__(
         self,
@@ -121,6 +144,10 @@ class StoryPipeline:
             page_count=page_count,
             art_style=art_style,
         )
+
+        # Replace LLM-generated structural labels with the human-readable arc stage
+        # names from the story brief so they show as chapter headings on each page.
+        _apply_arc_headings(plan.pages, brief)
 
         # Map PagePlan → StoryBeat for GenerationResult compatibility
         beats = [
