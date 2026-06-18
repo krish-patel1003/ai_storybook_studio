@@ -73,8 +73,8 @@ async def list_models(user: User = Depends(current_user)) -> ModelsOut:
                 description="Cloud-hosted · High quality",
                 available=bool(settings.GEMINI_API_KEY),
                 models=[
-                    ModelInfo(id="gemini-2.0-flash", name="Gemini Flash", description="Fast & efficient · Best for drafting", size="cloud"),
-                    ModelInfo(id="gemini-1.5-pro", name="Gemini Pro", description="Highest quality · Slower", size="cloud"),
+                    ModelInfo(id="gemini-3.5-flash", name="Gemini Flash", description="Fast & efficient · Best for drafting", size="cloud"),
+                    ModelInfo(id="gemini-3.1-pro-preview", name="Gemini Pro", description="Highest quality · Slower", size="cloud"),
                 ],
             ),
             ProviderInfo(

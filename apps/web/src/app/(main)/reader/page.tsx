@@ -396,6 +396,12 @@ function usePageAudio(
   // Play left-page audio as soon as its blob is ready.
   useEffect(() => {
     const audio = audioRef.current;
+
+    // Guard: when the prefetcher caches upcoming pages, cacheVersion increments.
+    // Don't interrupt right-page audio that's already playing — the onEnded
+    // handler will call doFlip() when it's done. Only reset on a real page change.
+    if (ctx.current.playingRight) return;
+
     ctx.current.playingRight = false;
 
     if (!audio || !currentPageData?.has_audio) {
@@ -419,8 +425,10 @@ function usePageAudio(
     if (!audio) return;
 
     const doFlip = () => {
-      ctx.current.playingRight = false;
-      setTimeout(() => bookRef.current?.pageFlip().flipNext(), 1000);
+      setTimeout(() => {
+        ctx.current.playingRight = false;
+        bookRef.current?.pageFlip().flipNext();
+      }, 800);
     };
 
     const onEnded = () => {

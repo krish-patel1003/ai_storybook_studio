@@ -477,7 +477,7 @@ function OptionsPanel({
           <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Detecting models…</div>
         ) : (
           <div className="space-y-2">
-            {(providers.length > 0 ? providers : [{ id: "gemini", name: "Google Gemini", description: "Cloud-hosted", available: true, models: [{ id: "gemini-3.5-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" }, { id: "gemini-1.5-pro", name: "Gemini Pro", description: "Highest quality", size: "cloud" }] }]).map((provider) => (
+            {(providers.length > 0 ? providers : [{ id: "gemini", name: "Google Gemini", description: "Cloud-hosted", available: true, models: [{ id: "gemini-3.5-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" }, { id: "gemini-3.1-pro-preview", name: "Gemini Pro", description: "Highest quality", size: "cloud" }] }]).map((provider) => (
               <div key={provider.id}>
                 <div className="mb-1 flex items-center gap-2">
                   <span className="text-xs font-bold text-muted-foreground">{provider.name}</span>
