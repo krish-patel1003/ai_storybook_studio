@@ -26,6 +26,7 @@ import { useBook } from "@/lib/book-store";
 import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
+import { useAuthImage } from "@/lib/use-auth-image";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 
@@ -152,38 +153,6 @@ const ILLUSTRATION_MSGS = [
   "Bringing the page to life…",
   "Almost there…",
 ];
-
-// ── Authenticated image hook ──────────────────────────────────────────────────
-
-function useAuthImage(url: string, token: string | null, hasImage: boolean) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!hasImage || !token) {
-      setBlobUrl(null);
-      return;
-    }
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => {
-        if (blob && !cancelled) {
-          objectUrl = URL.createObjectURL(blob);
-          setBlobUrl(objectUrl);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [url, token, hasImage]);
-
-  return blobUrl;
-}
 
 // ── Timer hook ────────────────────────────────────────────────────────────────
 
@@ -436,24 +405,33 @@ function PageCard({
               )}
             </div>
           </div>
-        ) : blobUrl ? (
-          <img
-            src={blobUrl}
-            alt={`Page ${page.order} illustration`}
-            className="h-full w-full object-cover"
-          />
-        ) : page.has_image ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin opacity-40" />
-            <span className="text-xs font-bold opacity-50">Loading…</span>
-          </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-            <ImageIcon className="h-10 w-10 opacity-30" strokeWidth={1.5} />
-            <span className="text-xs font-bold opacity-50">
-              {status === "error" ? "Failed" : "Not illustrated"}
-            </span>
-          </div>
+          <>
+            {/* Placeholder — always visible until image loads */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              {page.has_image && !blobUrl ? (
+                <>
+                  <Loader2 className="h-6 w-6 animate-spin opacity-40" />
+                  <span className="text-xs font-bold opacity-50">Loading…</span>
+                </>
+              ) : !blobUrl ? (
+                <>
+                  <ImageIcon className="h-10 w-10 opacity-30" strokeWidth={1.5} />
+                  <span className="text-xs font-bold opacity-50">
+                    {status === "error" ? "Failed" : "Not illustrated"}
+                  </span>
+                </>
+              ) : null}
+            </div>
+            {/* Image fades in over the placeholder once the blob URL is ready */}
+            {blobUrl && (
+              <img
+                src={blobUrl}
+                alt={`Page ${page.order} illustration`}
+                className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
+              />
+            )}
+          </>
         )}
 
         {/* Page number + preview button row */}

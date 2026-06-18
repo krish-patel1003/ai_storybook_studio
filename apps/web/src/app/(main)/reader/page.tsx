@@ -10,6 +10,7 @@ import { useBook } from "@/lib/book-store";
 import { pageImageUrl } from "@/lib/api";
 import type { PageOut } from "@/lib/api";
 import { READER_FONTS, type FontId } from "@/lib/fonts";
+import { useAuthImage } from "@/lib/use-auth-image";
 import type { HTMLFlipBookRef, HTMLFlipBookProps } from "react-pageflip";
 
 const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
@@ -61,57 +62,27 @@ function useReaderFont(): [FontId, (f: FontId) => void] {
   return [font, setFont];
 }
 
-// ── Authenticated resource hook ───────────────────────────────────────────────
-
-function useAuthBlob(url: string, token: string | null, enabled: boolean) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!enabled || !token) { setBlobUrl(null); return; }
-    let objectUrl: string | null = null;
-    let cancelled = false;
-
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => {
-        if (blob && !cancelled) {
-          objectUrl = URL.createObjectURL(blob);
-          setBlobUrl(objectUrl);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [url, token, enabled]);
-
-  return blobUrl;
-}
-
 // ── Cover page — full-bleed image with title + author overlay ─────────────────
 
 const CoverPage = forwardRef<
   HTMLDivElement,
   { page: PageOut; bookId: string; token: string | null; author: string; fontStack: string }
 >(({ page, bookId, token, author, fontStack }, ref) => {
-  const imgUrl = useAuthBlob(pageImageUrl(bookId, page.id), token, page.has_image);
+  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
 
   return (
     <div ref={ref} className="relative overflow-hidden select-none bg-foreground" style={{ height: "100%" }}>
       {/* Full-bleed illustration */}
-      {imgUrl ? (
+      <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+        <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
+      </div>
+      {imgUrl && (
         <img
           src={imgUrl}
           alt="Cover"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
           draggable={false}
         />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
-          <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
-        </div>
       )}
 
       {/* Bottom gradient overlay */}
@@ -160,7 +131,7 @@ const StoryPage = forwardRef<
   HTMLDivElement,
   { page: PageOut; bookId: string; token: string | null; fontStack: string; fontSize: number; fontWeight: number }
 >(({ page, bookId, token, fontStack, fontSize, fontWeight }, ref) => {
-  const imgUrl = useAuthBlob(pageImageUrl(bookId, page.id), token, page.has_image);
+  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -197,19 +168,18 @@ const StoryPage = forwardRef<
 
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
-      {/* Full-bleed illustration — sits behind everything, pinned to top so no white gap */}
-      {imgUrl ? (
+      {/* Full-bleed illustration — placeholder always rendered, image fades in over it */}
+      <div className="absolute inset-0 flex items-center justify-center bg-muted">
+        <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
+      </div>
+      {imgUrl && (
         <img
           src={imgUrl}
           alt={`Page ${page.order}`}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
           style={{ objectPosition: "center top" }}
           draggable={false}
         />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-muted">
-          <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
-        </div>
       )}
 
       {/* Gradient blending layer — long, gradual fade for a natural picture-book look */}
