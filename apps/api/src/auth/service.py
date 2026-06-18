@@ -225,16 +225,33 @@ async def _issue_tokens(user: User, db: AsyncSession) -> AuthTokens:
     )
 
 
-async def _verify_google_token(access_token: str) -> dict:
-    import httpx
+async def _verify_google_token(id_token: str) -> dict:
+    """Verify a Google ID token (JWT) and return its claims.
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+    Validates signature, audience (must match GOOGLE_CLIENT_ID), issuer,
+    and expiry — all checks that the old access-token/userinfo approach skipped.
+    """
+    import asyncio
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+    from google.auth.exceptions import TransportError
+    from src.auth.config import auth_settings
 
-    if resp.status_code != 200:
+    if not auth_settings.GOOGLE_CLIENT_ID:
         raise InvalidGoogleToken()
 
-    return resp.json()
+    def _verify() -> dict:
+        try:
+            return google_id_token.verify_oauth2_token(
+                id_token,
+                google_requests.Request(),
+                auth_settings.GOOGLE_CLIENT_ID,
+            )
+        except (ValueError, TransportError):
+            raise InvalidGoogleToken()
+
+    # verify_oauth2_token fetches Google's JWKS synchronously; run in thread pool
+    try:
+        return await asyncio.to_thread(_verify)
+    except InvalidGoogleToken:
+        raise

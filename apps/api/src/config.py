@@ -46,9 +46,9 @@ class Config(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
 
-    # Admin dashboard
-    ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD: str = "admin"
+    # Admin dashboard — REQUIRED: set via environment variables, no defaults
+    ADMIN_USERNAME: str
+    ADMIN_PASSWORD: str
 
 
 settings = Config()
