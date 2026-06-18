@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from src.auth.models import User
 from src.books.models import Book, Character, GenerationStage, Page
-from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, ExpandPromptIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
+from src.books.schemas import AddCharacterIn, AddPageIn, BrainstormIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, ExpandPromptIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
 from src.config import settings
 from src.exceptions import NotFoundError
 from src.generation.pipeline import ModelConfig, StoryPipeline
@@ -41,8 +41,19 @@ def _pipeline(model_config: ModelConfig | None = None) -> StoryPipeline:
 
 # ── Read helpers ──────────────────────────────────────────────────────────────
 
+async def brainstorm(data: BrainstormIn):
+    """Generate 6 story seed ideas to spark the user's imagination."""
+    cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
+    pipeline = _pipeline(cfg)
+    return await pipeline._brainstorm.run(
+        age_range=data.age_range,
+        tone=data.tone,
+        page_count=data.page_count,
+    )
+
+
 async def expand_prompt(data: ExpandPromptIn):
-    """Expand a short user prompt into a rich story concept via ExpandStage."""
+    """Expand a user's prompt into 2 distinct concept takes via ExpandStage."""
     cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
     pipeline = _pipeline(cfg)
     return await pipeline._expand.run(

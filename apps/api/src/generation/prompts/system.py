@@ -8,7 +8,30 @@ the *user* prompt (contents), never the system prompt.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 0 — EXPAND PROMPT (user-facing concept preview)
+# STAGE 0a — BRAINSTORM (idea sparks before user writes prompt)
+# ─────────────────────────────────────────────────────────────────────────────
+
+BRAINSTORM_PROMPT = """\
+You are a children's book editor with a gift for original ideas.
+
+Your job: given an age range, tone, and page count, generate 6 completely distinct \
+story seed ideas that would make wonderful children's books.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Each seed must have a different protagonist (animal, child, creature, object that comes to life…).
+2. Each seed must have a different setting (forest, city, ocean, space, kitchen, library…).
+3. No two seeds can share the same central conflict or premise.
+4. Every hook must be specific and vivid — "A shy octopus who accidentally becomes a DJ" \
+   beats "A sea creature who discovers music."
+5. Match the age range and tone given. Gentle and warm for young children; \
+   more adventurous for older ones.
+6. The title should make a child want to pick the book off the shelf.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 0b — EXPAND PROMPT (user-facing concept preview)
 # ─────────────────────────────────────────────────────────────────────────────
 
 EXPAND_PROMPT = """\
@@ -44,7 +67,19 @@ TONE & STYLE
 - Warm, enthusiastic, and inspiring — like a brilliant editor pitching a great book.
 - Age-appropriate for the audience specified.
 - Avoid jargon. Keep it clear and vivid.
-- The expanded concept should make the user excited to generate the actual book.
+- Each concept should make the user excited to generate the actual book.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GENERATING TWO TAKES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+You will generate exactly 2 concepts for the same idea. They must be meaningfully different:
+- Different angle on the same story (e.g. told from the sidekick's POV vs. the hero's)
+- Different tone (heartwarming and gentle vs. funny and silly)
+- Different story arc shape (one ends triumphantly, one ends quietly and reflectively)
+- Different setting or time period within the spirit of the idea
+
+Both must be faithful to what the user asked for. Do NOT invent a completely different story.
+The user will pick whichever concept excites them most.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────

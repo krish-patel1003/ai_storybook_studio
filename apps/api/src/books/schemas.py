@@ -157,6 +157,23 @@ class PageCountOptionsOut(BaseModel):
     max: int
 
 
+class BrainstormIn(BaseModel):
+    age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
+    tone: list[str] = Field(default_factory=list)
+    page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+    model_provider: str = "gemini"
+    model_name: str = "gemini-2.0-flash"
+
+
+class StorySeedOut(BaseModel):
+    title: str
+    hook: str
+
+
+class BrainstormOut(BaseModel):
+    seeds: list[StorySeedOut]
+
+
 class ExpandPromptIn(BaseModel):
     raw_prompt: str = Field(min_length=3, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
@@ -174,6 +191,11 @@ class ExpandedPromptOut(BaseModel):
     story_highlights: list[str]
     themes: list[str]
     visual_style: str
+
+
+class ExpandedPromptOptionsOut(BaseModel):
+    """Two distinct concept takes on the user's idea."""
+    concepts: list[ExpandedPromptOut]
 
 
 class BriefGenerateIn(BaseModel):

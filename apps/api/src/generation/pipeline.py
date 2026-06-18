@@ -21,7 +21,7 @@ from src.generation.schemas import (
 )
 from src.generation.stages.characters import CharacterStage
 from src.generation.stages.enhance import EnhanceStage
-from src.generation.stages.expand import ExpandStage
+from src.generation.stages.expand import BrainstormStage, ExpandStage
 from src.generation.stages.character_sheet import CharacterSheetStage, GeneratedCharacterSheet
 from src.generation.stages.image import GeneratedImage, ImageStage
 from src.generation.stages.outline import OutlineStage
@@ -88,6 +88,7 @@ class StoryPipeline:
         client, fast, quality = _build_stages(cfg, api_key, ollama_base_url)
         self._api_key = api_key
 
+        self._brainstorm = BrainstormStage(client, model=fast)
         self._expand = ExpandStage(client, model=fast)
         self._enhance = EnhanceStage(client, model=fast)
         self._characters = CharacterStage(client, model=quality)

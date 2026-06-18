@@ -13,6 +13,8 @@ from src.books.schemas import (
     AddPageIn,
     BookOut,
     BookSummaryOut,
+    BrainstormIn,
+    BrainstormOut,
     BriefFieldRegenerateIn,
     BriefGenerateIn,
     BriefOptionsOut,
@@ -20,6 +22,7 @@ from src.books.schemas import (
     CreateBookIn,
     CreateDraftIn,
     ExpandPromptIn,
+    ExpandedPromptOptionsOut,
     ExpandedPromptOut,
     GenerateIn,
     ModelInfo,
@@ -29,6 +32,7 @@ from src.books.schemas import (
     PageOut,
     ProviderInfo,
     RecalibrateIn,
+    StorySeedOut,
     UpdateBookIn,
     UpdatePageIn,
 )
@@ -85,20 +89,35 @@ async def list_models(user: User = Depends(current_user)) -> ModelsOut:
     )
 
 
-@router.post("/prompts/expand", response_model=ExpandedPromptOut)
+@router.post("/prompts/brainstorm", response_model=BrainstormOut)
+async def brainstorm_ideas(
+    data: BrainstormIn,
+    user: User = Depends(current_user),
+) -> BrainstormOut:
+    """Generate 6 short story seed ideas to inspire the user before they write their prompt."""
+    result = await service.brainstorm(data)
+    return BrainstormOut(seeds=[StorySeedOut(title=s.title, hook=s.hook) for s in result.seeds])
+
+
+@router.post("/prompts/expand", response_model=ExpandedPromptOptionsOut)
 async def expand_prompt(
     data: ExpandPromptIn,
     user: User = Depends(current_user),
-) -> ExpandedPromptOut:
-    """Expand a short user prompt into a rich story concept (title, concept, characters, highlights, themes, visual style)."""
+) -> ExpandedPromptOptionsOut:
+    """Expand a user's prompt into 2 distinct story concept takes to choose from."""
     result = await service.expand_prompt(data)
-    return ExpandedPromptOut(
-        title=result.title,
-        story_concept=result.story_concept,
-        key_characters=result.key_characters,
-        story_highlights=result.story_highlights,
-        themes=result.themes,
-        visual_style=result.visual_style,
+    return ExpandedPromptOptionsOut(
+        concepts=[
+            ExpandedPromptOut(
+                title=c.title,
+                story_concept=c.story_concept,
+                key_characters=c.key_characters,
+                story_highlights=c.story_highlights,
+                themes=c.themes,
+                visual_style=c.visual_style,
+            )
+            for c in result.concepts
+        ]
     )
 
 

@@ -126,7 +126,24 @@ export interface BookSummaryOut {
   updated_at: string;
 }
 
-// ── Prompt expansion types ────────────────────────────────────────────────────
+// ── Brainstorm + prompt expansion types ──────────────────────────────────────
+
+export interface BrainstormIn {
+  age_range: string;
+  tone: string[];
+  page_count: number;
+  model_provider?: string;
+  model_name?: string;
+}
+
+export interface StorySeedOut {
+  title: string;
+  hook: string;
+}
+
+export interface BrainstormOut {
+  seeds: StorySeedOut[];
+}
 
 export interface ExpandPromptIn {
   raw_prompt: string;
@@ -145,6 +162,10 @@ export interface ExpandedPromptOut {
   story_highlights: string[];
   themes: string[];
   visual_style: string;
+}
+
+export interface ExpandedPromptOptionsOut {
+  concepts: ExpandedPromptOut[];
 }
 
 // ── Request types ─────────────────────────────────────────────────────────────
@@ -338,8 +359,15 @@ export const api = {
   },
 
   books: {
+    brainstorm: (token: string, data: BrainstormIn) =>
+      request<BrainstormOut>("/books/prompts/brainstorm", {
+        method: "POST",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
     expandPrompt: (token: string, data: ExpandPromptIn) =>
-      request<ExpandedPromptOut>("/books/prompts/expand", {
+      request<ExpandedPromptOptionsOut>("/books/prompts/expand", {
         method: "POST",
         headers: authed(token),
         body: JSON.stringify(data),

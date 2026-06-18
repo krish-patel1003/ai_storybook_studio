@@ -11,7 +11,18 @@ Design principle: schema defines *structure*, Gemini authors *content*.
 from pydantic import BaseModel, Field
 
 
-# ── Stage 0: Prompt Expansion (user-facing preview before the brief) ──────────
+# ── Stage 0a: Brainstorm (idea sparks shown before user writes prompt) ─────────
+
+class StorySeed(BaseModel):
+    title: str = Field(description="A short, catchy title (4–7 words) that would look great on a book cover")
+    hook: str = Field(description="One sentence (max 20 words) describing the core story — specific, vivid, and irresistible")
+
+
+class BrainstormResult(BaseModel):
+    seeds: list[StorySeed] = Field(description="Exactly 6 distinct story seeds. Each must be meaningfully different in protagonist, setting, or premise.")
+
+
+# ── Stage 0b: Prompt Expansion (user-facing concept preview before the brief) ──
 
 class ExpandedPrompt(BaseModel):
     title: str = Field(description="A compelling, specific title for this story")
@@ -30,6 +41,15 @@ class ExpandedPrompt(BaseModel):
     visual_style: str = Field(
         description="Art direction in one sentence — style, mood, and colour palette. "
                     "E.g. 'Warm Pixar-style 3D animation with golden-hour lighting and bright summer colours.'"
+    )
+
+
+class ExpandedPromptOptions(BaseModel):
+    """Two meaningfully different concept takes on the same idea."""
+    concepts: list[ExpandedPrompt] = Field(
+        description="Exactly 2 distinct concepts. Same core idea from the user, but explored differently — "
+                    "e.g. different protagonist perspective, different tone, different story arc shape, or different setting angle. "
+                    "Both must be faithful to the user's idea."
     )
 
 
