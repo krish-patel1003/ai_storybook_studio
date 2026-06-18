@@ -36,52 +36,10 @@ import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// Age-adaptive SCRL examples (Character · Setting · Challenge · Learning)
-const EXAMPLES_BY_AGE: Record<string, string[]> = {
-  "3-5": [
-    "Zoe, age 4, who loves animals, visits a magical forest where baby animals need help finding their way home. She learns that even small helpers make a big difference.",
-    "Noah, age 3, who loves trucks, discovers the toy box is stuck and all the toys are trapped inside. He figures out that asking for help makes hard things easier.",
-    "Lily, age 4, who is scared of thunderstorms, meets a friendly storm cloud who needs her help to make rainbows. She learns that storms bring beautiful things.",
-  ],
-  "6-8": [
-    "Marcus, age 6, who loves superheroes but is nervous about soccer tryouts, discovers the soccer ball is actually magic. He learns that every person's power is something different.",
-    "Emma, age 7, who loves art but gets upset when her drawings aren't perfect, finds that her 'mistake' drawings come to life because imperfect things have the most personality.",
-    "Ava, age 8, who is afraid of the dark, meets Shadow — a lonely shadow scared of bright lights. Together they explore both worlds and learn that what seems scary is often just misunderstood.",
-  ],
-  "9-11": [
-    "Ava, age 9, an aspiring scientist who struggles with perfectionism, accidentally brings her science fair project to life. When it goes wrong, she discovers the best discoveries come from unexpected failures.",
-    "Marcus, age 9, who dreams of basketball but is shorter than everyone, finds a pair of ordinary sneakers that teach him footwork and strategy matter more than height.",
-    "Sofia, age 10, who loves music but thinks she's too quiet to matter, discovers the Forest of Rhythms has lost its beat — and only she can bring it back.",
-  ],
-};
-
-// Flat list used as a fallback (first age group)
-const EXAMPLES = EXAMPLES_BY_AGE["3-5"];
-
-// ── SCRL prompt quality analysis ──────────────────────────────────────────────
-
-interface SCRLCheck {
-  character: boolean; // mentions a name/person + trait
-  setting: boolean;   // mentions a place or world
-  challenge: boolean; // has a problem/conflict/goal
-  lesson: boolean;    // has a resolution/learning
-}
-
-function analyseSCRL(text: string): SCRLCheck {
-  const t = text.toLowerCase();
-  return {
-    character: /\b(age \d|year[- ]old|who (is|loves|feels|has|can|likes)|named|called|shy|brave|curious|nervous|creative|adventurous)\b/.test(t),
-    setting:   /\b(in |at |on |discover|visit|find|world|land|forest|garden|ocean|space|school|home|kingdom|city|farm|library|bakery)\b/.test(t),
-    challenge: /\b(must|help|solve|find|stop|save|fix|lost|broken|missing|afraid|scared|worried|trouble|problem|challenge|needs? to|has to|want to)\b/.test(t),
-    lesson:    /\b(learn|discover|realise|realize|understand|teach|lesson|important|matter|special|brave|friend|together|share|kind)\b/.test(t),
-  };
-}
-
-const SCRL_LABELS: { key: keyof SCRLCheck; label: string; tip: string }[] = [
-  { key: "character", label: "Character",  tip: "Add who the story is about — name, age, a trait" },
-  { key: "setting",   label: "Setting",    tip: "Add where the adventure takes place" },
-  { key: "challenge", label: "Challenge",  tip: "Add a problem or goal for the character" },
-  { key: "lesson",    label: "Lesson",     tip: "Add what the character learns or discovers" },
+const EXAMPLES = [
+  "A brave little fox who learns to share",
+  "Two best-friend robots who lose their colors",
+  "A shy dragon who runs a tiny tea shop",
 ];
 
 const STYLES = [
@@ -228,126 +186,6 @@ function OneClickOverlay({ stage, progress, book, onView }: {
                   </div>
                 );
               })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// ── Prompt quality bar ────────────────────────────────────────────────────────
-
-function PromptQualityBar({ prompt }: { prompt: string }) {
-  if (prompt.trim().length < 5) return null;
-  const scrl = analyseSCRL(prompt);
-  const filled = Object.values(scrl).filter(Boolean).length;
-  if (filled === 4) return null; // all good, hide noise
-
-  return (
-    <div className="mt-2 flex items-center gap-2 flex-wrap">
-      {SCRL_LABELS.map(({ key, label, tip }) => (
-        <div key={key} title={scrl[key] ? label : tip}
-          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-extrabold transition-all ${scrl[key] ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-          {scrl[key] ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : <span className="h-2.5 w-2.5 rounded-full border-[2px] border-current inline-block" />}
-          {label}
-        </div>
-      ))}
-      {filled < 4 && (
-        <span className="text-[10px] text-muted-foreground font-semibold">
-          {filled}/4 — {SCRL_LABELS.find(s => !scrl[s.key])?.tip}
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ── Guided prompt builder (SCRL form) ─────────────────────────────────────────
-
-interface SCRLFields {
-  name: string;
-  age: string;
-  trait: string;
-  setting: string;
-  challenge: string;
-  lesson: string;
-}
-
-function assembleSCRL(f: SCRLFields): string {
-  const parts: string[] = [];
-  if (f.name || f.age || f.trait) {
-    const who = [f.name, f.age ? `age ${f.age}` : "", f.trait ? `who ${f.trait}` : ""].filter(Boolean).join(", ");
-    parts.push(who);
-  }
-  if (f.setting) parts.push(f.setting);
-  if (f.challenge) parts.push(f.challenge);
-  if (f.lesson) parts.push(`Along the way, they learn that ${f.lesson}`);
-  return parts.join(". ").replace(/\.\./g, ".").trim();
-}
-
-function GuidedPromptBuilder({ onAssemble }: { onAssemble: (prompt: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [fields, setFields] = useState<SCRLFields>({ name: "", age: "", trait: "", setting: "", challenge: "", lesson: "" });
-  const set = (k: keyof SCRLFields) => (e: React.ChangeEvent<HTMLInputElement>) => setFields(f => ({ ...f, [k]: e.target.value }));
-  const preview = assembleSCRL(fields);
-  const hasContent = Object.values(fields).some(v => v.trim());
-
-  return (
-    <div className="rounded-2xl bg-card chunky-border overflow-hidden">
-      <button onClick={() => setOpen(o => !o)} className="flex w-full items-center justify-between px-4 py-3 font-extrabold text-sm">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4" strokeWidth={2.5} />
-          Guided prompt builder <span className="text-[10px] font-bold text-muted-foreground bg-muted rounded-full px-2 py-0.5 ml-1">SCRL formula</span>
-        </div>
-        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} strokeWidth={2.5} />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden">
-            <div className="px-4 pb-4 space-y-3 border-t-[2px] border-foreground/10 pt-3">
-              <p className="text-xs text-muted-foreground font-semibold">Fill in the four story building blocks — we assemble the prompt for you.</p>
-
-              {/* Character row */}
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground mb-1.5">👤 Character (WHO)</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <input value={fields.name} onChange={set("name")} placeholder="Name" className="rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50" />
-                  <input value={fields.age} onChange={set("age")} placeholder="Age" type="number" min={1} max={16} className="rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50" />
-                  <input value={fields.trait} onChange={set("trait")} placeholder="loves dinosaurs…" className="col-span-1 rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50" />
-                </div>
-              </div>
-
-              {/* Setting */}
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground mb-1.5">🌍 Setting (WHERE)</p>
-                <input value={fields.setting} onChange={set("setting")} placeholder="visits a magical forest where animals can talk…" className="w-full rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50" />
-              </div>
-
-              {/* Challenge */}
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground mb-1.5">⚡ Challenge (WHAT&apos;S THE PROBLEM)</p>
-                <input value={fields.challenge} onChange={set("challenge")} placeholder="must help the baby animals find their way home before dark…" className="w-full rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50" />
-              </div>
-
-              {/* Lesson */}
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground mb-1.5">💡 Lesson (WHAT DO THEY LEARN)</p>
-                <input value={fields.lesson} onChange={set("lesson")} placeholder="even small helpers can make a big difference…" className="w-full rounded-xl bg-background px-3 py-2 text-sm font-semibold chunky-border outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50" />
-              </div>
-
-              {/* Preview + Use */}
-              {hasContent && (
-                <div className="rounded-xl bg-primary/5 px-3 py-2.5 chunky-border">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Preview</p>
-                  <p className="text-xs font-semibold leading-relaxed text-foreground/80">{preview || "—"}</p>
-                </div>
-              )}
-              <button onClick={() => { if (preview) { onAssemble(preview); setOpen(false); } }}
-                disabled={!hasContent || !preview.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border disabled:opacity-40 hover:-translate-y-0.5 transition-transform">
-                <Check className="h-4 w-4" strokeWidth={3} /> Use this prompt
-              </button>
             </div>
           </motion.div>
         )}
@@ -1267,38 +1105,24 @@ export default function CreatePage() {
                   <motion.div key="input" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}
                     className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
                     <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
-                    <p className="mt-2 text-muted-foreground">Describe the character, setting, challenge &amp; lesson — or just start with an idea.</p>
+                    <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
 
-                    <div className="relative mt-5">
-                      <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={6}
-                        placeholder={`e.g. ${(EXAMPLES_BY_AGE[age] ?? EXAMPLES)[0]}`}
-                        className="w-full resize-none rounded-2xl bg-card p-5 pb-10 text-base outline-none chunky-border focus:ring-4 focus:ring-primary/30" />
+                    <div className="relative mt-6">
+                      <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
+                        placeholder="A brave little fox who learns to share…"
+                        className="w-full resize-none rounded-2xl bg-card p-5 pb-10 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30" />
                       <div className="absolute bottom-3 right-4 flex items-center gap-2">
                         <span className={`text-xs font-bold tabular-nums transition-colors ${wordCount(prompt) >= PROMPT_MAX_WORDS ? "text-destructive" : wordCount(prompt) >= PROMPT_MAX_WORDS * 0.85 ? "text-amber-500" : "text-muted-foreground"}`}>
-                          {wordCount(prompt)} / {PROMPT_MAX_WORDS}
+                          {wordCount(prompt)} / {PROMPT_MAX_WORDS} words
                         </span>
+                        {prompt.trim().length > 0 && <span className="text-xs text-muted-foreground/50">· {prompt.trim().length} chars</span>}
                       </div>
                     </div>
 
-                    {/* SCRL quality indicator */}
-                    <PromptQualityBar prompt={prompt} />
-
-                    {/* Guided builder */}
-                    <div className="mt-4">
-                      <GuidedPromptBuilder onAssemble={(p) => setPrompt(p)} />
-                    </div>
-
-                    {/* Age-adaptive examples */}
-                    <div className="mt-3">
-                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Example prompts for ages {age}</p>
-                      <div className="space-y-1.5">
-                        {(EXAMPLES_BY_AGE[age] ?? EXAMPLES).map((ex) => (
-                          <button key={ex} onClick={() => setPrompt(ex)}
-                            className="w-full text-left rounded-xl bg-card px-3 py-2.5 text-xs font-semibold text-foreground/80 chunky-border hover:bg-accent/20 hover:-translate-y-0.5 transition-all leading-snug">
-                            ✦ {ex}
-                          </button>
-                        ))}
-                      </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {EXAMPLES.map((ex) => (
+                        <button key={ex} onClick={() => setPrompt(ex)} className="rounded-full bg-card px-3 py-1.5 text-sm font-bold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">✦ {ex}</button>
+                      ))}
                     </div>
 
                     {/* ── Brainstorm panel ────────────────────────────── */}
