@@ -9,6 +9,16 @@ steps:
       - 'infra/docker/api.Dockerfile'
       - 'apps/api'
 
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'storybook-api'
+      - '--image=us-central1-docker.pkg.dev/ai-storybook-studio-496817/storybook/api:latest'
+      - '--region=us-central1'
+      - '--quiet'
+
 images:
   - 'us-central1-docker.pkg.dev/ai-storybook-studio-496817/storybook/api:latest'
 
