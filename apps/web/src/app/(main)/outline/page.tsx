@@ -584,10 +584,13 @@ export default function OutlinePage() {
                 ))}
               </div>
               {book.raw_prompt && (
-                <div className="mt-3 border-t border-foreground/10 pt-3">
-                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Your original idea</p>
-                  <p className="text-sm text-foreground/70 italic leading-relaxed">"{book.raw_prompt}"</p>
-                </div>
+                <details className="group mt-3 border-t border-foreground/10 pt-3">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-extrabold text-muted-foreground hover:text-foreground transition-colors w-fit select-none">
+                    <span className="transition-transform group-open:rotate-90">›</span>
+                    Your original prompt
+                  </summary>
+                  <p className="mt-2 text-sm text-foreground/70 italic leading-relaxed">"{book.raw_prompt}"</p>
+                </details>
               )}
             </div>
           )}

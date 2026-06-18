@@ -1386,11 +1386,16 @@ export default function CreatePage() {
                       )}
                     </div>
 
-                    {/* Prompt pill */}
-                    <div className="mb-5 rounded-xl bg-muted/60 px-4 py-2.5 chunky-border">
-                      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-0.5">Your prompt</p>
-                      <p className="text-sm font-semibold text-foreground/80">{prompt}</p>
-                    </div>
+                    {/* Prompt — collapsible toggle */}
+                    <details className="group mb-5">
+                      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-extrabold text-muted-foreground hover:text-foreground transition-colors w-fit select-none">
+                        <span className="transition-transform group-open:rotate-90">›</span>
+                        Your original prompt
+                      </summary>
+                      <div className="mt-2 rounded-xl bg-muted/60 px-4 py-2.5 chunky-border">
+                        <p className="text-sm font-semibold text-foreground/80">{prompt}</p>
+                      </div>
+                    </details>
 
                     {briefLoading ? (
                       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
