@@ -5,11 +5,12 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import {
   FileText, Link2, BookOpen, Check, Download, Copy,
-  Loader2, Rocket, ArrowLeft,
+  Loader2, Rocket, ArrowLeft, Type,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { api, type BookOut } from "@/lib/api";
 import { BookPicker } from "@/components/book-picker";
+import { READER_FONTS, type FontId } from "@/lib/fonts";
 
 const formats = [
   {
@@ -48,6 +49,7 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
   const [picked, setPicked] = useState("pdf");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [fontId, setFontId] = useState<FontId>("unkempt");
 
   const illustratedPages = book.pages.filter((p) => !p.is_cover && p.has_image).length;
   const totalPages = book.pages.filter((p) => !p.is_cover).length;
@@ -74,8 +76,8 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
     try {
       const res =
         picked === "pdf"
-          ? await api.books.exportPdf(token, book.id)
-          : await api.books.exportEpub(token, book.id);
+          ? await api.books.exportPdf(token, book.id, fontId)
+          : await api.books.exportEpub(token, book.id, fontId);
 
       if (!res.ok) throw new Error("Export failed");
 
@@ -143,6 +145,51 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
             );
           })}
         </div>
+
+        {/* Font picker — only for PDF/EPUB */}
+        {picked !== "link" && (
+          <div className="mt-6 rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Type className="h-4 w-4 text-primary" strokeWidth={2.5} />
+              <h2 className="font-display text-xl font-black">Story font</h2>
+              <span className="text-xs text-muted-foreground font-semibold ml-1">— pick the font for your exported file</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {READER_FONTS.map((f) => {
+                const active = fontId === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setFontId(f.id)}
+                    className={`flex flex-col items-center gap-1.5 rounded-2xl border-[2.5px] px-3 py-3 transition-all ${
+                      active
+                        ? "border-foreground bg-primary text-primary-foreground chunky-shadow"
+                        : "border-foreground/20 bg-background hover:border-foreground/50 hover:-translate-y-0.5"
+                    }`}
+                  >
+                    <span
+                      className="text-3xl leading-none"
+                      style={{ fontFamily: f.stack, fontWeight: f.weight }}
+                    >
+                      Aa
+                    </span>
+                    <span
+                      className="text-xs font-bold leading-tight text-center"
+                      style={{ fontFamily: f.stack, fontWeight: f.weight }}
+                    >
+                      {f.label}
+                    </span>
+                    {active && (
+                      <span className="mt-0.5 grid h-4 w-4 place-items-center rounded-full bg-primary-foreground">
+                        <Check className="h-2.5 w-2.5 text-primary" strokeWidth={3} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {checks.length > 0 && (
           <div className="mt-8 rounded-3xl bg-card p-6 chunky-border chunky-shadow-sm">

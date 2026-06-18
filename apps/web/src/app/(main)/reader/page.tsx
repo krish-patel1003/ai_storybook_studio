@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { pageImageUrl } from "@/lib/api";
 import type { PageOut } from "@/lib/api";
+import { READER_FONTS, type FontId } from "@/lib/fonts";
 import type { HTMLFlipBookRef, HTMLFlipBookProps } from "react-pageflip";
 
 const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
@@ -41,19 +42,9 @@ function useReaderFontSize(): [FontSizeId, (s: FontSizeId) => void] {
   return [size, setSize];
 }
 
-// ── Font options ──────────────────────────────────────────────────────────────
+// ── Font options (shared from @/lib/fonts) ────────────────────────────────────
 
-const FONTS = [
-  { id: "unkempt",      label: "Unkempt",         stack: 'var(--font-unkempt), cursive',  weight: 400, sample: "Aa" },
-  { id: "mochibop",     label: "Mochibop",         stack: '"Mochiy Pop One", sans-serif', weight: 400, sample: "Aa" },
-  { id: "nunito",       label: "Nunito",           stack: '"Nunito", sans-serif',         weight: 600, sample: "Aa" },
-  { id: "patrick-hand", label: "Patrick Hand",    stack: '"Patrick Hand", cursive',      weight: 400, sample: "Aa" },
-  { id: "caveat",       label: "Caveat",           stack: '"Caveat", cursive',            weight: 700, sample: "Aa" },
-  { id: "merriweather", label: "Merriweather",     stack: '"Merriweather", serif',        weight: 700, sample: "Aa" },
-  { id: "quicksand",    label: "Quicksand",        stack: '"Quicksand", sans-serif',      weight: 600, sample: "Aa" },
-] as const;
-
-type FontId = typeof FONTS[number]["id"];
+const FONTS = READER_FONTS;
 
 function useReaderFont(): [FontId, (f: FontId) => void] {
   // v3 key — forces Unkempt as default, ignores old "patrick-hand" saved preference
@@ -173,18 +164,29 @@ const StoryPage = forwardRef<
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-shrink font if text overflows the container
+  // Auto-shrink font if text overflows the container.
+  // Uses ResizeObserver so it re-fires once HTMLFlipBook (dynamic import) settles
+  // to its actual dimensions — fixes the "tiny text on first load" bug.
   useEffect(() => {
     const el = textRef.current;
     const container = containerRef.current;
-    if (!el || !container || !page.text) return;
-    el.style.fontSize = `${fontSize}rem`;
-    let px = fontSize * 16;
-    const minPx = 11;
-    while (el.scrollHeight > container.clientHeight && px > minPx) {
-      px -= 0.5;
-      el.style.fontSize = `${px}px`;
-    }
+    if (!el || !container) return;
+
+    const fit = () => {
+      if (!page.text || container.clientHeight === 0) return;
+      el.style.fontSize = `${fontSize}rem`;
+      let px = fontSize * 16;
+      const minPx = 11;
+      while (el.scrollHeight > container.clientHeight && px > minPx) {
+        px -= 0.5;
+        el.style.fontSize = `${px}px`;
+      }
+    };
+
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(container);
+    return () => ro.disconnect();
   }, [page.text, fontStack, fontSize]);
 
   // Text zone: where the text box sits (bottom of page).
@@ -268,6 +270,7 @@ BackCover.displayName = "BackCover";
 function FontPicker({ font, setFont }: { font: FontId; setFont: (f: FontId) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const activeFont = FONTS.find((f) => f.id === font) ?? FONTS[0];
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -285,10 +288,12 @@ function FontPicker({ font, setFont }: { font: FontId; setFont: (f: FontId) => v
         className="flex items-center gap-1.5 rounded-full bg-card px-3 h-8 chunky-border transition-transform hover:-translate-y-0.5 text-xs font-extrabold"
       >
         <Type className="h-3.5 w-3.5" strokeWidth={2.5} />
-        <span>Font</span>
+        <span style={{ fontFamily: activeFont.stack, fontWeight: activeFont.weight }}>
+          {activeFont.label}
+        </span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl bg-card p-2 chunky-border chunky-shadow z-50">
+        <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl bg-card p-2 chunky-border chunky-shadow z-50">
           <p className="px-2 pb-1.5 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
             Story font
           </p>
@@ -296,12 +301,22 @@ function FontPicker({ font, setFont }: { font: FontId; setFont: (f: FontId) => v
             <button
               key={f.id}
               onClick={() => { setFont(f.id); setOpen(false); }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
-                font === f.id ? "bg-primary text-primary-foreground" : "hover:bg-highlight"
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                font === f.id ? "bg-primary text-primary-foreground" : "hover:bg-accent/40"
               }`}
             >
-              <span className="text-lg w-6 shrink-0" style={{ fontFamily: f.stack, fontWeight: f.weight }}>{f.sample}</span>
-              <span className="text-sm" style={{ fontFamily: f.stack, fontWeight: f.weight }}>{f.label}</span>
+              <span
+                className="text-xl w-8 shrink-0 text-center"
+                style={{ fontFamily: f.stack, fontWeight: f.weight, lineHeight: 1 }}
+              >
+                Aa
+              </span>
+              <span
+                className="text-sm leading-tight"
+                style={{ fontFamily: f.stack, fontWeight: f.weight }}
+              >
+                {f.label}
+              </span>
             </button>
           ))}
         </div>
