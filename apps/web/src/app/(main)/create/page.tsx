@@ -26,7 +26,6 @@ import {
   Lightbulb,
   Map,
   RotateCcw,
-  CheckCheck,
   ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -636,82 +635,18 @@ function PageReviewCard({ page, bookId, token, onUpdate }: {
 
 // ── Single concept card ───────────────────────────────────────────────────────
 
-function ConceptCard({ concept, onPick, picking }: {
-  concept: ExpandedPromptOut;
-  onPick: () => void;
-  picking: boolean;
-}) {
-  return (
-    <div className="rounded-2xl bg-background chunky-border overflow-hidden flex flex-col">
-      {/* Title bar */}
-      <div className="bg-primary/5 border-b-[2px] border-foreground px-4 py-3">
-        <p className="font-display text-lg font-black leading-tight">{concept.title}</p>
-      </div>
+// ── Enhanced prompt review panel ─────────────────────────────────────────────
 
-      <div className="flex-1 p-4 space-y-3">
-        {/* Story concept */}
-        <p className="text-sm font-semibold leading-relaxed text-foreground/80 line-clamp-4">{concept.story_concept}</p>
-
-        {/* Characters */}
-        {concept.key_characters.length > 0 && (
-          <div>
-            <div className="flex items-center gap-1 mb-1.5">
-              <Users className="h-3 w-3 text-muted-foreground" strokeWidth={2.5} />
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Characters</p>
-            </div>
-            <div className="space-y-1">
-              {concept.key_characters.slice(0, 3).map((c, i) => (
-                <div key={i} className="flex items-start gap-1.5 rounded-lg bg-card px-2.5 py-1.5 chunky-border">
-                  <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-primary text-[9px] font-black text-primary-foreground">{i + 1}</span>
-                  <p className="text-xs font-semibold leading-snug">{c}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Themes */}
-        {concept.themes.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {concept.themes.map((t) => (
-              <span key={t} className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-bold">{t}</span>
-            ))}
-          </div>
-        )}
-
-        {/* Visual style */}
-        <p className="text-[10px] font-semibold text-muted-foreground italic">{concept.visual_style}</p>
-      </div>
-
-      {/* Pick CTA */}
-      <div className="p-4 pt-0">
-        <button
-          onClick={onPick}
-          disabled={picking}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
-        >
-          {picking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" strokeWidth={2.5} />}
-          {picking ? "Generating brief…" : "Pick this →"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Concept step (loading + 2 options) ───────────────────────────────────────
-
-function ConceptStep({
-  concepts,
+function EnhancedPromptReview({
+  expanded,
   loading,
   onRegenerate,
-  onPick,
-  pickingIdx,
+  onApprove,
 }: {
-  concepts: ExpandedPromptOut[];
+  expanded: ExpandedPromptOut | null;
   loading: boolean;
   onRegenerate: () => void;
-  onPick: (concept: ExpandedPromptOut, idx: number) => void;
-  pickingIdx: number | null;
+  onApprove: () => void;
 }) {
   if (loading) {
     return (
@@ -721,32 +656,95 @@ function ConceptStep({
           <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
         </div>
         <div>
-          <p className="font-display text-2xl font-black">Generating 2 concepts…</p>
-          <p className="mt-1.5 text-sm text-muted-foreground">Two different takes on your idea — pick the one that excites you</p>
+          <p className="font-display text-2xl font-black">Expanding your idea…</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">Adding characters, scenes &amp; visual style</p>
         </div>
       </div>
     );
   }
-  if (concepts.length === 0) return null;
+  if (!expanded) return null;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground font-semibold">Pick the concept that excites you most — we&apos;ll build the brief from it.</p>
-        <button onClick={onRegenerate} className="shrink-0 flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
-          <RefreshCw className="h-3 w-3" strokeWidth={2.5} /> New takes
-        </button>
+      <div className="rounded-2xl bg-background p-4 chunky-border">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Suggested title</p>
+        <p className="font-display text-2xl font-black">{expanded.title}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {concepts.map((concept, i) => (
-          <ConceptCard
-            key={i}
-            concept={concept}
-            onPick={() => onPick(concept, i)}
-            picking={pickingIdx === i}
-          />
-        ))}
+      <div className="rounded-2xl bg-background p-4 chunky-border">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Story concept</p>
+        <p className="text-sm font-semibold leading-relaxed text-foreground/80">{expanded.story_concept}</p>
+      </div>
+
+      {expanded.key_characters.length > 0 && (
+        <div className="rounded-2xl bg-background p-4 chunky-border">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Characters</p>
+          </div>
+          <div className="space-y-1.5">
+            {expanded.key_characters.map((c, i) => (
+              <div key={i} className="flex items-start gap-2 rounded-xl bg-card px-3 py-2 chunky-border">
+                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">{i + 1}</span>
+                <p className="text-sm font-semibold leading-snug">{c}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {expanded.story_highlights.length > 0 && (
+        <div className="rounded-2xl bg-background p-4 chunky-border">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Sparkles className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Scene highlights</p>
+          </div>
+          <div className="space-y-1.5">
+            {expanded.story_highlights.map((h, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                <p className="text-sm font-semibold leading-snug text-foreground/80">{h}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {expanded.themes.length > 0 && (
+          <div className="rounded-2xl bg-background p-4 chunky-border">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</p>
+              </div>
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary">✦ added to settings</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {expanded.themes.map((t) => (
+                <span key={t} className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold chunky-border">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="rounded-2xl bg-background p-4 chunky-border">
+          <div className="flex items-center gap-1.5 mb-2">
+            <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Visual style</p>
+          </div>
+          <p className="text-xs font-semibold leading-relaxed text-foreground/80">{expanded.visual_style}</p>
+        </div>
+      </div>
+
+      <div className="flex gap-3 pt-1">
+        <button onClick={onRegenerate}
+          className="flex items-center gap-1.5 rounded-2xl bg-card px-4 py-3 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
+          <RefreshCw className="h-4 w-4" strokeWidth={2.5} /> Try again
+        </button>
+        <button onClick={onApprove}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
+          <Sparkles className="h-4 w-4" strokeWidth={2.5} /> Generate brief →
+        </button>
       </div>
     </div>
   );
@@ -754,26 +752,20 @@ function ConceptStep({
 
 // ── Step progress indicator ───────────────────────────────────────────────────
 
-// Maps flow states to visual step index (0-based)
-// enhancing/enhanced → step 1 (Concept)
-// brief              → step 2 (Brief)
-// writing/pages      → step 3 (Review)
 const STEPS = [
   { id: "input",   label: "Prompt"  },
   { id: "concept", label: "Concept" },
   { id: "brief",   label: "Brief"   },
-  { id: "review",  label: "Pages"   },
-  { id: "check",   label: "Polish"  },
+  { id: "review",  label: "Review"  },
 ];
 
-type FlowState = "input" | "enhancing" | "enhanced" | "brief" | "writing" | "pages" | "checking" | "checked";
+type FlowState = "input" | "enhancing" | "enhanced" | "brief" | "writing" | "pages";
 
 function flowToStepIdx(state: FlowState): number {
   if (state === "input")     return 0;
   if (state === "enhancing" || state === "enhanced") return 1;
   if (state === "brief")     return 2;
-  if (state === "writing" || state === "pages") return 3;
-  return 4; // checking | checked
+  return 3; // writing | pages
 }
 
 function StepBar({ current }: { current: FlowState }) {
@@ -826,11 +818,9 @@ export default function CreatePage() {
   const [brainstormLoading, setBrainstormLoading] = useState(false);
   const [brainstormOpen, setBrainstormOpen] = useState(false);
 
-  // Expanded prompt (concept step) — two options, user picks one
-  const [conceptOptions, setConceptOptions] = useState<ExpandedPromptOut[]>([]);
+  // Expanded prompt (concept step)
   const [expandedPrompt, setExpandedPrompt] = useState<ExpandedPromptOut | null>(null);
   const [expandLoading, setExpandLoading] = useState(false);
-  const [pickingConceptIdx, setPickingConceptIdx] = useState<number | null>(null);
 
   // Models
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -887,20 +877,29 @@ export default function CreatePage() {
     }
   }
 
-  // ── Step 1 → 2: Expand prompt → 2 concept options ─────────────────────────
+  // ── Step 1 → 2: Expand prompt into a rich concept ────────────────────────
 
   async function handleExpandPrompt() {
     if (!token) { toast.error("Please sign in first"); return; }
     if (prompt.trim().length < 3) { toast.error("Tell us a bit more about your story"); return; }
     setExpandLoading(true);
-    setConceptOptions([]);
     setExpandedPrompt(null);
     setFlowState("enhancing");
     try {
       const result = await api.books.expandPrompt(token, {
         raw_prompt: prompt, age_range: age, tone, safety_mode: safety, page_count: pageCount,
       });
-      setConceptOptions(result.concepts);
+      setExpandedPrompt(result);
+      // Merge AI themes into tone selection
+      if (result.themes.length > 0) {
+        setTone((prev) => {
+          const merged = [...prev];
+          for (const t of result.themes) {
+            if (!merged.includes(t)) merged.push(t);
+          }
+          return merged;
+        });
+      }
       setFlowState("enhanced");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to expand prompt");
@@ -910,25 +909,9 @@ export default function CreatePage() {
     }
   }
 
-  function handlePickConcept(concept: ExpandedPromptOut, idx: number) {
-    setPickingConceptIdx(idx);
-    setExpandedPrompt(concept);
-    // Merge AI themes into tone selection
-    if (concept.themes.length > 0) {
-      setTone((prev) => {
-        const merged = [...prev];
-        for (const t of concept.themes) {
-          if (!merged.includes(t)) merged.push(t);
-        }
-        return merged;
-      });
-    }
-    handleGenerateBriefWithConcept(concept).finally(() => setPickingConceptIdx(null));
-  }
+  // ── Step 2 → 3: Generate brief from approved concept ──────────────────────
 
-  // ── Step 2 → 3: Generate brief (accepts concept override to avoid stale closure) ──
-
-  async function handleGenerateBriefWithConcept(concept: ExpandedPromptOut | null = null) {
+  async function handleGenerateBrief() {
     if (!token) { toast.error("Please sign in first"); return; }
     setBriefLoading(true);
     setActiveBrief(null);
@@ -942,8 +925,7 @@ export default function CreatePage() {
         setDraft(saved);
         setBook(saved);
       }
-      const params = { ...briefParams, expanded_concept: concept ?? expandedPrompt ?? undefined };
-      const brief = await api.books.generateBrief(token, params);
+      const brief = await api.books.generateBrief(token, briefParams);
       setActiveBrief(brief);
     } catch (err: any) {
       toast.error(err.message ?? "Failed to generate brief");
@@ -951,10 +933,6 @@ export default function CreatePage() {
     } finally {
       setBriefLoading(false);
     }
-  }
-
-  function handleGenerateBrief() {
-    return handleGenerateBriefWithConcept(null);
   }
 
   async function regenerateField(field: keyof BriefOut) {
@@ -999,17 +977,9 @@ export default function CreatePage() {
     }
   }
 
-  // ── Step 4 → consistency check ────────────────────────────────────────────
+  // ── Step 4 → editor ───────────────────────────────────────────────────────
 
   function handleApprovePages() {
-    // Go to consistency check step instead of directly to editor
-    setFlowState("checking");
-    // Simulate a quick check pass (ReviewStage already ran inside generate —
-    // this step surfaces the result and lets user go to editor with confidence)
-    setTimeout(() => setFlowState("checked"), 800);
-  }
-
-  function handleGoToEditor() {
     router.push("/outline");
   }
 
@@ -1073,18 +1043,17 @@ export default function CreatePage() {
         {/* ── Top bar ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between border-b-[2.5px] border-foreground bg-background px-6 py-3">
           <StepBar current={flowState} />
-          {flowState !== "input" && flowState !== "checking" && (
+          {flowState !== "input" && (
             <button
               onClick={() => {
-                if (flowState === "checked" || flowState === "pages") setFlowState("pages");
+                if (flowState === "pages") setFlowState("pages");
                 else if (flowState === "brief" || flowState === "writing") setFlowState("enhanced");
                 else setFlowState("input");
               }}
               className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
             >
               <ArrowLeft className="h-3 w-3" strokeWidth={3} />
-              {flowState === "checked" ? "Back to pages"
-               : flowState === "pages" ? "Edit brief"
+              {flowState === "pages" ? "Edit brief"
                : flowState === "brief" ? "Edit concept"
                : flowState === "enhanced" || flowState === "enhancing" ? "Edit prompt"
                : "Edit"}
@@ -1117,12 +1086,6 @@ export default function CreatePage() {
                         </span>
                         {prompt.trim().length > 0 && <span className="text-xs text-muted-foreground/50">· {prompt.trim().length} chars</span>}
                       </div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {EXAMPLES.map((ex) => (
-                        <button key={ex} onClick={() => setPrompt(ex)} className="rounded-full bg-card px-3 py-1.5 text-sm font-bold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">✦ {ex}</button>
-                      ))}
                     </div>
 
                     {/* ── Brainstorm panel ────────────────────────────── */}
@@ -1169,7 +1132,7 @@ export default function CreatePage() {
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
                         <Wand2 className="h-5 w-5" strokeWidth={2.5} /> Enhance my story →
                       </button>
-                      <p className="mt-2 text-center text-xs text-muted-foreground">AI gives you 2 concept takes to pick from — then builds the brief from the one you choose.</p>
+                      <p className="mt-2 text-center text-xs text-muted-foreground">AI expands your idea into a full concept — review it, then generate the brief.</p>
                     </div>
 
                     {/* Mobile settings */}
@@ -1197,8 +1160,8 @@ export default function CreatePage() {
                     className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
 
                     <div className="mb-2">
-                      <h1 className="font-display text-3xl font-black md:text-4xl">Choose your concept</h1>
-                      <p className="mt-1 text-sm text-muted-foreground">Two takes on your idea — pick whichever excites you most.</p>
+                      <h1 className="font-display text-3xl font-black md:text-4xl">Your story concept</h1>
+                      <p className="mt-1 text-sm text-muted-foreground">AI expanded your idea — review it, then generate your brief.</p>
                     </div>
 
                     {/* Original prompt pill */}
@@ -1207,12 +1170,11 @@ export default function CreatePage() {
                       <p className="text-sm font-semibold text-foreground/80">{prompt}</p>
                     </div>
 
-                    <ConceptStep
-                      concepts={conceptOptions}
+                    <EnhancedPromptReview
+                      expanded={expandedPrompt}
                       loading={expandLoading}
                       onRegenerate={handleExpandPrompt}
-                      onPick={handlePickConcept}
-                      pickingIdx={pickingConceptIdx}
+                      onApprove={handleGenerateBrief}
                     />
 
                     {/* Mobile: locked settings */}
@@ -1435,77 +1397,10 @@ export default function CreatePage() {
                     <div className="mt-6 space-y-3">
                       <button onClick={handleApprovePages}
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-                        <CheckCheck className="h-5 w-5" strokeWidth={2.5} /> Looks good — run consistency check →
+                        <BookOpen className="h-5 w-5" strokeWidth={2} /> Looks good — go to editor →
                       </button>
-                      <p className="text-center text-xs text-muted-foreground">Final pass: checks character names, plot continuity &amp; pacing before you illustrate.</p>
+                      <p className="text-center text-xs text-muted-foreground">Next: add illustrations, narration, and export your book.</p>
                     </div>
-                  </motion.div>
-                )}
-
-                {/* ── CONSISTENCY CHECK ── */}
-                {(flowState === "checking" || flowState === "checked") && currentBook && (
-                  <motion.div key="check" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
-                    className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
-
-                    <h1 className="font-display text-3xl font-black md:text-4xl mb-1">Consistency check</h1>
-                    <p className="text-sm text-muted-foreground mb-6">AI reviewed your pages for character names, plot continuity, pacing, and language complexity.</p>
-
-                    {flowState === "checking" ? (
-                      <div className="flex flex-col items-center gap-5 py-16 text-center">
-                        <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow">
-                          <CheckCheck className="h-7 w-7 text-primary-foreground" strokeWidth={1.5} />
-                          <span className="absolute -right-1.5 -top-1.5 h-4 w-4 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
-                        </div>
-                        <p className="font-display text-xl font-black">Checking your story…</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {/* Summary card */}
-                        <div className="rounded-2xl bg-background p-5 chunky-border">
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary chunky-border">
-                              <Check className="h-5 w-5 text-primary-foreground" strokeWidth={3} />
-                            </div>
-                            <div>
-                              <p className="font-extrabold text-base">Your story passed the consistency check</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">AI reviewed and auto-fixed any issues during the writing pass.</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {[
-                              { icon: "👤", label: "Character names", status: "Consistent" },
-                              { icon: "📖", label: "Plot continuity", status: "Verified" },
-                              { icon: "📏", label: "Pacing", status: "Balanced" },
-                              { icon: "🧒", label: "Reading level", status: `Ages ${age}` },
-                            ].map(({ icon, label, status }) => (
-                              <div key={label} className="flex items-center gap-2.5 rounded-xl bg-card px-3 py-2.5 chunky-border">
-                                <span className="text-base">{icon}</span>
-                                <div>
-                                  <p className="text-xs font-extrabold">{label}</p>
-                                  <p className="text-[10px] font-semibold text-primary">{status}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Pages summary */}
-                        <div className="rounded-2xl bg-background p-4 chunky-border">
-                          <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-3">Story summary</p>
-                          <div className="space-y-1.5 text-xs font-semibold text-muted-foreground">
-                            <div className="flex justify-between"><span>Total pages</span><span className="font-extrabold text-foreground">{sortedPages.length}</span></div>
-                            <div className="flex justify-between"><span>Total words</span><span className="font-extrabold text-foreground">{sortedPages.reduce((n, p) => n + (p.word_count ?? 0), 0).toLocaleString()}</span></div>
-                            {activeBrief && <div className="flex justify-between"><span>Title</span><span className="font-extrabold text-foreground truncate ml-4">{activeBrief.title}</span></div>}
-                          </div>
-                        </div>
-
-                        <button onClick={handleGoToEditor}
-                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-                          <BookOpen className="h-5 w-5" strokeWidth={2} /> Go to editor →
-                        </button>
-                        <p className="text-center text-xs text-muted-foreground">Next: add illustrations, narration, and export your book.</p>
-                      </div>
-                    )}
                   </motion.div>
                 )}
 
@@ -1526,7 +1421,7 @@ export default function CreatePage() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-5">
-              {(flowState === "pages" || flowState === "checking" || flowState === "checked") && activeBrief ? (
+              {flowState === "pages" && activeBrief ? (
                 <BriefSummaryPanel
                   brief={activeBrief} age={age} pageCount={pageCount}
                   style={style} modelName={modelName} modelProvider={modelProvider}

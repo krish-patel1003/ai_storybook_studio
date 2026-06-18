@@ -67,19 +67,7 @@ TONE & STYLE
 - Warm, enthusiastic, and inspiring — like a brilliant editor pitching a great book.
 - Age-appropriate for the audience specified.
 - Avoid jargon. Keep it clear and vivid.
-- Each concept should make the user excited to generate the actual book.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-GENERATING TWO TAKES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You will generate exactly 2 concepts for the same idea. They must be meaningfully different:
-- Different angle on the same story (e.g. told from the sidekick's POV vs. the hero's)
-- Different tone (heartwarming and gentle vs. funny and silly)
-- Different story arc shape (one ends triumphantly, one ends quietly and reflectively)
-- Different setting or time period within the spirit of the idea
-
-Both must be faithful to what the user asked for. Do NOT invent a completely different story.
-The user will pick whichever concept excites them most.
+- The expanded concept should make the user excited to generate the actual book.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────

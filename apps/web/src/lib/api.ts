@@ -164,10 +164,6 @@ export interface ExpandedPromptOut {
   visual_style: string;
 }
 
-export interface ExpandedPromptOptionsOut {
-  concepts: ExpandedPromptOut[];
-}
-
 // ── Request types ─────────────────────────────────────────────────────────────
 
 export interface BriefGenerateIn {
@@ -367,7 +363,7 @@ export const api = {
       }),
 
     expandPrompt: (token: string, data: ExpandPromptIn) =>
-      request<ExpandedPromptOptionsOut>("/books/prompts/expand", {
+      request<ExpandedPromptOut>("/books/prompts/expand", {
         method: "POST",
         headers: authed(token),
         body: JSON.stringify(data),

@@ -44,13 +44,6 @@ class ExpandedPrompt(BaseModel):
     )
 
 
-class ExpandedPromptOptions(BaseModel):
-    """Two meaningfully different concept takes on the same idea."""
-    concepts: list[ExpandedPrompt] = Field(
-        description="Exactly 2 distinct concepts. Same core idea from the user, but explored differently — "
-                    "e.g. different protagonist perspective, different tone, different story arc shape, or different setting angle. "
-                    "Both must be faithful to the user's idea."
-    )
 
 
 # ── Stage 1: Prompt Enhancement ───────────────────────────────────────────────

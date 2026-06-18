@@ -193,11 +193,6 @@ class ExpandedPromptOut(BaseModel):
     visual_style: str
 
 
-class ExpandedPromptOptionsOut(BaseModel):
-    """Two distinct concept takes on the user's idea."""
-    concepts: list[ExpandedPromptOut]
-
-
 class BriefGenerateIn(BaseModel):
     raw_prompt: str = Field(min_length=10, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")

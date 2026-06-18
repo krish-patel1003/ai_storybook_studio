@@ -1,7 +1,7 @@
 from src.generation.constants import GEMINI_FLASH, TEMP_ENHANCE
 from src.generation.llm_client import LLMClient
 from src.generation.prompts.system import BRAINSTORM_PROMPT, EXPAND_PROMPT
-from src.generation.schemas import BrainstormResult, ExpandedPromptOptions
+from src.generation.schemas import BrainstormResult, ExpandedPrompt
 
 
 class BrainstormStage:
@@ -37,7 +37,7 @@ and irresistible to a child flipping through a bookshelf.
 
 
 class ExpandStage:
-    """Expands a user's prompt into 2 distinct story concepts to choose from."""
+    """Expands a user's prompt into a rich story concept."""
 
     def __init__(self, client: LLMClient, model: str = GEMINI_FLASH) -> None:
         self._client = client
@@ -50,7 +50,7 @@ class ExpandStage:
         tone: list[str],
         safety: bool,
         page_count: int,
-    ) -> ExpandedPromptOptions:
+    ) -> ExpandedPrompt:
         tone_str = ", ".join(tone) if tone else "neutral"
         safety_str = (
             "Safety filters ON — keep themes gentle, age-appropriate, no scary content."
@@ -66,12 +66,12 @@ Audience:
 - {safety_str}
 - Target length: {page_count} pages
 
-Generate exactly 2 different takes on this idea. Both must be faithful to the user's \
-idea. Make each concept so vivid and exciting that the user has a hard time picking just one.
+Expand this into a rich, exciting story concept. Be specific, vivid, and faithful \
+to what the user asked for. Make them excited to generate this book.
 """
         return await self._client.generate(
             prompt=user_prompt,
-            schema=ExpandedPromptOptions,
+            schema=ExpandedPrompt,
             system=EXPAND_PROMPT,
             model=self._model,
             temperature=TEMP_ENHANCE,
