@@ -199,6 +199,35 @@ arc:
   GOOD: "Summer begins", "Skating day", "The pool", "Coding together", "The big show"
   BAD: "Inciting Incident", "Rising Action", "Climax", "Denouement"
   The combined page_span values must sum exactly to the requested page count.
+
+requirements:
+  Read the user's prompt carefully and extract every concrete, non-negotiable deliverable —
+  things the story MUST contain that go beyond "tell a good story."
+
+  LOOK FOR:
+  - Specific vocabulary to teach (foreign words, technical terms, new concepts)
+  - Named characters who must appear and do specific things
+  - Specific events or scenes that must happen ("overcome a fear", "meet a coach")
+  - Structural requirements ("include a recap page", "end with a summary")
+  - Counts and quantities ("at least two words per language", "three skills")
+  - Format requirements ("explain each word's meaning immediately after it appears")
+
+  For each deliverable, write ONE clear, specific, checkable sentence.
+  Be precise about quantities: not "teach some Hindi" but "Coach Priya teaches EXACTLY 2 Hindi words;
+  each word appears in the story text followed immediately by its English meaning in parentheses."
+
+  If a requirement implies a dedicated page (e.g. "vocabulary recap at the end"), make that explicit:
+  "The FINAL content page is a vocabulary recap that lists all taught words and their meanings."
+
+  If the prompt has no structured deliverables, return an empty list.
+
+  EXAMPLES of good requirements:
+  - "Coach Priya (ice skating, Hindi) introduces exactly 2 Hindi words; each word appears in the story
+    text and is immediately followed by its English meaning — e.g. 'Koshish (try)'"
+  - "Coach Carlos (swimming, Spanish) introduces exactly 2 Spanish words with the same format"
+  - "Coach Amélie (dance, French) introduces exactly 2 French words with the same format"
+  - "The final content page is a vocabulary recap page listing all 6 foreign words and their meanings"
+  - "Each of the three skills (ice skating, swimming, dancing) gets its own arc stage"
 """
 
 
@@ -289,6 +318,24 @@ If the answer is no, make the beat more physical and concrete.
 ILLUSTRATIONS ADD INFORMATION:
 The setting_note on each beat should name something the illustration will SHOW
 that the text does NOT need to say. Art and words tell different parts of the same story.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY REQUIREMENTS — READ BEFORE WRITING ANY BEAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The brief includes a requirements list. These are non-negotiable deliverables.
+Every requirement MUST be traceable to at least one beat.
+
+RULES:
+1. Read every requirement before writing a single beat.
+2. For each requirement, decide which beat will fulfill it.
+   Write that fulfillment explicitly in the beat's description.
+   BAD beat: "Coach Priya helps Leo stand up on the ice"
+   GOOD beat: "Coach Priya kneels beside Leo and teaches him the Hindi word 'Koshish' (try),
+               explaining it means to keep going even when it's hard"
+3. If a requirement says "dedicated page" (e.g. a vocab recap), allocate a distinct beat for it —
+   do NOT fold it into another beat.
+4. If requirements push the total beyond the target page count, add the extra beats anyway.
+   Content completeness beats page count conformity.
 """
 
 
@@ -377,6 +424,20 @@ For illustration_metadata:
 - assembled_prompt must be fully self-contained: art style + character visual anchors + scene + mood + lighting
 - The illustration must SHOW SOMETHING THE TEXT DOES NOT SAY
 - Format: "[art style], [scene with character visual anchors], [composition], [mood and lighting]"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PAGE-LEVEL REQUIREMENTS (delivered in the user prompt)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each page prompt will include a MUST DELIVER block listing any requirements
+this specific page is responsible for fulfilling.
+
+When you see a MUST DELIVER block:
+- Treat each item as a hard constraint, not a suggestion.
+- The requirement must be present and clear in the page text you write.
+- For vocabulary words: the word AND its meaning must both appear on the page.
+  Format: introduce the word naturally in dialogue or narration, then immediately
+  explain it. E.g: Coach says "Burbujas!" and blows bubbles. "That means bubbles," he grins.
+- Do NOT skip, summarise, or defer a requirement to a later page.
 """
 
 

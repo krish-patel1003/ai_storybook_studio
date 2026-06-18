@@ -23,6 +23,7 @@ from src.generation.stages.characters import CharacterStage
 from src.generation.stages.enhance import EnhanceStage
 from src.generation.stages.expand import BrainstormStage, ExpandStage
 from src.generation.stages.character_sheet import CharacterSheetStage, GeneratedCharacterSheet
+from src.generation.stages.fulfillment import FulfillmentStage
 from src.generation.stages.image import GeneratedImage, ImageStage
 from src.generation.stages.outline import OutlineStage
 from src.generation.stages.pages import PageStage
@@ -96,6 +97,7 @@ class StoryPipeline:
         self._pages = PageStage(client, model=quality)
         self._polish = PolishStage(client, model=fast)
         self._review = ReviewStage(client, model=fast)
+        self._fulfillment = FulfillmentStage(client, model=fast)
         self._recalibrate = RecalibrateStage(client, model=fast)
         self._image = ImageStage(api_key=api_key)
         self._char_sheet = CharacterSheetStage(api_key=api_key)
@@ -132,6 +134,10 @@ class StoryPipeline:
         pages = await self._polish.run(pages=pages, age_range=age_range)
         # Review pass — reads the full book, rewrites pages that are too complex or AI-sounding
         pages = await self._review.run(pages=pages, age_range=age_range)
+        # Fulfillment pass — audits requirement compliance, patches or adds pages as needed
+        pages = await self._fulfillment.run(
+            pages=pages, brief=brief, age_range=age_range, art_style=art_style
+        )
         return GenerationResult(
             brief=brief,
             characters=characters,

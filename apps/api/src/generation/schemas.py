@@ -61,6 +61,17 @@ class StoryBrief(BaseModel):
     themes: list[str] = Field(description="3–5 plain theme words or short phrases. Example: ['Friendship', 'Teamwork', 'Trying new things']")
     lesson: str = Field(description="The lesson in one plain sentence a child would say out loud. Example: 'Friends can do amazing things when they help each other.'")
     arc: list[ArcStage] = Field(description="Ordered list of arc stages. Names and count determined by the story. page_span values must sum to the requested page count.")
+    requirements: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Concrete, non-negotiable deliverables extracted from the user's prompt — things the story MUST contain, "
+            "beyond its narrative arc. Each item is a specific, checkable statement. "
+            "Examples: 'Coach Priya teaches exactly 2 Hindi words; each word is introduced in the story "
+            "with its English meaning explained immediately after', "
+            "'Final page is a vocabulary recap listing all 6 foreign words and their meanings'. "
+            "Leave empty if the prompt has no structured deliverables beyond 'tell a good story'."
+        ),
+    )
 
 
 # ── Stage 2: Characters ───────────────────────────────────────────────────────
@@ -175,3 +186,48 @@ class RecalibratedOutline(BaseModel):
     editorial_note: str = Field(
         description="Brief explanation of the key structural decisions made during recalibration"
     )
+
+
+# ── Stage 7b: Fulfillment Audit ───────────────────────────────────────────────
+
+class RequirementCheck(BaseModel):
+    requirement: str = Field(description="The original requirement text, copied verbatim")
+    fulfilled: bool = Field(description="True if this requirement is clearly and completely met in the book as written")
+    found_on_pages: list[int] = Field(
+        default_factory=list,
+        description="Page order numbers where this requirement is addressed (may be empty if not fulfilled)"
+    )
+    gap: str | None = Field(
+        default=None,
+        description="If not fulfilled: exactly what is missing. E.g. 'Only 1 Hindi word found (koshish); a second Hindi word with meaning is absent'. Null if fulfilled."
+    )
+    fix_strategy: str | None = Field(
+        default=None,
+        description=(
+            "If not fulfilled: 'patch_page_N' to add content to an existing page, or 'new_page' to insert a "
+            "dedicated page. Choose patch when the fix is one sentence; choose new_page when it needs a full page "
+            "(e.g. a vocabulary recap). Null if fulfilled."
+        )
+    )
+    patch_target_page: int | None = Field(
+        default=None,
+        description="If fix_strategy is patch_page_N: the page order number to patch. Null otherwise."
+    )
+
+
+class FulfillmentAudit(BaseModel):
+    checks: list[RequirementCheck] = Field(
+        description="One entry per requirement in the brief.requirements list, in the same order"
+    )
+
+
+class PagePatch(BaseModel):
+    page_order: int
+    new_text: str = Field(description="Complete replacement text for this page — same scene, adds the missing content naturally woven in")
+
+
+class NewPage(BaseModel):
+    after_order: int = Field(description="Insert this page immediately after the page with this order number")
+    narrative_role: str
+    text: str = Field(description="Full page text. For a vocab recap: a friendly, child-facing list of words and meanings.")
+    illustration_note: str = Field(description="Brief note for the illustrator describing what this page should show")
