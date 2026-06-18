@@ -31,6 +31,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, type BookOut, type BriefOut, type ExpandedPromptOut, type PageOut, type ProviderInfo, type StorySeedOut } from "@/lib/api";
+import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -168,13 +169,80 @@ function useWritingMessages(brief: BriefOut | null, intervalMs = 2400) {
   return msgs.current[idx] ?? "Writing your pages…";
 }
 
+// ── Spinner message pools ─────────────────────────────────────────────────────
+
+const EXPAND_MSGS = [
+  "Imagining the characters…",
+  "Sketching the world…",
+  "Finding the story's soul…",
+  "Picking the right visual style…",
+  "Dreaming up the highlights…",
+  "Turning your idea into a world…",
+  "Thinking about the opening scene…",
+  "Adding some sparkle…",
+  "Deciding who the hero is…",
+  "Building the setting in my head…",
+  "Coming up with a title you'll love…",
+  "Figuring out the perfect ending…",
+];
+
+const BRIEF_MSGS = [
+  "Mapping out your story arc…",
+  "Naming characters you'll love…",
+  "Choosing the right lesson…",
+  "Deciding how many twists to add…",
+  "Drafting the opening scene…",
+  "Finding the perfect title…",
+  "Building the story's heartbeat…",
+  "Thinking like an editor…",
+  "Outlining act one, two, three…",
+  "Sprinkling in the magic moments…",
+  "Crafting something memorable…",
+  "Giving the arc some shape…",
+  "Making sure it has a satisfying ending…",
+  "Adding just the right amount of heart…",
+];
+
 // ── One-click overlay ─────────────────────────────────────────────────────────
 
 const ONE_CLICK_HINTS: Record<string, string[]> = {
-  writing:      ["Crafting your story arc…", "Picking the perfect words…", "Weaving plot twists 🌀"],
-  characters:   ["Sketching character traits…", "Deciding who's the hero 🦊", "Giving everyone backstories…"],
-  illustrating: ["Painting the scenes…", "Adding colour and detail 🎨", "Bringing characters to life…"],
-  narrating:    ["Finding the perfect voice 🎙️", "Adding emotion to each line…"],
+  writing: [
+    "Crafting your story arc…",
+    "Picking the perfect words…",
+    "Weaving in the plot twists…",
+    "Giving each page its own moment…",
+    "Making sure the ending earns it…",
+    "Adding a surprise nobody saw coming…",
+    "Checking every sentence sounds right…",
+    "Setting the scene just so…",
+  ],
+  characters: [
+    "Sketching character traits…",
+    "Deciding who's the hero…",
+    "Giving everyone a backstory…",
+    "Making the sidekick lovable…",
+    "Figuring out who causes the trouble…",
+    "Giving each character a distinct voice…",
+    "Deciding what the protagonist wants most…",
+  ],
+  illustrating: [
+    "Painting the scenes…",
+    "Adding colour and detail…",
+    "Bringing characters to life…",
+    "Mixing the right colours…",
+    "Painting the background first…",
+    "Getting the lighting just right…",
+    "Drawing tiny details only kids will find…",
+    "Adding texture and depth…",
+    "One last brush stroke…",
+  ],
+  narrating: [
+    "Finding the perfect voice…",
+    "Adding emotion to each line…",
+    "Breathing life into the words…",
+    "Making sure the pauses land right…",
+    "Reading it like bedtime…",
+  ],
 };
 
 type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
@@ -724,11 +792,13 @@ function PageReviewCard({ page, bookId, token, onUpdate }: {
 function EnhancedPromptReview({
   expanded,
   loading,
+  loadingMessage,
   onRegenerate,
   onApprove,
 }: {
   expanded: ExpandedPromptOut | null;
   loading: boolean;
+  loadingMessage?: string;
   onRegenerate: () => void;
   onApprove: () => void;
 }) {
@@ -741,7 +811,18 @@ function EnhancedPromptReview({
         </div>
         <div>
           <p className="font-display text-2xl font-black">Expanding your idea…</p>
-          <p className="mt-1.5 text-sm text-muted-foreground">Adding characters, scenes &amp; visual style</p>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={loadingMessage}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.35 }}
+              className="mt-1.5 text-sm text-muted-foreground min-h-[1.25rem]"
+            >
+              {loadingMessage ?? "Adding characters, scenes & visual style"}
+            </motion.p>
+          </AnimatePresence>
         </div>
       </div>
     );
@@ -1113,6 +1194,8 @@ export default function CreatePage() {
   };
 
   const writingMessage = useWritingMessages(activeBrief);
+  const expandMessage = useCyclingMessage(EXPAND_MSGS);
+  const briefMessage = useCyclingMessage(BRIEF_MSGS);
 
   const sortedPages = currentBook
     ? [...currentBook.pages].sort((a, b) => a.order - b.order)
@@ -1259,6 +1342,7 @@ export default function CreatePage() {
                     <EnhancedPromptReview
                       expanded={expandedPrompt}
                       loading={expandLoading}
+                      loadingMessage={expandMessage}
                       onRegenerate={handleExpandPrompt}
                       onApprove={handleGenerateBrief}
                     />
@@ -1315,7 +1399,18 @@ export default function CreatePage() {
                         </div>
                         <div className="text-center">
                           <p className="font-display text-xl font-black">Building your brief…</p>
-                          <p className="mt-1 text-sm text-muted-foreground">Crafting title, arc, characters &amp; themes</p>
+                          <AnimatePresence mode="wait">
+                            <motion.p
+                              key={briefMessage}
+                              initial={{ opacity: 0, y: 6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -6 }}
+                              transition={{ duration: 0.35 }}
+                              className="mt-1 text-sm text-muted-foreground min-h-[1.25rem]"
+                            >
+                              {briefMessage}
+                            </motion.p>
+                          </AnimatePresence>
                         </div>
                       </div>
                     ) : activeBrief ? (

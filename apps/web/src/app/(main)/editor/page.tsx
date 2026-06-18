@@ -27,7 +27,26 @@ import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
+import { useCyclingMessage } from "@/lib/use-cycling-message";
+import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
+
+const ILLUSTRATION_MSGS = [
+  "Mixing the right colours…",
+  "Painting the background first…",
+  "Adding the characters…",
+  "Getting the lighting just right…",
+  "Brushing in the details…",
+  "Drawing tiny details only kids will find…",
+  "Adding texture and depth…",
+  "Deciding on the colour palette…",
+  "Making sure the characters look right…",
+  "Blending the colours…",
+  "Composing the scene…",
+  "Finding the right mood…",
+  "Bringing the page to life…",
+  "Almost there…",
+];
 
 // ── Authenticated image hook ──────────────────────────────────────────────────
 
@@ -275,6 +294,7 @@ function PageCard({
   const blobUrl = useAuthImage(imgUrl, token, page.has_image);
   const { previewing, loading: previewLoading, togglePreview } = useAudioPreview(bookId, page.id, token);
   const [showPreview, setShowPreview] = useState(false);
+  const illustrationMsg = useCyclingMessage(ILLUSTRATION_MSGS, 2800);
 
   const fmt = (s: number) => `${Math.floor(s / 60) > 0 ? `${Math.floor(s / 60)}m ` : ""}${(s % 60).toString().padStart(2, "0")}s`;
 
@@ -289,10 +309,21 @@ function PageCard({
       {/* Illustration area */}
       <div className="relative aspect-[4/3] bg-muted border-b-[2.5px] border-foreground overflow-hidden">
         {status === "generating" ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <div className="text-center">
-              <p className="text-xs font-bold text-muted-foreground">Generating…</p>
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={illustrationMsg}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.3 }}
+                  className="text-xs font-bold text-muted-foreground min-h-[1rem]"
+                >
+                  {illustrationMsg}
+                </motion.p>
+              </AnimatePresence>
               {elapsed > 0 && (
                 <p className="text-xs text-primary font-extrabold mt-0.5 flex items-center justify-center gap-1">
                   <Clock className="h-3 w-3" /> {fmt(elapsed)}
