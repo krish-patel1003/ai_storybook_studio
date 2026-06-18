@@ -419,6 +419,15 @@ function usePageAudio(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, currentPageData?.id, cacheVersion]);
 
+  // Cover page has no right-page partner (showCover renders it alone).
+  // If cover has no audio the onEnded chain never fires — flip after a short pause.
+  useEffect(() => {
+    if (currentPage !== 0 || currentPageData?.has_audio) return;
+    const t = setTimeout(() => bookRef.current?.pageFlip().flipNext(), 1800);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, currentPageData?.has_audio]);
+
   // Single stable "ended" listener — handles left→right→flip sequence.
   useEffect(() => {
     const audio = audioRef.current;
@@ -436,6 +445,10 @@ function usePageAudio(
       if (ctx.current.muted) { ctx.current.playingRight = false; return; }
 
       if (!ctx.current.playingRight) {
+        // Cover page is shown alone (showCover=true) — no right-page partner.
+        // Flip directly instead of playing the next page's audio prematurely.
+        if (ctx.current.currentPage === 0) { doFlip(); return; }
+
         const rightPage = ctx.current.pages[ctx.current.currentPage + 1];
         if (rightPage?.has_audio) {
           const blobUrl = cache.current.get(rightPage.id);
