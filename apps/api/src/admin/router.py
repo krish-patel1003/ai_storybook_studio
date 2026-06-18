@@ -6,6 +6,7 @@ Protected by HTTP Basic Auth (username/password from config).
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -19,6 +20,19 @@ from src.database import get_db
 
 router = APIRouter()
 security = HTTPBasic()
+
+# ── Cost estimation constants ──────────────────────────────────────────────────
+# Estimated per-book LLM spend (covers all pipeline calls for one book)
+_LLM_PER_BOOK: dict[str, float] = {
+    "gemini-3.5-flash":       0.008,
+    "gemini-3.1-pro-preview": 0.180,
+    "gemini-2.0-flash":       0.008,
+    "gemini-1.5-flash":       0.006,
+    "gemini-1.5-pro":         0.140,
+}
+_DEFAULT_LLM_COST:      float = 0.010
+_ILLUSTRATION_PER_PAGE: float = 0.040   # Imagen 3 per image
+_AUDIO_PER_PAGE:        float = 0.100   # ElevenLabs ~500 chars @ $0.0002/char
 
 
 def require_admin(credentials: Annotated[HTTPBasicCredentials, Depends(security)]):
@@ -47,6 +61,15 @@ def _now() -> datetime:
 
 def _since(days: int) -> datetime:
     return _now() - timedelta(days=days)
+
+def _llm_cost(model: str | None) -> float:
+    return _LLM_PER_BOOK.get(model or "", _DEFAULT_LLM_COST)
+
+def _compute_cost(model: str | None, illustrated: int, narrated: int) -> dict:
+    llm  = round(_llm_cost(model), 4)
+    ilus = round(illustrated * _ILLUSTRATION_PER_PAGE, 4)
+    aud  = round(narrated   * _AUDIO_PER_PAGE,         4)
+    return {"llm": llm, "illustrations": ilus, "audio": aud, "total": round(llm + ilus + aud, 4)}
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
@@ -107,12 +130,13 @@ async def get_stats(
 
     # ── Recent signups ────────────────────────────────────────────────────────
     recent_user_rows = (await db.execute(
-        select(User.email, User.pen_name, User.created_at, User.is_email_verified, User.google_id)
+        select(User.id, User.email, User.pen_name, User.created_at, User.is_email_verified, User.google_id)
         .order_by(User.created_at.desc())
         .limit(10)
     )).all()
     recent_users = [
         {
+            "id": str(r.id),
             "email": r.email,
             "pen_name": r.pen_name,
             "joined": r.created_at.isoformat(),
@@ -177,4 +201,195 @@ async def get_stats(
         "books_per_day": books_per_day,
         "recent_users": recent_users,
         "recent_books": recent_books,
+    }
+
+
+@router.get("/costs")
+async def get_costs(
+    _: AdminDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Aggregate cost analytics across all books, broken down by model."""
+    rows = (await db.execute(
+        select(
+            Book.model_name,
+            func.count(func.distinct(Book.id)).label("books"),
+            func.count(Page.id).filter(Page.image_key.isnot(None)).label("illustrated"),
+            func.count(Page.id).filter(Page.audio_key.isnot(None)).label("narrated"),
+        )
+        .outerjoin(Page, Page.book_id == Book.id)
+        .group_by(Book.model_name)
+    )).all()
+
+    by_model = []
+    total_llm   = 0.0
+    total_ilus  = 0.0
+    total_aud   = 0.0
+    total_books = 0
+
+    for r in rows:
+        llm  = round(_llm_cost(r.model_name) * r.books, 4)
+        ilus = round(r.illustrated * _ILLUSTRATION_PER_PAGE, 4)
+        aud  = round(r.narrated   * _AUDIO_PER_PAGE,         4)
+        total_llm   += llm
+        total_ilus  += ilus
+        total_aud   += aud
+        total_books += r.books
+        by_model.append({
+            "model":             r.model_name or "unknown",
+            "books":             r.books,
+            "illustrated_pages": r.illustrated,
+            "narrated_pages":    r.narrated,
+            "llm_cost":          llm,
+            "illustration_cost": ilus,
+            "audio_cost":        aud,
+            "total":             round(llm + ilus + aud, 4),
+        })
+
+    grand_total  = round(total_llm + total_ilus + total_aud, 4)
+    avg_per_book = round(grand_total / total_books, 4) if total_books else 0.0
+
+    return {
+        "totals": {
+            "llm":           round(total_llm,  4),
+            "illustrations": round(total_ilus, 4),
+            "audio":         round(total_aud,  4),
+            "total":         grand_total,
+        },
+        "by_model":      by_model,
+        "avg_per_book":  avg_per_book,
+        "total_books":   total_books,
+    }
+
+
+@router.get("/users")
+async def list_users(
+    _: AdminDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """All users with book counts and estimated spend."""
+    user_rows = (await db.execute(
+        select(
+            User.id, User.email, User.pen_name, User.created_at,
+            User.is_email_verified, User.google_id,
+            func.count(func.distinct(Book.id)).label("book_count"),
+            func.count(Page.id).filter(Page.image_key.isnot(None)).label("illustrated"),
+            func.count(Page.id).filter(Page.audio_key.isnot(None)).label("narrated"),
+        )
+        .outerjoin(Book, Book.user_id == User.id)
+        .outerjoin(Page, Page.book_id == Book.id)
+        .group_by(User.id)
+        .order_by(User.created_at.desc())
+    )).all()
+
+    # Per-user, per-model book count → LLM cost
+    model_rows = (await db.execute(
+        select(Book.user_id, Book.model_name, func.count(Book.id).label("n"))
+        .group_by(Book.user_id, Book.model_name)
+    )).all()
+
+    user_llm: dict[str, float] = {}
+    for r in model_rows:
+        uid = str(r.user_id)
+        user_llm[uid] = user_llm.get(uid, 0.0) + _llm_cost(r.model_name) * r.n
+
+    users = []
+    for r in user_rows:
+        uid  = str(r.id)
+        llm  = round(user_llm.get(uid, 0.0), 4)
+        ilus = round(r.illustrated * _ILLUSTRATION_PER_PAGE, 4)
+        aud  = round(r.narrated   * _AUDIO_PER_PAGE,         4)
+        users.append({
+            "id":                uid,
+            "email":             r.email,
+            "pen_name":          r.pen_name,
+            "joined":            r.created_at.isoformat(),
+            "verified":          r.is_email_verified,
+            "google":            r.google_id is not None,
+            "books":             r.book_count,
+            "illustrated_pages": r.illustrated,
+            "narrated_pages":    r.narrated,
+            "cost": {
+                "llm":           llm,
+                "illustrations": ilus,
+                "audio":         aud,
+                "total":         round(llm + ilus + aud, 4),
+            },
+        })
+
+    return {"users": users, "total": len(users)}
+
+
+@router.get("/users/{user_id}")
+async def get_user(
+    user_id: UUID,
+    _: AdminDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Detailed stats for a single user: all their books with individual cost breakdowns."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    book_rows = (await db.execute(
+        select(
+            Book.id, Book.title, Book.raw_prompt, Book.model_name, Book.page_count,
+            Book.art_style, Book.age_range, Book.stage, Book.created_at,
+            func.count(Page.id).filter(Page.image_key.isnot(None)).label("illustrated"),
+            func.count(Page.id).filter(Page.audio_key.isnot(None)).label("narrated"),
+        )
+        .outerjoin(Page, Page.book_id == Book.id)
+        .where(Book.user_id == user_id)
+        .group_by(Book.id)
+        .order_by(Book.created_at.desc())
+    )).all()
+
+    books       = []
+    total_llm   = 0.0
+    total_ilus  = 0.0
+    total_aud   = 0.0
+
+    for r in book_rows:
+        cost = _compute_cost(r.model_name, r.illustrated, r.narrated)
+        total_llm  += cost["llm"]
+        total_ilus += cost["illustrations"]
+        total_aud  += cost["audio"]
+        prompt = r.raw_prompt
+        books.append({
+            "id":         str(r.id),
+            "title":      r.title,
+            "prompt":     prompt[:60] + ("…" if len(prompt) > 60 else ""),
+            "model":      r.model_name,
+            "page_count": r.page_count,
+            "art_style":  r.art_style,
+            "age_range":  r.age_range,
+            "stage":      r.stage,
+            "created":    r.created_at.isoformat(),
+            "illustrated": r.illustrated,
+            "narrated":    r.narrated,
+            "cost":        cost,
+        })
+
+    grand = round(total_llm + total_ilus + total_aud, 4)
+
+    return {
+        "user": {
+            "id":       str(user.id),
+            "email":    user.email,
+            "pen_name": user.pen_name,
+            "joined":   user.created_at.isoformat(),
+            "verified": user.is_email_verified,
+            "google":   user.google_id is not None,
+            "active":   user.is_active,
+        },
+        "books": books,
+        "totals": {
+            "books":               len(books),
+            "illustrated_pages":   sum(b["illustrated"] for b in books),
+            "narrated_pages":      sum(b["narrated"] for b in books),
+            "llm_cost":            round(total_llm,  4),
+            "illustration_cost":   round(total_ilus, 4),
+            "audio_cost":          round(total_aud,  4),
+            "total_cost":          grand,
+        },
     }
