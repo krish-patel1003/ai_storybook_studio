@@ -330,7 +330,7 @@ export default function LibraryPage() {
   }
 
   function previewBook(book: BookSummaryOut) {
-    loadAndGo(book, "/reader", setPreviewLoadingId);
+    loadAndGo(book, "/reader?from=library", setPreviewLoadingId);
   }
 
   async function toggleVisibility(book: BookSummaryOut) {

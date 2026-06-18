@@ -4,7 +4,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { forwardRef, useRef, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type, BookOpen } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { pageImageUrl } from "@/lib/api";
@@ -504,6 +504,7 @@ function ReaderInner() {
 
   // Resolve where the back button should go
   const fromParam = searchParams.get("from");
+  const validFrom = fromParam === "editor" || fromParam === "library";
   const backHref = fromParam === "editor" ? "/editor" : "/library";
   const backLabel = fromParam === "editor" ? "Editor" : "Library";
   const bookRef = useRef<HTMLFlipBookRef>(null);
@@ -528,7 +529,26 @@ function ReaderInner() {
   const fontSize   = FONT_SIZES.find((s) => s.id === fontSizeId)?.rem ?? 1.8;
   const penName = user?.pen_name ?? "";
 
-  if (!book) return null;
+  // Opened directly (not via editor Preview or library) → show empty state
+  if (!validFrom || !book) {
+    return (
+      <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-6 px-6 text-center">
+        <div className="grid h-20 w-20 place-items-center rounded-3xl bg-card chunky-border chunky-shadow">
+          <BookOpen className="h-9 w-9 text-muted-foreground" strokeWidth={1.5} />
+        </div>
+        <div>
+          <h1 className="font-display text-3xl font-black">No book selected</h1>
+          <p className="mt-2 text-muted-foreground">Head to your library to pick a book to read.</p>
+        </div>
+        <Link
+          href="/library"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+        >
+          Go to Library
+        </Link>
+      </main>
+    );
+  }
 
   function goNext() { bookRef.current?.pageFlip().flipNext(); }
   function goPrev() { bookRef.current?.pageFlip().flipPrev(); }

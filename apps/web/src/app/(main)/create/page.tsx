@@ -1194,6 +1194,7 @@ export default function CreatePage() {
   };
 
   const writingMessage = useWritingMessages(activeBrief);
+  const writingTimer = useElapsedTimer(flowState === "writing");
   const expandMessage = useCyclingMessage(EXPAND_MSGS);
   const briefMessage = useCyclingMessage(BRIEF_MSGS);
 
@@ -1540,6 +1541,7 @@ export default function CreatePage() {
                             {writingMessage}
                           </motion.p>
                         </AnimatePresence>
+                        <p className="mt-3 font-mono text-2xl font-black tabular-nums tracking-tight">{writingTimer}</p>
                       </div>
                       {activeBrief && (
                         <div className="rounded-2xl bg-card px-4 py-3 chunky-border text-left w-full">
