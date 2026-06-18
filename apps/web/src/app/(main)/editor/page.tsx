@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useReducer } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -10,10 +10,7 @@ import {
   ImageIcon,
   Check,
   ArrowLeft,
-  Play,
-  Zap,
   Clock,
-  SkipForward,
   Eye,
   Download,
   Link2,
@@ -22,6 +19,7 @@ import {
   Volume2,
   Mic,
   Expand,
+  Play,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -30,6 +28,113 @@ import { useRelativeTime } from "@/lib/use-relative-time";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
+
+// ── Module-level illustration job (survives Next.js client-side navigation) ───
+//
+// Fires all page illustration requests in parallel. Because this lives outside
+// any React component, ongoing requests keep running even if the user navigates
+// away. When they come back the component re-subscribes and sees the current
+// progress immediately.
+
+type PageIllustrationStatus = "idle" | "generating" | "done" | "error";
+
+interface IllustrationJob {
+  bookId: string;
+  total: number;
+  done: number;
+  sheetsGenerating: boolean;
+  started: number; // Date.now()
+  pageStatuses: Record<string, PageIllustrationStatus>;
+}
+
+let _job: IllustrationJob | null = null;
+// A stable ref to the latest updateBook function — replaced by each component mount.
+let _onPageDone: ((updated: BookOut) => void) | null = null;
+const _subs = new Set<() => void>();
+
+function _notifyJob() { _subs.forEach((fn) => fn()); }
+
+function useIllustrationJob(bookId: string | undefined): IllustrationJob | null {
+  const [, tick] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    _subs.add(tick);
+    return () => { _subs.delete(tick); };
+  }, []);
+  return _job?.bookId === bookId ? _job : null;
+}
+
+async function startIllustrationJob(
+  token: string,
+  book: BookOut,
+  onPageDone: (updated: BookOut) => void,
+) {
+  const bookId = book.id;
+  // Don't restart if already running for this book
+  if (_job?.bookId === bookId && _job.done < _job.total) return;
+
+  const pages = [...book.pages].sort((a, b) => a.order - b.order);
+
+  _job = {
+    bookId,
+    total: pages.length,
+    done: 0,
+    sheetsGenerating: false,
+    started: Date.now(),
+    pageStatuses: Object.fromEntries(pages.map((p) => [p.id, "idle" as PageIllustrationStatus])),
+  };
+  _onPageDone = onPageDone;
+  _notifyJob();
+
+  // Step 1: Auto-generate character sheets if none exist yet
+  const needsSheets =
+    book.characters.length > 0 &&
+    book.characters.every((c) => !c.has_reference_image);
+
+  if (needsSheets) {
+    _job.sheetsGenerating = true;
+    _notifyJob();
+    try {
+      await api.books.generateCharacterSheets(token, bookId);
+    } catch {
+      // Non-fatal — continue without sheets
+    }
+    if (_job?.bookId === bookId) {
+      _job.sheetsGenerating = false;
+      _notifyJob();
+    }
+  }
+
+  // Step 2: Fire all page illustrations in parallel
+  for (const p of pages) {
+    if (_job?.bookId === bookId) _job.pageStatuses[p.id] = "generating";
+  }
+  _notifyJob();
+
+  await Promise.all(
+    pages.map(async (page) => {
+      try {
+        const updated = await api.books.illustratePage(token, bookId, page.id);
+        if (_job?.bookId === bookId) {
+          _job.pageStatuses[page.id] = "done";
+          _job.done++;
+          _onPageDone?.(updated);
+          _notifyJob();
+        }
+      } catch {
+        if (_job?.bookId === bookId) {
+          _job.pageStatuses[page.id] = "error";
+          _job.done++;
+          _notifyJob();
+        }
+      }
+    }),
+  );
+
+  // Clear job after a short delay so the "done" state is visible
+  setTimeout(() => {
+    if (_job?.bookId === bookId) { _job = null; _notifyJob(); }
+  }, 5000);
+}
 
 const ILLUSTRATION_MSGS = [
   "Mixing the right colours…",
@@ -657,8 +762,6 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Mode = "one-by-one" | "all";
-type Concurrency = "sync" | "async";
 type PageStatus = "idle" | "generating" | "done" | "error";
 
 export default function EditorPage() {
@@ -667,13 +770,26 @@ export default function EditorPage() {
   const lastSaved = useRelativeTime(book?.updated_at);
 
   const [showExport, setShowExport] = useState(false);
-  const [mode, setMode] = useState<Mode>("one-by-one");
-  const [concurrency, setConcurrency] = useState<Concurrency>("sync");
-  const [pageStatuses, setPageStatuses] = useState<Record<string, PageStatus>>({});
   const [pageElapsed, setPageElapsed] = useState<Record<string, number>>({});
-  const [isRunning, setIsRunning] = useState(false);
-  const abortRef = useRef(false);
+  const [sheetsBusy, setSheetsBusy] = useState(false);
   const timer = useTimer();
+
+  // Subscribe to the module-level illustration job
+  const job = useIllustrationJob(book?.id);
+  const isRunning = !!job && job.done < job.total;
+
+  // Derive page statuses from the job (falls back to idle)
+  const pageStatuses: Record<string, PageStatus> = {};
+  if (job) {
+    for (const [id, s] of Object.entries(job.pageStatuses)) {
+      pageStatuses[id] = s as PageStatus;
+    }
+  }
+
+  // Keep _onPageDone ref pointing to latest updateBook
+  useEffect(() => {
+    _onPageDone = (updated: BookOut) => updateBook(updated);
+  }, [updateBook]);
 
   // Narration state
   const [narratingBook, setNarratingBook] = useState(false);
@@ -713,61 +829,27 @@ export default function EditorPage() {
     }
   }
 
-  function setStatus(pageId: string, status: PageStatus) {
-    setPageStatuses((prev) => ({ ...prev, [pageId]: status }));
-  }
-
-  async function generateOnePage(page: PageOut): Promise<boolean> {
-    if (!token || !book) return false;
-    setStatus(page.id, "generating");
-    startPageTimer(page.id);
-    try {
-      const updated = await api.books.illustratePage(token, book.id, page.id);
-      updateBook({ pages: updated.pages });
-      setStatus(page.id, "done");
-      return true;
-    } catch (e: any) {
-      setStatus(page.id, "error");
-      toast.error(`Page ${page.order} failed: ${e.message ?? "Unknown error"}`);
-      return false;
-    } finally {
-      stopPageTimer(page.id);
-    }
-  }
-
-  async function handleGenerateAll() {
-    if (!token || !book) return;
-    abortRef.current = false;
-    setIsRunning(true);
+  async function handleIllustrate() {
+    if (!token || !book || isRunning) return;
     timer.start();
-
-    const pages = [...book.pages].sort((a, b) => a.order - b.order);
-
-    try {
-      if (mode === "one-by-one" || concurrency === "sync") {
-        // Sequential — one at a time, show each as it comes back
-        for (const page of pages) {
-          if (abortRef.current) break;
-          await generateOnePage(page);
-        }
-      } else {
-        // Async — fire all simultaneously
-        await Promise.all(pages.map((page) => generateOnePage(page)));
-      }
-      toast.success("All illustrations complete!");
-    } finally {
-      timer.stop();
-      setIsRunning(false);
-    }
+    await startIllustrationJob(token, book, (updated) => {
+      updateBook(updated);
+    });
+    timer.stop();
+    toast.success("All illustrations complete!");
   }
 
   async function handleGenerateSingle(page: PageOut) {
-    if (isRunning) return;
-    await generateOnePage(page);
-  }
-
-  function handleStop() {
-    abortRef.current = true;
+    if (!token || !book || isRunning) return;
+    startPageTimer(page.id);
+    try {
+      const updated = await api.books.illustratePage(token, book.id, page.id);
+      updateBook(updated);
+    } catch (e: any) {
+      toast.error(`Page ${page.order} failed: ${e.message ?? "Unknown error"}`);
+    } finally {
+      stopPageTimer(page.id);
+    }
   }
 
   async function handleNarrate() {
@@ -819,18 +901,23 @@ export default function EditorPage() {
   const allPages = [...book.pages].sort((a, b) => a.order - b.order);
   const illustratedCount = allPages.filter((p) => p.has_image).length;
   const totalCount = allPages.length;
-  const generatingCount = Object.values(pageStatuses).filter((s) => s === "generating").length;
+  const allDone = illustratedCount === totalCount && totalCount > 0;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
       {showExport && (
         <ExportModal book={book as BookOut} token={token} onClose={() => setShowExport(false)} />
       )}
+
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <Link href="/outline" className="inline-flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Outline
+        {/* Top bar: back + actions */}
+        <div className="flex items-center justify-between mb-4">
+          <Link
+            href="/outline"
+            className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
+          >
+            <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back to outline
           </Link>
           <div className="flex items-center gap-2">
             {illustratedCount > 0 && (
@@ -839,7 +926,7 @@ export default function EditorPage() {
                 className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
               >
                 <Eye className="h-4 w-4" strokeWidth={2.5} />
-                Preview book
+                Preview
               </Link>
             )}
             <button
@@ -851,6 +938,8 @@ export default function EditorPage() {
             </button>
           </div>
         </div>
+
+        {/* Title + progress */}
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-4xl font-black md:text-5xl">Illustrations</h1>
@@ -867,97 +956,66 @@ export default function EditorPage() {
                   />
                 </div>
                 {lastSaved && (
-                  <span className="text-xs font-bold text-muted-foreground">
-                    Saved {lastSaved}
-                  </span>
+                  <span className="text-xs font-bold text-muted-foreground">Saved {lastSaved}</span>
                 )}
               </div>
             )}
           </div>
 
-          {/* Global timer */}
+          {/* Elapsed timer */}
           {(isRunning || timer.elapsed > 0) && (
             <div className="flex flex-col items-end gap-1 shrink-0">
               <div className="flex items-center gap-2 rounded-2xl bg-card px-4 py-2.5 chunky-border">
                 <Clock className={`h-4 w-4 ${isRunning ? "text-primary animate-pulse" : "text-muted-foreground"}`} />
                 <span className="font-display text-xl font-black tabular-nums">{timer.formatted}</span>
               </div>
-              {isRunning && generatingCount > 0 && (
-                <span className="text-xs font-bold text-muted-foreground">{generatingCount} in progress</span>
-              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
-        {/* Mode */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Mode</span>
-          <div className="flex rounded-xl overflow-hidden chunky-border">
-            {(["one-by-one", "all"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                disabled={isRunning}
-                className={`px-3 py-1.5 text-xs font-extrabold transition-colors ${
-                  mode === m ? "bg-primary text-primary-foreground" : "bg-background hover:bg-secondary"
-                }`}
-              >
-                {m === "one-by-one" ? (
-                  <span className="flex items-center gap-1"><SkipForward className="h-3.5 w-3.5" strokeWidth={2.5} /> One by one</span>
-                ) : (
-                  <span className="flex items-center gap-1"><Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} /> All pages</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Concurrency (only relevant for "all" mode) */}
-        {mode === "all" && (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Concurrency</span>
-            <div className="flex rounded-xl overflow-hidden chunky-border">
-              {(["sync", "async"] as Concurrency[]).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setConcurrency(c)}
-                  disabled={isRunning}
-                  className={`px-3 py-1.5 text-xs font-extrabold transition-colors ${
-                    concurrency === c ? "bg-primary text-primary-foreground" : "bg-background hover:bg-secondary"
-                  }`}
-                >
-                  {c === "sync" ? (
-                    <span className="flex items-center gap-1"><Play className="h-3.5 w-3.5" strokeWidth={2.5} /> Sequential</span>
-                  ) : (
-                    <span className="flex items-center gap-1"><Zap className="h-3.5 w-3.5" strokeWidth={2.5} /> Parallel</span>
-                  )}
-                </button>
-              ))}
+      {/* Illustrate CTA — the single action bar */}
+      <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card p-4 chunky-border">
+        <div className="flex-1 min-w-0">
+          {job?.sheetsGenerating ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+              <p className="text-sm font-extrabold">Generating character sheets for consistency…</p>
             </div>
-          </div>
-        )}
-
-        <div className="ml-auto flex gap-2">
-          {isRunning ? (
-            <button
-              onClick={handleStop}
-              className="inline-flex items-center gap-2 rounded-full bg-destructive px-4 py-2 text-sm font-extrabold text-white chunky-border"
-            >
-              Stop
-            </button>
+          ) : isRunning ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+              <p className="text-sm font-extrabold">
+                Illustrating {job?.done ?? 0} of {job?.total ?? totalCount} pages…
+                <span className="ml-1.5 font-semibold text-muted-foreground text-xs">You can switch tabs — it keeps going.</span>
+              </p>
+            </div>
+          ) : allDone ? (
+            <p className="text-sm font-extrabold text-primary">✓ All pages illustrated</p>
           ) : (
-            <button
-              onClick={handleGenerateAll}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
-            >
-              <Sparkles className="h-4 w-4" strokeWidth={3} />
-              {mode === "one-by-one" ? "Generate one by one" : concurrency === "sync" ? "Generate all (sequential)" : "Generate all (parallel)"}
-            </button>
+            <div>
+              <p className="text-sm font-extrabold">Illustrate your book</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image)
+                  ? "Character sheets will be generated automatically for consistency."
+                  : "All pages are illustrated in parallel — you can switch tabs freely."}
+              </p>
+            </div>
           )}
         </div>
+        <button
+          onClick={handleIllustrate}
+          disabled={isRunning}
+          className="shrink-0 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
+        >
+          {isRunning ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Illustrating…</>
+          ) : allDone ? (
+            <><Sparkles className="h-4 w-4" strokeWidth={3} /> Re-illustrate all</>
+          ) : (
+            <><Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate all</>
+          )}
+        </button>
       </div>
 
       {/* Narration bar — only shown once pages have text */}
@@ -1048,15 +1106,12 @@ export default function EditorPage() {
         </div>
       )}
 
-      {/* Character consistency warning */}
-      {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image) && (
+      {/* Character consistency note — sheets auto-generated on first Illustrate */}
+      {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image) && !isRunning && illustratedCount === 0 && (
         <div className="mb-4 flex items-center gap-3 rounded-2xl bg-highlight/60 px-4 py-3 chunky-border text-sm">
           <Sparkles className="h-4 w-4 shrink-0 text-foreground" strokeWidth={2.5} />
-          <span className="font-bold">Character sheets not generated.</span>
-          <span className="text-muted-foreground">Illustrations may lack character consistency.</span>
-          <Link href="/outline" className="ml-auto shrink-0 text-xs font-extrabold underline underline-offset-2">
-            Generate sheets →
-          </Link>
+          <span className="font-bold">Character sheets will be auto-generated</span>
+          <span className="text-muted-foreground">when you hit Illustrate — for visual consistency.</span>
         </div>
       )}
 
