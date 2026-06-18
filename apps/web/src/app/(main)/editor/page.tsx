@@ -952,6 +952,19 @@ export default function EditorPage() {
         </div>
       </div>
 
+      {/* Original prompt — collapsible */}
+      {book.raw_prompt && (
+        <details className="group mb-4">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-extrabold text-muted-foreground hover:text-foreground transition-colors w-fit">
+            <span className="transition-transform group-open:rotate-90">›</span>
+            Your original idea
+          </summary>
+          <div className="mt-2 rounded-2xl bg-card px-4 py-3 chunky-border">
+            <p className="text-sm italic text-foreground/70 leading-relaxed">"{book.raw_prompt}"</p>
+          </div>
+        </details>
+      )}
+
       {/* Illustrate CTA — the single action bar */}
       <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card p-4 chunky-border">
         <div className="flex-1 min-w-0">

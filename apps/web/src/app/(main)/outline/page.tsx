@@ -583,6 +583,12 @@ export default function OutlinePage() {
                   </span>
                 ))}
               </div>
+              {book.raw_prompt && (
+                <div className="mt-3 border-t border-foreground/10 pt-3">
+                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Your original idea</p>
+                  <p className="text-sm text-foreground/70 italic leading-relaxed">"{book.raw_prompt}"</p>
+                </div>
+              )}
             </div>
           )}
 
