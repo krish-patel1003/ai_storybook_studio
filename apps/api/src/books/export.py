@@ -287,25 +287,33 @@ def _build_pdf_sync(
             text_zone_top = PAGE_H - text_zone_h
 
             if page.text:
-                pdf.set_font("StoryBold", "", FONT_SIZE)
                 pdf.set_text_color(30, 28, 45)
 
-                # Measure how tall the wrapped block will be
-                cell_w = PAGE_W - MARGIN * 2
-                # fpdf2 get_string_width works per line; use multi_cell height trick
-                pdf.set_xy(MARGIN, 0)
-                lines = pdf.multi_cell(
-                    cell_w, LINE_H, page.text, align="C", dry_run=True, output="LINES"
-                )
-                block_h = len(lines) * LINE_H
+                cell_w  = PAGE_W - MARGIN * 2
+                available = text_zone_h - MARGIN * 1.5   # breathing room top + bottom
+
+                # Scale font down until the wrapped block fits the text zone.
+                # Preserves the LINE_H / FONT_SIZE ratio to keep leading consistent.
+                _LINE_RATIO = LINE_H / FONT_SIZE          # mm per line per pt
+                font_size = float(FONT_SIZE)
+                line_h    = LINE_H
+
+                while font_size >= 8.5:
+                    pdf.set_font("StoryBold", "", font_size)
+                    lines   = pdf.multi_cell(cell_w, line_h, page.text, align="C",
+                                             dry_run=True, output="LINES")
+                    block_h = len(lines) * line_h
+                    if block_h <= available:
+                        break
+                    font_size -= 0.5
+                    line_h    = _LINE_RATIO * font_size
 
                 # Vertically centre within the text zone (with a small top bias)
-                available = text_zone_h - MARGIN
-                top_offset = max(0, (available - block_h) / 2)
+                top_offset = max(0.0, (available - block_h) / 2)
                 text_y = text_zone_top + top_offset + MARGIN * 0.5
 
                 pdf.set_xy(MARGIN, text_y)
-                pdf.multi_cell(cell_w, LINE_H, page.text, align="C")
+                pdf.multi_cell(cell_w, line_h, page.text, align="C")
 
             # Page number
             pdf.set_xy(0, PAGE_H - MARGIN + 2)

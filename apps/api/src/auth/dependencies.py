@@ -1,8 +1,9 @@
-from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.exceptions import AccountInactive, InvalidCredentials, UserNotFound
@@ -11,6 +12,8 @@ from src.auth.utils import decode_access_token
 from src.database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+_SEEN_THROTTLE = timedelta(minutes=5)
 
 
 async def parse_jwt_data(
@@ -28,4 +31,17 @@ async def current_user(
         raise UserNotFound()
     if not user.is_active:
         raise AccountInactive()
+
+    # Stamp last_seen_at at most once every 5 minutes to avoid excessive writes
+    now = datetime.now(UTC)
+    ls = user.last_seen_at
+    if ls is not None and ls.tzinfo is None:
+        ls = ls.replace(tzinfo=UTC)
+    if ls is None or (now - ls) > _SEEN_THROTTLE:
+        await db.execute(
+            update(User).where(User.id == user.id).values(last_seen_at=now)
+        )
+        await db.commit()
+        user.last_seen_at = now
+
     return user

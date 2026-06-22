@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Users, BookOpen, ImageIcon, Mic, TrendingUp,
   LogOut, RefreshCw, CheckCircle, Chrome, Shield,
-  BarChart2, Clock, Loader2, DollarSign, X,
+  BarChart2, Clock, Loader2, DollarSign, X, Activity, AlertCircle,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -13,14 +13,18 @@ const CRED_KEY = "sb_admin_creds";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Stats {
-  users: { total: number; verified: number; google: number; today: number; week: number; month: number };
+  users: {
+    total: number; verified: number; google: number;
+    today: number; week: number; month: number;
+    active_today: number; active_week: number; active_month: number;
+  };
   books: { total: number; complete: number; today: number; week: number; month: number };
   pages: { total: number; illustrated: number; narrated: number };
   art_styles: { style: string; count: number }[];
   age_ranges: { range: string; count: number }[];
   models_used: { model: string; count: number }[];
   books_per_day: { day: string; count: number }[];
-  recent_users: { id: string; email: string; pen_name: string; joined: string; verified: boolean; google: boolean }[];
+  recent_users: { id: string; email: string; pen_name: string; joined: string; last_seen: string | null; verified: boolean; google: boolean }[];
   recent_books: { title: string; prompt: string; stage: string; style: string; pages: number; created: string }[];
 }
 
@@ -39,7 +43,7 @@ interface Costs {
 }
 
 interface UserSummary {
-  id: string; email: string; pen_name: string; joined: string;
+  id: string; email: string; pen_name: string; joined: string; last_seen: string | null;
   verified: boolean; google: boolean; books: number;
   illustrated_pages: number; narrated_pages: number;
   cost: CostBreakdown;
@@ -52,7 +56,7 @@ interface UserDetailBook {
 }
 
 interface UserDetailData {
-  user: { id: string; email: string; pen_name: string; joined: string; verified: boolean; google: boolean; active: boolean };
+  user: { id: string; email: string; pen_name: string; joined: string; last_seen: string | null; verified: boolean; google: boolean; active: boolean };
   books: UserDetailBook[];
   totals: {
     books: number; illustrated_pages: number; narrated_pages: number;
@@ -205,6 +209,11 @@ function UserDetailPanel({
                     <span className="text-[10px] font-bold rounded-full bg-red-100 text-red-700 px-1.5 py-0.5">Suspended</span>
                   )}
                   <span className="text-xs text-muted-foreground">Joined {timeAgo(detail.user.joined)}</span>
+                  {detail.user.last_seen && (
+                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-0.5">
+                      <Activity className="h-3 w-3" strokeWidth={2} />Active {timeAgo(detail.user.last_seen)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -363,7 +372,9 @@ export default function AdminDashboard() {
   const [creds, setCreds] = useState<{ user: string; pass: string } | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [costs, setCosts] = useState<Costs | null>(null);
+  const [costsError, setCostsError] = useState(false);
   const [userList, setUserList] = useState<{ users: UserSummary[]; total: number } | null>(null);
+  const [usersError, setUsersError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -377,6 +388,8 @@ export default function AdminDashboard() {
 
   const fetchAll = useCallback(async (u: string, p: string) => {
     setLoading(true);
+    setCostsError(false);
+    setUsersError(false);
     const auth = `Basic ${btoa(`${u}:${p}`)}`;
     try {
       const [statsRes, costsRes, usersRes] = await Promise.all([
@@ -385,14 +398,17 @@ export default function AdminDashboard() {
         fetch(`${API}/admin/users`,  { headers: { Authorization: auth } }),
       ]);
       if (!statsRes.ok) { setCreds(null); localStorage.removeItem(CRED_KEY); return; }
-      const [statsData, costsData, usersData] = await Promise.all([
-        statsRes.json(),
-        costsRes.ok  ? costsRes.json()  : null,
-        usersRes.ok  ? usersRes.json()  : null,
-      ]);
-      setStats(statsData);
-      if (costsData) setCosts(costsData);
-      if (usersData) setUserList(usersData);
+      setStats(await statsRes.json());
+      if (costsRes.ok) {
+        setCosts(await costsRes.json());
+      } else {
+        setCostsError(true);
+      }
+      if (usersRes.ok) {
+        setUserList(await usersRes.json());
+      } else {
+        setUsersError(true);
+      }
       setLastRefresh(new Date());
     } finally {
       setLoading(false);
@@ -414,6 +430,8 @@ export default function AdminDashboard() {
     setStats(null);
     setCosts(null);
     setUserList(null);
+    setCostsError(false);
+    setUsersError(false);
     localStorage.removeItem(CRED_KEY);
   }
 
@@ -473,6 +491,44 @@ export default function AdminDashboard() {
               <StatCard icon={BookOpen}    label="Total Books"        value={stats.books.total}        sub={`+${stats.books.today} today`}   color="bg-primary" />
               <StatCard icon={ImageIcon}   label="Pages Illustrated"  value={stats.pages.illustrated}  sub={`${pct(stats.pages.illustrated, stats.pages.total)}% done`}  color="bg-purple-500" />
               <StatCard icon={Mic}         label="Pages Narrated"     value={stats.pages.narrated}     sub={`${pct(stats.pages.narrated, stats.pages.total)}% done`}     color="bg-pink-500" />
+            </div>
+          </section>
+
+          {/* ── Active users ── */}
+          <section>
+            <h2 className="font-display text-2xl font-black mb-1">Active Users</h2>
+            <p className="text-xs text-muted-foreground mb-4">Users who made an API request within the period (tracked via last_seen_at)</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-card p-5 chunky-border chunky-shadow-sm flex items-center gap-4">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500 chunky-border">
+                  <Activity className="h-5 w-5 text-white" strokeWidth={2.5} />
+                </span>
+                <div>
+                  <p className="font-display text-3xl font-black">{stats.users.active_today ?? 0}</p>
+                  <p className="text-sm font-extrabold">Active today</p>
+                  <p className="text-xs text-muted-foreground">{pct(stats.users.active_today ?? 0, stats.users.total)}% of all users</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-card p-5 chunky-border chunky-shadow-sm flex items-center gap-4">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal-500 chunky-border">
+                  <Activity className="h-5 w-5 text-white" strokeWidth={2.5} />
+                </span>
+                <div>
+                  <p className="font-display text-3xl font-black">{stats.users.active_week ?? 0}</p>
+                  <p className="text-sm font-extrabold">Active last 7 days</p>
+                  <p className="text-xs text-muted-foreground">{pct(stats.users.active_week ?? 0, stats.users.total)}% of all users</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-card p-5 chunky-border chunky-shadow-sm flex items-center gap-4">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-500 chunky-border">
+                  <Activity className="h-5 w-5 text-white" strokeWidth={2.5} />
+                </span>
+                <div>
+                  <p className="font-display text-3xl font-black">{stats.users.active_month ?? 0}</p>
+                  <p className="text-sm font-extrabold">Active last 30 days</p>
+                  <p className="text-xs text-muted-foreground">{pct(stats.users.active_month ?? 0, stats.users.total)}% of all users</p>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -547,6 +603,12 @@ export default function AdminDashboard() {
           </div>
 
           {/* ── Cost analytics ── */}
+          {costsError && (
+            <div className="flex items-center gap-3 rounded-2xl border-2 border-orange-300 bg-orange-50 px-5 py-4 text-sm font-bold text-orange-800">
+              <AlertCircle className="h-5 w-5 shrink-0" strokeWidth={2.5} />
+              Cost analytics endpoint not found — deploy the latest backend to enable it.
+            </div>
+          )}
           {costs && (
             <section>
               <h2 className="font-display text-2xl font-black mb-1">Cost Analytics</h2>
@@ -614,9 +676,13 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       {u.google && <span title="Google" className="text-[10px] font-bold rounded-full bg-orange-100 text-orange-700 px-1.5 py-0.5">G</span>}
                       {u.verified && <CheckCircle className="h-3.5 w-3.5 text-green-500" strokeWidth={2.5} />}
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                        <Clock className="h-3 w-3" strokeWidth={2} />{timeAgo(u.joined)}
-                      </span>
+                      {u.last_seen
+                        ? <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
+                            <Activity className="h-3 w-3" strokeWidth={2} />{timeAgo(u.last_seen)}
+                          </span>
+                        : <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <Clock className="h-3 w-3" strokeWidth={2} />{timeAgo(u.joined)}
+                          </span>}
                       <button
                         onClick={() => setSelectedUserId(u.id)}
                         className="rounded-full bg-card border border-foreground/20 px-2 py-0.5 text-[10px] font-bold hover:bg-muted transition-colors ml-1"
@@ -658,6 +724,12 @@ export default function AdminDashboard() {
           </div>
 
           {/* ── All users ── */}
+          {usersError && (
+            <div className="flex items-center gap-3 rounded-2xl border-2 border-orange-300 bg-orange-50 px-5 py-4 text-sm font-bold text-orange-800">
+              <AlertCircle className="h-5 w-5 shrink-0" strokeWidth={2.5} />
+              Users list endpoint not found — deploy the latest backend to enable it.
+            </div>
+          )}
           {userList && (
             <section>
               <h2 className="font-display text-2xl font-black mb-4">
@@ -673,6 +745,7 @@ export default function AdminDashboard() {
                         <th className="text-right px-5 py-3">Illustrated</th>
                         <th className="text-right px-5 py-3">Narrated</th>
                         <th className="text-right px-5 py-3">Est. Spend</th>
+                        <th className="text-right px-5 py-3">Last seen</th>
                         <th className="text-right px-5 py-3">Joined</th>
                         <th className="px-5 py-3" />
                       </tr>
@@ -697,6 +770,11 @@ export default function AdminDashboard() {
                           <td className="px-5 py-3 text-right text-muted-foreground">{u.illustrated_pages}</td>
                           <td className="px-5 py-3 text-right text-muted-foreground">{u.narrated_pages}</td>
                           <td className="px-5 py-3 text-right font-bold text-primary">{fmtCost(u.cost.total)}</td>
+                          <td className="px-5 py-3 text-right text-xs">
+                            {u.last_seen
+                              ? <span className="text-emerald-600 font-bold">{timeAgo(u.last_seen)}</span>
+                              : <span className="text-muted-foreground">—</span>}
+                          </td>
                           <td className="px-5 py-3 text-right text-xs text-muted-foreground">{timeAgo(u.joined)}</td>
                           <td className="px-5 py-3 text-right">
                             <button
@@ -710,7 +788,7 @@ export default function AdminDashboard() {
                       ))}
                       {userList.users.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted-foreground">No users yet</td>
+                          <td colSpan={8} className="px-5 py-8 text-center text-sm text-muted-foreground">No users yet</td>
                         </tr>
                       )}
                     </tbody>

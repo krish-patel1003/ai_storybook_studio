@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, cast, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -85,63 +85,72 @@ async def get_stats(
     month_start = _since(30)
 
     # ── Users ────────────────────────────────────────────────────────────────
-    total_users      = await db.scalar(select(func.count(User.id))) or 0
-    verified_users   = await db.scalar(select(func.count(User.id)).where(User.is_email_verified.is_(True))) or 0
-    google_users     = await db.scalar(select(func.count(User.id)).where(User.google_id.isnot(None))) or 0
-    users_today      = await db.scalar(select(func.count(User.id)).where(User.created_at >= today_start)) or 0
-    users_week       = await db.scalar(select(func.count(User.id)).where(User.created_at >= week_start)) or 0
-    users_month      = await db.scalar(select(func.count(User.id)).where(User.created_at >= month_start)) or 0
+    total_users    = await db.scalar(select(func.count(User.id))) or 0
+    verified_users = await db.scalar(select(func.count(User.id)).where(User.is_email_verified.is_(True))) or 0
+    google_users   = await db.scalar(select(func.count(User.id)).where(User.google_id.isnot(None))) or 0
+    users_today    = await db.scalar(select(func.count(User.id)).where(User.created_at >= today_start)) or 0
+    users_week     = await db.scalar(select(func.count(User.id)).where(User.created_at >= week_start)) or 0
+    users_month    = await db.scalar(select(func.count(User.id)).where(User.created_at >= month_start)) or 0
+
+    # ── Active users (last_seen_at — real sessions) ───────────────────────────
+    active_today = await db.scalar(
+        select(func.count(User.id)).where(User.last_seen_at >= today_start)
+    ) or 0
+    active_week = await db.scalar(
+        select(func.count(User.id)).where(User.last_seen_at >= week_start)
+    ) or 0
+    active_month = await db.scalar(
+        select(func.count(User.id)).where(User.last_seen_at >= month_start)
+    ) or 0
 
     # ── Books ────────────────────────────────────────────────────────────────
-    total_books      = await db.scalar(select(func.count(Book.id))) or 0
-    complete_books   = await db.scalar(select(func.count(Book.id)).where(Book.stage == "complete")) or 0
-    books_today      = await db.scalar(select(func.count(Book.id)).where(Book.created_at >= today_start)) or 0
-    books_week       = await db.scalar(select(func.count(Book.id)).where(Book.created_at >= week_start)) or 0
-    books_month      = await db.scalar(select(func.count(Book.id)).where(Book.created_at >= month_start)) or 0
+    total_books    = await db.scalar(select(func.count(Book.id))) or 0
+    complete_books = await db.scalar(select(func.count(Book.id)).where(Book.stage == "complete")) or 0
+    books_today    = await db.scalar(select(func.count(Book.id)).where(Book.created_at >= today_start)) or 0
+    books_week     = await db.scalar(select(func.count(Book.id)).where(Book.created_at >= week_start)) or 0
+    books_month    = await db.scalar(select(func.count(Book.id)).where(Book.created_at >= month_start)) or 0
 
     # ── Pages ────────────────────────────────────────────────────────────────
-    total_pages      = await db.scalar(select(func.count(Page.id))) or 0
-    illustrated      = await db.scalar(select(func.count(Page.id)).where(Page.image_key.isnot(None))) or 0
-    narrated         = await db.scalar(select(func.count(Page.id)).where(Page.audio_key.isnot(None))) or 0
+    total_pages = await db.scalar(select(func.count(Page.id))) or 0
+    illustrated = await db.scalar(select(func.count(Page.id)).where(Page.image_key.isnot(None))) or 0
+    narrated    = await db.scalar(select(func.count(Page.id)).where(Page.audio_key.isnot(None))) or 0
 
     # ── Art style breakdown ───────────────────────────────────────────────────
     style_rows = (await db.execute(
         select(Book.art_style, func.count(Book.id).label("n"))
-        .group_by(Book.art_style)
-        .order_by(func.count(Book.id).desc())
+        .group_by(Book.art_style).order_by(func.count(Book.id).desc())
     )).all()
     art_styles = [{"style": r.art_style, "count": r.n} for r in style_rows]
 
     # ── Age range breakdown ───────────────────────────────────────────────────
     age_rows = (await db.execute(
         select(Book.age_range, func.count(Book.id).label("n"))
-        .group_by(Book.age_range)
-        .order_by(func.count(Book.id).desc())
+        .group_by(Book.age_range).order_by(func.count(Book.id).desc())
     )).all()
     age_ranges = [{"range": r.age_range, "count": r.n} for r in age_rows]
 
     # ── Model usage ───────────────────────────────────────────────────────────
     model_rows = (await db.execute(
         select(Book.model_name, func.count(Book.id).label("n"))
-        .group_by(Book.model_name)
-        .order_by(func.count(Book.id).desc())
+        .group_by(Book.model_name).order_by(func.count(Book.id).desc())
     )).all()
     models_used = [{"model": r.model_name, "count": r.n} for r in model_rows]
 
     # ── Recent signups ────────────────────────────────────────────────────────
     recent_user_rows = (await db.execute(
-        select(User.id, User.email, User.pen_name, User.created_at, User.is_email_verified, User.google_id)
-        .order_by(User.created_at.desc())
-        .limit(10)
+        select(User.id, User.email, User.pen_name, User.created_at,
+               User.is_email_verified, User.google_id, User.last_seen_at)
+        .order_by(User.created_at.desc()).limit(10)
     )).all()
     recent_users = [
         {
-            "id": str(r.id),
-            "email": r.email,
-            "pen_name": r.pen_name,
-            "joined": r.created_at.isoformat(),
-            "verified": r.is_email_verified,
-            "google": r.google_id is not None,
+            "id":         str(r.id),
+            "email":      r.email,
+            "pen_name":   r.pen_name,
+            "joined":     r.created_at.isoformat(),
+            "last_seen":  r.last_seen_at.isoformat() if r.last_seen_at else None,
+            "verified":   r.is_email_verified,
+            "google":     r.google_id is not None,
         }
         for r in recent_user_rows
     ]
@@ -149,16 +158,15 @@ async def get_stats(
     # ── Recent books ──────────────────────────────────────────────────────────
     recent_book_rows = (await db.execute(
         select(Book.title, Book.raw_prompt, Book.stage, Book.art_style, Book.page_count, Book.created_at)
-        .order_by(Book.created_at.desc())
-        .limit(10)
+        .order_by(Book.created_at.desc()).limit(10)
     )).all()
     recent_books = [
         {
-            "title": r.title,
-            "prompt": r.raw_prompt[:80] + ("…" if len(r.raw_prompt) > 80 else ""),
-            "stage": r.stage,
-            "style": r.art_style,
-            "pages": r.page_count,
+            "title":   r.title,
+            "prompt":  r.raw_prompt[:80] + ("…" if len(r.raw_prompt) > 80 else ""),
+            "stage":   r.stage,
+            "style":   r.art_style,
+            "pages":   r.page_count,
             "created": r.created_at.isoformat(),
         }
         for r in recent_book_rows
@@ -176,31 +184,34 @@ async def get_stats(
 
     return {
         "users": {
-            "total": total_users,
+            "total":    total_users,
             "verified": verified_users,
-            "google": google_users,
-            "today": users_today,
-            "week": users_week,
-            "month": users_month,
+            "google":   google_users,
+            "today":    users_today,
+            "week":     users_week,
+            "month":    users_month,
+            "active_today":  active_today,
+            "active_week":   active_week,
+            "active_month":  active_month,
         },
         "books": {
-            "total": total_books,
+            "total":    total_books,
             "complete": complete_books,
-            "today": books_today,
-            "week": books_week,
-            "month": books_month,
+            "today":    books_today,
+            "week":     books_week,
+            "month":    books_month,
         },
         "pages": {
-            "total": total_pages,
+            "total":       total_pages,
             "illustrated": illustrated,
-            "narrated": narrated,
+            "narrated":    narrated,
         },
-        "art_styles": art_styles,
-        "age_ranges": age_ranges,
-        "models_used": models_used,
+        "art_styles":    art_styles,
+        "age_ranges":    age_ranges,
+        "models_used":   models_used,
         "books_per_day": books_per_day,
-        "recent_users": recent_users,
-        "recent_books": recent_books,
+        "recent_users":  recent_users,
+        "recent_books":  recent_books,
     }
 
 
@@ -213,7 +224,7 @@ async def get_costs(
     rows = (await db.execute(
         select(
             Book.model_name,
-            func.count(func.distinct(Book.id)).label("books"),
+            func.count(distinct(Book.id)).label("books"),
             func.count(Page.id).filter(Page.image_key.isnot(None)).label("illustrated"),
             func.count(Page.id).filter(Page.audio_key.isnot(None)).label("narrated"),
         )
@@ -221,10 +232,10 @@ async def get_costs(
         .group_by(Book.model_name)
     )).all()
 
-    by_model = []
-    total_llm   = 0.0
-    total_ilus  = 0.0
-    total_aud   = 0.0
+    by_model   = []
+    total_llm  = 0.0
+    total_ilus = 0.0
+    total_aud  = 0.0
     total_books = 0
 
     for r in rows:
@@ -256,9 +267,9 @@ async def get_costs(
             "audio":         round(total_aud,  4),
             "total":         grand_total,
         },
-        "by_model":      by_model,
-        "avg_per_book":  avg_per_book,
-        "total_books":   total_books,
+        "by_model":     by_model,
+        "avg_per_book": avg_per_book,
+        "total_books":  total_books,
     }
 
 
@@ -271,8 +282,8 @@ async def list_users(
     user_rows = (await db.execute(
         select(
             User.id, User.email, User.pen_name, User.created_at,
-            User.is_email_verified, User.google_id,
-            func.count(func.distinct(Book.id)).label("book_count"),
+            User.is_email_verified, User.google_id, User.last_seen_at,
+            func.count(distinct(Book.id)).label("book_count"),
             func.count(Page.id).filter(Page.image_key.isnot(None)).label("illustrated"),
             func.count(Page.id).filter(Page.audio_key.isnot(None)).label("narrated"),
         )
@@ -304,6 +315,7 @@ async def list_users(
             "email":             r.email,
             "pen_name":          r.pen_name,
             "joined":            r.created_at.isoformat(),
+            "last_seen":         r.last_seen_at.isoformat() if r.last_seen_at else None,
             "verified":          r.is_email_verified,
             "google":            r.google_id is not None,
             "books":             r.book_count,
@@ -344,10 +356,10 @@ async def get_user(
         .order_by(Book.created_at.desc())
     )).all()
 
-    books       = []
-    total_llm   = 0.0
-    total_ilus  = 0.0
-    total_aud   = 0.0
+    books      = []
+    total_llm  = 0.0
+    total_ilus = 0.0
+    total_aud  = 0.0
 
     for r in book_rows:
         cost = _compute_cost(r.model_name, r.illustrated, r.narrated)
@@ -356,15 +368,15 @@ async def get_user(
         total_aud  += cost["audio"]
         prompt = r.raw_prompt
         books.append({
-            "id":         str(r.id),
-            "title":      r.title,
-            "prompt":     prompt[:60] + ("…" if len(prompt) > 60 else ""),
-            "model":      r.model_name,
-            "page_count": r.page_count,
-            "art_style":  r.art_style,
-            "age_range":  r.age_range,
-            "stage":      r.stage,
-            "created":    r.created_at.isoformat(),
+            "id":          str(r.id),
+            "title":       r.title,
+            "prompt":      prompt[:60] + ("…" if len(prompt) > 60 else ""),
+            "model":       r.model_name,
+            "page_count":  r.page_count,
+            "art_style":   r.art_style,
+            "age_range":   r.age_range,
+            "stage":       r.stage,
+            "created":     r.created_at.isoformat(),
             "illustrated": r.illustrated,
             "narrated":    r.narrated,
             "cost":        cost,
@@ -374,22 +386,23 @@ async def get_user(
 
     return {
         "user": {
-            "id":       str(user.id),
-            "email":    user.email,
-            "pen_name": user.pen_name,
-            "joined":   user.created_at.isoformat(),
-            "verified": user.is_email_verified,
-            "google":   user.google_id is not None,
-            "active":   user.is_active,
+            "id":        str(user.id),
+            "email":     user.email,
+            "pen_name":  user.pen_name,
+            "joined":    user.created_at.isoformat(),
+            "last_seen": user.last_seen_at.isoformat() if user.last_seen_at else None,
+            "verified":  user.is_email_verified,
+            "google":    user.google_id is not None,
+            "active":    user.is_active,
         },
         "books": books,
         "totals": {
-            "books":               len(books),
-            "illustrated_pages":   sum(b["illustrated"] for b in books),
-            "narrated_pages":      sum(b["narrated"] for b in books),
-            "llm_cost":            round(total_llm,  4),
-            "illustration_cost":   round(total_ilus, 4),
-            "audio_cost":          round(total_aud,  4),
-            "total_cost":          grand,
+            "books":             len(books),
+            "illustrated_pages": sum(b["illustrated"] for b in books),
+            "narrated_pages":    sum(b["narrated"] for b in books),
+            "llm_cost":          round(total_llm,  4),
+            "illustration_cost": round(total_ilus, 4),
+            "audio_cost":        round(total_aud,  4),
+            "total_cost":        grand,
         },
     }
