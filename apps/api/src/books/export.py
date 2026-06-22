@@ -287,33 +287,44 @@ def _build_pdf_sync(
             text_zone_top = PAGE_H - text_zone_h
 
             if page.text:
+                import re as _re
                 pdf.set_text_color(30, 28, 45)
 
-                cell_w  = PAGE_W - MARGIN * 2
-                available = text_zone_h - MARGIN * 1.5   # breathing room top + bottom
+                cell_w = PAGE_W - MARGIN * 2
+                # Collapse multi-paragraph gaps: \n\n wastes a full line_h per gap
+                display_text = _re.sub(r'\n{2,}', '\n', page.text.strip())
 
-                # Scale font down until the wrapped block fits the text zone.
-                # Preserves the LINE_H / FONT_SIZE ratio to keep leading consistent.
-                _LINE_RATIO = LINE_H / FONT_SIZE          # mm per line per pt
-                font_size = float(FONT_SIZE)
-                line_h    = LINE_H
+                # Space from text_zone_top to page bottom, minus a small top bias
+                available = text_zone_h - MARGIN
 
-                while font_size >= 8.5:
+                # Shrink font until block fits; keep font_size and line_h in sync
+                _LINE_RATIO = LINE_H / FONT_SIZE
+                font_size   = float(FONT_SIZE)
+                line_h      = LINE_H
+                lines: list[str] = []
+
+                for _attempt in range(200):          # max 200 half-point steps
                     pdf.set_font("StoryBold", "", font_size)
-                    lines   = pdf.multi_cell(cell_w, line_h, page.text, align="C",
-                                             dry_run=True, output="LINES")
+                    lines   = pdf.multi_cell(cell_w, line_h, display_text,
+                                             align="C", dry_run=True, output="LINES")
                     block_h = len(lines) * line_h
-                    if block_h <= available:
+                    if block_h <= available or font_size <= 8.5:
                         break
                     font_size -= 0.5
                     line_h    = _LINE_RATIO * font_size
 
-                # Vertically centre within the text zone (with a small top bias)
+                # Hard cap: if still overflowing at minimum size, clip lines
+                max_lines = max(1, int(available / line_h))
+                if len(lines) > max_lines:
+                    lines = lines[:max_lines]
+                block_h = len(lines) * line_h
+
+                # Vertically centre within text zone
                 top_offset = max(0.0, (available - block_h) / 2)
                 text_y = text_zone_top + top_offset + MARGIN * 0.5
 
                 pdf.set_xy(MARGIN, text_y)
-                pdf.multi_cell(cell_w, line_h, page.text, align="C")
+                pdf.multi_cell(cell_w, line_h, "\n".join(lines), align="C")
 
             # Page number
             pdf.set_xy(0, PAGE_H - MARGIN + 2)
