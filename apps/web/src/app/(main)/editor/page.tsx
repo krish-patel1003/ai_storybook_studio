@@ -1081,25 +1081,21 @@ export default function EditorPage() {
               <div>
                 <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Preview</p>
                 <div className="relative w-20 h-28 rounded-xl bg-muted chunky-border overflow-hidden">
-                  {/* image placeholder */}
                   <div className="absolute inset-0 bg-gradient-to-br from-muted-foreground/10 to-muted-foreground/20" />
-                  {/* text block positioned */}
                   <div className={`absolute inset-x-0 px-1.5 py-1 flex flex-col gap-0.5 ${
-                    textStylePosition === "top"    ? "top-0"                   :
+                    textStylePosition === "top"    ? "top-0"                    :
                     textStylePosition === "center" ? "top-1/2 -translate-y-1/2" :
                     "bottom-0"
+                  } ${
+                    textStyleAlign === "left"   ? "items-start"  :
+                    textStyleAlign === "right"  ? "items-end"    :
+                    "items-center"
                   }`}>
-                    {[100, 80, 90].map((w, i) => (
+                    {[85, 65, 75].map((w, i) => (
                       <div
                         key={i}
-                        className="h-1 rounded-full bg-foreground/40"
-                        style={{
-                          width: `${w}%`,
-                          marginLeft: textStyleAlign === "left"   ? 0 :
-                                      textStyleAlign === "right"  ? "auto" : "auto",
-                          marginRight: textStyleAlign === "right"  ? 0 :
-                                       textStyleAlign === "left"   ? "auto" : "auto",
-                        }}
+                        className="h-1 rounded-full bg-foreground/50"
+                        style={{ width: `${w}%` }}
                       />
                     ))}
                   </div>

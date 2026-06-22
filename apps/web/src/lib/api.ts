@@ -415,8 +415,8 @@ export const api = {
       request<BookOut>(`/books/${bookId}`, { headers: authed(token) }),
 
     bulkTextStyle: (token: string, bookId: string, data: BulkTextStyleIn) =>
-      request<BookOut>(`/books/${bookId}/text-style`, {
-        method: "PATCH",
+      request<BookOut>(`/books/${bookId}/pages/style`, {
+        method: "POST",
         headers: authed(token),
         body: JSON.stringify(data),
       }),
