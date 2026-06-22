@@ -392,7 +392,7 @@ async def update_kdp_fields(
     return _KDPOut(**current, is_cached=True)
 
 
-@router.patch("/{book_id}/pages/text-style", response_model=BookOut)
+@router.patch("/{book_id}/text-style", response_model=BookOut)
 async def bulk_text_style(
     data: BulkTextStyleIn,
     db: AsyncSession = Depends(get_db),
