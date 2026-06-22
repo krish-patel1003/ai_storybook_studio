@@ -19,6 +19,32 @@ const BookPage = forwardRef<
   HTMLDivElement,
   { page: PageOut; bookId: string }
 >(({ page, bookId }, ref) => {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const zoneRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = textRef.current;
+    const zone = zoneRef.current;
+    if (!el || !zone || !page.text) return;
+
+    const fit = () => {
+      if (zone.clientHeight === 0) return;
+      el.style.fontSize = "";          // reset to CSS default (text-sm = 14px)
+      let px = 14;
+      const minPx = 9;
+      while (el.scrollHeight > zone.clientHeight && px > minPx) {
+        px -= 0.5;
+        el.style.fontSize = `${px}px`;
+      }
+      el.style.overflow = el.scrollHeight > zone.clientHeight ? "hidden" : "";
+    };
+
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(zone);
+    return () => ro.disconnect();
+  }, [page.text]);
+
   return (
     <div ref={ref} className="relative overflow-hidden bg-card select-none" style={{ height: "100%" }}>
       {/* Illustration — top 68% */}
@@ -37,14 +63,14 @@ const BookPage = forwardRef<
         )}
       </div>
 
-      {/* Text — bottom 32% */}
-      <div className="absolute inset-x-0 bottom-0 overflow-hidden border-t-[2.5px] border-foreground bg-card px-4 py-3" style={{ height: "32%" }}>
+      {/* Text — bottom 32%, font auto-shrinks to fit */}
+      <div ref={zoneRef} className="absolute inset-x-0 bottom-0 overflow-hidden border-t-[2.5px] border-foreground bg-card px-4 py-3" style={{ height: "32%" }}>
         {page.is_cover ? (
           <h2 className="text-center font-display text-lg font-black leading-tight overflow-hidden">
             {page.text ?? ""}
           </h2>
         ) : (
-          <p className="font-display text-sm leading-relaxed overflow-hidden">
+          <p ref={textRef} className="font-display text-sm leading-relaxed">
             {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
           </p>
         )}

@@ -147,11 +147,13 @@ const StoryPage = forwardRef<
       if (!page.text || container.clientHeight === 0) return;
       el.style.fontSize = `${fontSize}rem`;
       let px = fontSize * 16;
-      const minPx = 11;
+      const minPx = 9;
       while (el.scrollHeight > container.clientHeight && px > minPx) {
         px -= 0.5;
         el.style.fontSize = `${px}px`;
       }
+      // Hard cap: if text still overflows at minimum size, clip it
+      el.style.overflow = el.scrollHeight > container.clientHeight ? "hidden" : "";
     };
 
     fit();
@@ -191,10 +193,10 @@ const StoryPage = forwardRef<
         }}
       />
 
-      {/* Text area — vertically centred in the bottom zone so text fills the space naturally */}
+      {/* Text area — bottom-anchored so very long text grows upward into the gradient rather than below the page */}
       <div
         ref={containerRef}
-        className="absolute inset-x-0 bottom-0 flex items-center justify-center overflow-hidden"
+        className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-end overflow-hidden"
         style={{ height: textZone, padding: "8px 28px 24px 28px" }}
       >
         {page.text ? (
