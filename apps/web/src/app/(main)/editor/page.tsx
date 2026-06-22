@@ -29,6 +29,7 @@ import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { useAuthImage } from "@/lib/use-auth-image";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
+import { READER_FONTS } from "@/lib/fonts";
 
 // ── Module-level illustration job (survives Next.js client-side navigation) ───
 //
@@ -665,11 +666,13 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
             <div className="rounded-2xl bg-background p-4 chunky-border">
               <p className="mb-2 text-sm font-extrabold">Story font</p>
               <div className="flex flex-wrap gap-2">
-                {exportFonts.map((f) => (
+                {exportFonts.map((f) => {
+                  const rf = READER_FONTS.find((r) => r.id === f.id);
+                  return (
                   <button
                     key={f.id}
                     onClick={() => setExportFont(f.id)}
-                    style={{ fontFamily: f.stack, fontWeight: f.weight }}
+                    style={rf ? { fontFamily: rf.stack, fontWeight: rf.weight } : undefined}
                     className={`rounded-full px-3 py-1.5 text-xs chunky-border transition-colors ${
                       exportFont === f.id
                         ? "bg-primary text-primary-foreground"
@@ -678,7 +681,8 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
                   >
                     {f.label}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
