@@ -20,10 +20,15 @@ import {
   Mic,
   Expand,
   Play,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  MoveVertical,
+  Shuffle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
+import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile, type TextAlign, type TextPosition } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { useAuthImage } from "@/lib/use-auth-image";
@@ -795,6 +800,31 @@ export default function EditorPage() {
     api.voices.list(token).then(setVoiceProfiles).catch(() => {});
   }, [token]);
 
+  // Text style state
+  const [textStyleAlign, setTextStyleAlign]       = useState<TextAlign>("center");
+  const [textStylePosition, setTextStylePosition] = useState<TextPosition>("bottom");
+  const [textStyleMode, setTextStyleMode]         = useState<"static" | "randomize">("static");
+  const [textStyleSaving, setTextStyleSaving]     = useState(false);
+
+  async function handleApplyTextStyle() {
+    if (!token || !book) return;
+    setTextStyleSaving(true);
+    try {
+      const updated = await api.books.bulkTextStyle(token, book.id, {
+        randomize: textStyleMode === "randomize",
+        ...(textStyleMode === "static"
+          ? { text_align: textStyleAlign, text_position: textStylePosition }
+          : {}),
+      });
+      updateBook(updated);
+      toast.success(textStyleMode === "randomize" ? "Text style randomized!" : "Text style applied to all pages!");
+    } catch {
+      toast.error("Failed to apply text style.");
+    } finally {
+      setTextStyleSaving(false);
+    }
+  }
+
   // Per-page timers
   const pageTimerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
@@ -968,6 +998,136 @@ export default function EditorPage() {
             <p className="text-sm italic text-foreground/70 leading-relaxed">"{book.raw_prompt}"</p>
           </div>
         </details>
+      )}
+
+      {/* Text Style Editor — Canva-like alignment + position picker */}
+      {allPages.some((p) => !p.is_cover) && (
+        <div className="mb-6 rounded-2xl bg-card p-5 chunky-border">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <MoveVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+            <h2 className="text-sm font-extrabold">Text Layout</h2>
+            <span className="text-xs text-muted-foreground">Set alignment and position for story text on all pages</span>
+          </div>
+
+          {/* Mode toggle */}
+          <div className="flex items-center gap-2 mb-5">
+            <button
+              onClick={() => setTextStyleMode("static")}
+              className={`rounded-full px-3 py-1.5 text-xs font-extrabold chunky-border transition-colors ${
+                textStyleMode === "static" ? "bg-primary text-primary-foreground" : "bg-background"
+              }`}
+            >
+              Same for all pages
+            </button>
+            <button
+              onClick={() => setTextStyleMode("randomize")}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold chunky-border transition-colors ${
+                textStyleMode === "randomize" ? "bg-primary text-primary-foreground" : "bg-background"
+              }`}
+            >
+              <Shuffle className="h-3 w-3" /> Randomize per page
+            </button>
+          </div>
+
+          {textStyleMode === "static" && (
+            <div className="flex flex-wrap gap-6 mb-5">
+              {/* Alignment */}
+              <div>
+                <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Alignment</p>
+                <div className="flex items-center gap-1.5">
+                  {([
+                    { val: "left"  as TextAlign, Icon: AlignLeft,   label: "Left"   },
+                    { val: "center" as TextAlign, Icon: AlignCenter, label: "Center" },
+                    { val: "right"  as TextAlign, Icon: AlignRight,  label: "Right"  },
+                  ] as const).map(({ val, Icon, label }) => (
+                    <button
+                      key={val}
+                      title={label}
+                      onClick={() => setTextStyleAlign(val)}
+                      className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold chunky-border transition-colors ${
+                        textStyleAlign === val ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Position */}
+              <div>
+                <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Position</p>
+                <div className="flex items-center gap-1.5">
+                  {([
+                    { val: "top"    as TextPosition, label: "Top"    },
+                    { val: "center" as TextPosition, label: "Middle" },
+                    { val: "bottom" as TextPosition, label: "Bottom" },
+                  ] as const).map(({ val, label }) => (
+                    <button
+                      key={val}
+                      onClick={() => setTextStylePosition(val)}
+                      className={`rounded-xl px-3 py-2 text-xs font-bold chunky-border transition-colors ${
+                        textStylePosition === val ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mini preview */}
+              <div>
+                <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Preview</p>
+                <div className="relative w-20 h-28 rounded-xl bg-muted chunky-border overflow-hidden">
+                  {/* image placeholder */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-muted-foreground/10 to-muted-foreground/20" />
+                  {/* text block positioned */}
+                  <div className={`absolute inset-x-0 px-1.5 py-1 flex flex-col gap-0.5 ${
+                    textStylePosition === "top"    ? "top-0"                   :
+                    textStylePosition === "center" ? "top-1/2 -translate-y-1/2" :
+                    "bottom-0"
+                  }`}>
+                    {[100, 80, 90].map((w, i) => (
+                      <div
+                        key={i}
+                        className="h-1 rounded-full bg-foreground/40"
+                        style={{
+                          width: `${w}%`,
+                          marginLeft: textStyleAlign === "left"   ? 0 :
+                                      textStyleAlign === "right"  ? "auto" : "auto",
+                          marginRight: textStyleAlign === "right"  ? 0 :
+                                       textStyleAlign === "left"   ? "auto" : "auto",
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {textStyleMode === "randomize" && (
+            <p className="text-xs text-muted-foreground mb-5">
+              Each story page will get a random alignment (left / center / right) and position (top / middle / bottom).
+            </p>
+          )}
+
+          <button
+            onClick={handleApplyTextStyle}
+            disabled={textStyleSaving}
+            className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-extrabold text-background chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
+          >
+            {textStyleSaving ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…</>
+            ) : textStyleMode === "randomize" ? (
+              <><Shuffle className="h-3.5 w-3.5" /> Randomize & apply</>
+            ) : (
+              <><Check className="h-3.5 w-3.5" /> Apply to all pages</>
+            )}
+          </button>
+        </div>
       )}
 
       {/* Illustrate CTA — the single action bar */}

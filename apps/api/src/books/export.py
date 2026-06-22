@@ -59,6 +59,8 @@ class ExportPage:
     text: str | None
     image_bytes: bytes | None  # None if not yet illustrated
     author: str = ""
+    text_align: str = "center"    # left | center | right
+    text_position: str = "bottom" # top | center | bottom
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
@@ -157,15 +159,16 @@ def _story_page_composite(
     w_mm: float,
     h_mm: float,
     text_zone_frac: float = 0.36,
+    text_position: str = "bottom",
     dpi: int = 150,
 ) -> bytes:
     """
     Crop/scale the image to fill the page, then composite a paper-white
-    gradient over the bottom portion (matching the reader's blend).
+    gradient behind the text zone (direction depends on text_position).
     Returns JPEG bytes.
     """
-    from PIL import Image as PILImage, ImageFilter
     import numpy as np
+    from PIL import Image as PILImage
 
     mm_per_inch = 25.4
     tw = int(w_mm * dpi / mm_per_inch)
@@ -176,7 +179,6 @@ def _story_page_composite(
         img = img.convert("RGB")
     iw, ih = img.size
 
-    # Cover-scale then centre-crop
     scale = max(tw / iw, th / ih)
     nw, nh = int(iw * scale), int(ih * scale)
     img = img.resize((nw, nh), PILImage.LANCZOS)
@@ -189,25 +191,37 @@ def _story_page_composite(
         bg.paste(img, mask=img.split()[3])
         img = bg
 
-    # Build gradient overlay — starts at gradient_top_frac, opaque at bottom
-    gradient_top_frac = text_zone_frac + 0.16   # gradient bleeds 16 pp above text
-    grad_start_y = int(th * (1.0 - gradient_top_frac))
-    grad_h = th - grad_start_y
-
-    # Create RGBA overlay of paper white with alpha ramp
-    overlay = PILImage.new("RGBA", (tw, th), (0, 0, 0, 0))
     paper = (250, 248, 243)
-    arr = np.zeros((th, tw, 4), dtype=np.uint8)
+    arr   = np.zeros((th, tw, 4), dtype=np.uint8)
+    bleed = 0.16   # gradient extends this far beyond the text zone edge
 
-    for row in range(grad_start_y, th):
-        t = (row - grad_start_y) / grad_h           # 0 → 1
-        alpha = int(min(255, t ** 1.6 * 300))        # ease-in curve, clamp 255
-        arr[row, :] = [paper[0], paper[1], paper[2], alpha]
+    if text_position == "top":
+        zone_end   = int(th * (text_zone_frac + bleed))
+        for row in range(0, zone_end):
+            t     = 1.0 - row / zone_end          # 1 at top → 0 at zone end
+            alpha = int(min(255, t ** 1.6 * 300))
+            arr[row, :] = [paper[0], paper[1], paper[2], alpha]
 
-    overlay = PILImage.fromarray(arr, "RGBA")
-    img_rgba = img.convert("RGBA")
-    composited = PILImage.alpha_composite(img_rgba, overlay)
-    result = composited.convert("RGB")
+    elif text_position == "center":
+        mid       = th // 2
+        half_zone = int(th * (text_zone_frac / 2 + bleed))
+        for row in range(max(0, mid - half_zone), min(th, mid + half_zone)):
+            dist  = abs(row - mid) / half_zone     # 0 at centre → 1 at edge
+            t     = 1.0 - dist
+            alpha = int(min(255, t ** 1.6 * 300))
+            arr[row, :] = [paper[0], paper[1], paper[2], alpha]
+
+    else:  # bottom (default)
+        grad_start = int(th * (1.0 - text_zone_frac - bleed))
+        grad_h     = th - grad_start
+        for row in range(grad_start, th):
+            t     = (row - grad_start) / grad_h
+            alpha = int(min(255, t ** 1.6 * 300))
+            arr[row, :] = [paper[0], paper[1], paper[2], alpha]
+
+    overlay    = PILImage.fromarray(arr, "RGBA")
+    composited = PILImage.alpha_composite(img.convert("RGBA"), overlay)
+    result     = composited.convert("RGB")
 
     buf = io.BytesIO()
     result.save(buf, format="JPEG", quality=88)
@@ -267,11 +281,15 @@ def _build_pdf_sync(
                 pdf.cell(PAGE_W, 6, f"by {author}", align="C")
 
         else:
-            # Full-bleed image with gradient already composited in
+            t_pos   = getattr(page, "text_position", "bottom")
+            t_align = getattr(page, "text_align",    "center")
+
+            # Full-bleed image with gradient composited behind text zone
             if page.image_bytes:
                 img_bytes = _story_page_composite(
                     page.image_bytes, PAGE_W, PAGE_H,
                     text_zone_frac=TEXT_ZONE_FRAC,
+                    text_position=t_pos,
                 )
                 pdf.set_fill_color(250, 248, 243)
                 pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
@@ -280,51 +298,56 @@ def _build_pdf_sync(
                 pdf.set_fill_color(250, 248, 243)
                 pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
 
-            # Text sits in the bottom TEXT_ZONE_FRAC of the page, vertically centred
-            FONT_SIZE   = 13          # pt  — matches reader's ~1.55rem default
-            LINE_H      = 7.2         # mm per line at 13 pt with generous leading
+            FONT_SIZE = 13
+            LINE_H    = 7.2
             text_zone_h = PAGE_H * TEXT_ZONE_FRAC
-            text_zone_top = PAGE_H - text_zone_h
+
+            # Text zone top-left Y depends on position
+            if t_pos == "top":
+                text_zone_top = 0.0
+            elif t_pos == "center":
+                text_zone_top = (PAGE_H - text_zone_h) / 2
+            else:  # bottom
+                text_zone_top = PAGE_H - text_zone_h
+
+            # fpdf2 align code
+            _ALIGN = {"left": "L", "center": "C", "right": "R"}
+            pdf_align = _ALIGN.get(t_align, "C")
 
             if page.text:
                 import re as _re
                 pdf.set_text_color(30, 28, 45)
 
-                cell_w = PAGE_W - MARGIN * 2
-                # Collapse multi-paragraph gaps: \n\n wastes a full line_h per gap
+                cell_w       = PAGE_W - MARGIN * 2
                 display_text = _re.sub(r'\n{2,}', '\n', page.text.strip())
+                available    = text_zone_h - MARGIN
 
-                # Space from text_zone_top to page bottom, minus a small top bias
-                available = text_zone_h - MARGIN
-
-                # Shrink font until block fits; keep font_size and line_h in sync
                 _LINE_RATIO = LINE_H / FONT_SIZE
                 font_size   = float(FONT_SIZE)
                 line_h      = LINE_H
                 lines: list[str] = []
 
-                for _attempt in range(200):          # max 200 half-point steps
+                for _attempt in range(200):
                     pdf.set_font("StoryBold", "", font_size)
                     lines   = pdf.multi_cell(cell_w, line_h, display_text,
-                                             align="C", dry_run=True, output="LINES")
+                                             align=pdf_align, dry_run=True, output="LINES")
                     block_h = len(lines) * line_h
                     if block_h <= available or font_size <= 8.5:
                         break
                     font_size -= 0.5
                     line_h    = _LINE_RATIO * font_size
 
-                # Hard cap: if still overflowing at minimum size, clip lines
                 max_lines = max(1, int(available / line_h))
                 if len(lines) > max_lines:
                     lines = lines[:max_lines]
                 block_h = len(lines) * line_h
 
-                # Vertically centre within text zone
                 top_offset = max(0.0, (available - block_h) / 2)
                 text_y = text_zone_top + top_offset + MARGIN * 0.5
 
-                pdf.set_xy(MARGIN, text_y)
-                pdf.multi_cell(cell_w, line_h, "\n".join(lines), align="C")
+                x_offset = MARGIN if t_align != "right" else MARGIN
+                pdf.set_xy(x_offset, text_y)
+                pdf.multi_cell(cell_w, line_h, "\n".join(lines), align=pdf_align)
 
             # Page number
             pdf.set_xy(0, PAGE_H - MARGIN + 2)

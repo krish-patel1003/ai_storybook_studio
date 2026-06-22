@@ -52,6 +52,9 @@ export interface IllustrationMetadata {
   negative_prompt: string;
 }
 
+export type TextAlign    = "left" | "center" | "right";
+export type TextPosition = "top"  | "center" | "bottom";
+
 export interface PageOut {
   id: string;
   order: number;
@@ -67,6 +70,8 @@ export interface PageOut {
   illustration_metadata: IllustrationMetadata | null;
   has_image: boolean;
   has_audio: boolean;
+  text_align: TextAlign;
+  text_position: TextPosition;
 }
 
 export function pageImageUrl(bookId: string, pageId: string): string {
@@ -218,6 +223,16 @@ export interface UpdatePageIn {
   setting_note?: string;
   is_locked?: boolean;
   text?: string;
+  text_align?: TextAlign;
+  text_position?: TextPosition;
+}
+
+export interface BulkTextStyleIn {
+  text_align?: TextAlign;
+  text_position?: TextPosition;
+  randomize?: boolean;
+  align_pool?: TextAlign[];
+  position_pool?: TextPosition[];
 }
 
 export interface AddPageIn {
@@ -398,6 +413,13 @@ export const api = {
 
     get: (token: string, bookId: string) =>
       request<BookOut>(`/books/${bookId}`, { headers: authed(token) }),
+
+    bulkTextStyle: (token: string, bookId: string, data: BulkTextStyleIn) =>
+      request<BookOut>(`/books/${bookId}/pages/text-style`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
 
     updatePage: (token: string, bookId: string, pageId: string, data: UpdatePageIn) =>
       request<BookOut>(`/books/${bookId}/pages/${pageId}`, {

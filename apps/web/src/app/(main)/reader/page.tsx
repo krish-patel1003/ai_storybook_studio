@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { forwardRef, useRef, useState, useEffect, useCallback } from "react";
+import React, { forwardRef, useRef, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type, BookOpen } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -162,11 +162,10 @@ const StoryPage = forwardRef<
     return () => ro.disconnect();
   }, [page.text, fontStack, fontSize]);
 
-  // Text zone: where the text box sits (bottom of page).
-  // Gradient zone: just wide enough to blend the image into the text area —
-  // must NOT start so high that it hides meaningful illustration content.
   const textZone     = "38%";
   const gradientZone = "47%";
+  const tPos   = page.text_position ?? "bottom";
+  const tAlign = (page.text_align ?? "center") as React.CSSProperties["textAlign"];
 
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
@@ -184,35 +183,52 @@ const StoryPage = forwardRef<
         />
       )}
 
-      {/* Gradient blending layer — long, gradual fade for a natural picture-book look */}
-      <div
-        className="absolute inset-x-0 bottom-0 pointer-events-none"
-        style={{
-          height: gradientZone,
-          background: "linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, #faf8f3 90%)",
-        }}
-      />
+      {/* Gradient blending layer — direction follows text position */}
+      {(() => {
+        const gradStyle: React.CSSProperties =
+          tPos === "top"    ? { top: 0, bottom: "auto", background: "linear-gradient(to top, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, #faf8f3 90%)" } :
+          tPos === "center" ? { top: "26%", bottom: "26%", background: "radial-gradient(ellipse at center, rgba(250,248,243,0.90) 30%, transparent 90%)" } :
+          { bottom: 0, top: "auto", background: "linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, #faf8f3 90%)" };
+        return (
+          <div
+            className="absolute inset-x-0 pointer-events-none"
+            style={{ height: gradientZone, ...gradStyle }}
+          />
+        );
+      })()}
 
-      {/* Text area — bottom-anchored so very long text grows upward into the gradient rather than below the page */}
-      <div
-        ref={containerRef}
-        className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-end overflow-hidden"
-        style={{ height: textZone, padding: "8px 28px 24px 28px" }}
-      >
-        {page.text ? (
-          <p
-            ref={textRef}
-            className="text-foreground text-center w-full"
-            style={{ fontFamily: fontStack, fontSize: `${fontSize}rem`, fontWeight, lineHeight: 1.85 }}
+      {/* Text area — position follows page.text_position */}
+      {(() => {
+        const posStyle: React.CSSProperties =
+          tPos === "top"    ? { top: 0, bottom: "auto" } :
+          tPos === "center" ? { top: "31%", bottom: "31%" } :
+          { bottom: 0, top: "auto" };
+        const justifyClass =
+          tPos === "top"    ? "justify-start" :
+          tPos === "center" ? "justify-center" :
+          "justify-end";
+        return (
+          <div
+            ref={containerRef}
+            className={`absolute inset-x-0 flex flex-col items-center ${justifyClass} overflow-hidden`}
+            style={{ height: textZone, padding: "8px 28px 24px 28px", ...posStyle }}
           >
-            {page.text}
-          </p>
-        ) : (
-          <p className="italic text-muted-foreground text-sm" style={{ fontFamily: fontStack }}>
-            No text yet
-          </p>
-        )}
-      </div>
+            {page.text ? (
+              <p
+                ref={textRef}
+                className="text-foreground w-full"
+                style={{ fontFamily: fontStack, fontSize: `${fontSize}rem`, fontWeight, lineHeight: 1.85, textAlign: tAlign }}
+              >
+                {page.text}
+              </p>
+            ) : (
+              <p className="italic text-muted-foreground text-sm" style={{ fontFamily: fontStack }}>
+                No text yet
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Chapter label — top right, from narrative role */}
       {page.narrative_role && (

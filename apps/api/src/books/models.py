@@ -152,4 +152,8 @@ class Page(Base):
     # MinIO object key — set after narration is generated (null = not yet narrated)
     audio_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Text layout — applied in reader and PDF export
+    text_align: Mapped[str] = mapped_column(String(10), nullable=False, server_default="center")
+    text_position: Mapped[str] = mapped_column(String(10), nullable=False, server_default="bottom")
+
     book: Mapped["Book"] = relationship(back_populates="pages")

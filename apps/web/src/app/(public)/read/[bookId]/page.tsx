@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { forwardRef, useRef, useState, useEffect } from "react";
+import React, { forwardRef, useRef, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ImageIcon, BookOpen } from "lucide-react";
 import { api, publicPageImageUrl, type BookOut, type PageOut } from "@/lib/api";
@@ -63,18 +63,32 @@ const BookPage = forwardRef<
         )}
       </div>
 
-      {/* Text — bottom 32%, font auto-shrinks to fit */}
-      <div ref={zoneRef} className="absolute inset-x-0 bottom-0 overflow-hidden border-t-[2.5px] border-foreground bg-card px-4 py-3" style={{ height: "32%" }}>
-        {page.is_cover ? (
-          <h2 className="text-center font-display text-lg font-black leading-tight overflow-hidden">
-            {page.text ?? ""}
-          </h2>
-        ) : (
-          <p ref={textRef} className="font-display text-sm leading-relaxed">
-            {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
-          </p>
-        )}
-      </div>
+      {/* Text zone — position depends on page.text_position */}
+      {(() => {
+        const pos = page.text_position ?? "bottom";
+        const posStyle: React.CSSProperties =
+          pos === "top"    ? { top: 0, bottom: "auto" } :
+          pos === "center" ? { top: "34%", bottom: "34%" } :
+          { bottom: 0, top: "auto" };
+        const textAlign = (page.text_align ?? "center") as React.CSSProperties["textAlign"];
+        return (
+          <div
+            ref={zoneRef}
+            className="absolute inset-x-0 overflow-hidden border-[2.5px] border-foreground bg-card px-4 py-3"
+            style={{ height: "32%", ...posStyle }}
+          >
+            {page.is_cover ? (
+              <h2 className="text-center font-display text-lg font-black leading-tight overflow-hidden">
+                {page.text ?? ""}
+              </h2>
+            ) : (
+              <p ref={textRef} className="font-display text-sm leading-relaxed" style={{ textAlign }}>
+                {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
+              </p>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 });

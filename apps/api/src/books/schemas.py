@@ -37,6 +37,18 @@ class UpdatePageIn(BaseModel):
     setting_note: str | None = None
     is_locked: bool | None = None
     text: str | None = None
+    text_align: str | None = Field(default=None, pattern=r"^(left|center|right)$")
+    text_position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
+
+
+class BulkTextStyleIn(BaseModel):
+    """Apply text layout to all content pages at once, or randomize."""
+    text_align: str | None = Field(default=None, pattern=r"^(left|center|right)$")
+    text_position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
+    randomize: bool = False
+    # When randomize=True, pick from these subsets (defaults to all if empty)
+    align_pool: list[str] = Field(default_factory=list)
+    position_pool: list[str] = Field(default_factory=list)
 
 
 class RecalibrateIn(BaseModel):
@@ -100,6 +112,8 @@ class PageOut(BaseModel):
     has_image: bool = False
     audio_key: str | None = Field(default=None, exclude=True)
     has_audio: bool = False
+    text_align: str = "center"
+    text_position: str = "bottom"
 
     model_config = {"from_attributes": True}
 

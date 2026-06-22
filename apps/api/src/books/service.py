@@ -328,6 +328,41 @@ async def update_page(
         page.is_locked = data.is_locked
     if data.text is not None:
         page.text = data.text
+    if data.text_align is not None:
+        page.text_align = data.text_align
+    if data.text_position is not None:
+        page.text_position = data.text_position
+
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def bulk_text_style(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: "BulkTextStyleIn",
+) -> "Book":
+    import random as _random
+    from src.books.schemas import BulkTextStyleIn
+
+    book = await get_book(db, book_id, user_id)
+    content_pages = [p for p in book.pages if not p.is_cover]
+
+    _ALIGNS    = ["left", "center", "right"]
+    _POSITIONS = ["top", "center", "bottom"]
+    align_pool    = [a for a in (data.align_pool    or _ALIGNS)    if a in _ALIGNS]
+    position_pool = [p for p in (data.position_pool or _POSITIONS) if p in _POSITIONS]
+
+    for page in content_pages:
+        if data.randomize:
+            page.text_align    = _random.choice(align_pool)
+            page.text_position = _random.choice(position_pool)
+        else:
+            if data.text_align is not None:
+                page.text_align = data.text_align
+            if data.text_position is not None:
+                page.text_position = data.text_position
 
     await db.commit()
     return await get_book(db, book_id, user_id)
@@ -669,6 +704,8 @@ async def build_export_pages(db: AsyncSession, book: Book) -> list:
             is_cover=page.is_cover,
             text=page.text,
             image_bytes=image_bytes,
+            text_align=getattr(page, "text_align", "center"),
+            text_position=getattr(page, "text_position", "bottom"),
         ))
     return result
 
