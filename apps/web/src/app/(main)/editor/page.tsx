@@ -669,7 +669,8 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
                   <button
                     key={f.id}
                     onClick={() => setExportFont(f.id)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${
+                    style={{ fontFamily: f.stack, fontWeight: f.weight }}
+                    className={`rounded-full px-3 py-1.5 text-xs chunky-border transition-colors ${
                       exportFont === f.id
                         ? "bg-primary text-primary-foreground"
                         : "bg-card hover:bg-secondary"
