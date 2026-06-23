@@ -28,6 +28,7 @@ class CreateBookIn(BaseModel):
     )
     model_provider: str = "gemini"
     model_name: str = "gemini-3.5-flash"
+    child_profile_id: uuid.UUID | None = None
 
 
 class UpdatePageIn(BaseModel):
@@ -39,6 +40,7 @@ class UpdatePageIn(BaseModel):
     text: str | None = None
     text_align: str | None = Field(default=None, pattern=r"^(left|center|right)$")
     text_position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
+    canvas_overlay: dict | None = None
 
 
 class BulkTextStyleIn(BaseModel):
@@ -114,6 +116,7 @@ class PageOut(BaseModel):
     has_audio: bool = False
     text_align: str = "center"
     text_position: str = "bottom"
+    canvas_overlay: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -143,6 +146,7 @@ class BookOut(BaseModel):
     pages: list[PageOut]
     created_at: datetime
     updated_at: datetime
+    child_profile_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -262,6 +266,7 @@ class CreateDraftIn(BaseModel):
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
     model_name: str = "gemini-3.5-flash"
+    child_profile_id: uuid.UUID | None = None
 
 
 class GenerateIn(BaseModel):

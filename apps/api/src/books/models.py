@@ -62,6 +62,11 @@ class Book(Base):
     # Visibility
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")
 
+    # Optional child profile — personalises prompts and loading UX
+    child_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("child_profile.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     # Seed for illustration consistency — set once, used as base for per-page seeds
     visual_seed: Mapped[int] = mapped_column(Integer, nullable=False, default=lambda: __import__('random').randint(0, 2**31 - 1))
 
@@ -155,5 +160,9 @@ class Page(Base):
     # Text layout — applied in reader and PDF export
     text_align: Mapped[str] = mapped_column(String(10), nullable=False, server_default="center")
     text_position: Mapped[str] = mapped_column(String(10), nullable=False, server_default="bottom")
+
+    # Canvas-style text overlay — set by the canvas editor; overrides text_align/text_position when present
+    # Schema: { x, y, w, fontSize, fontFamily, textColor, bgStyle, bgOpacity }
+    canvas_overlay: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     book: Mapped["Book"] = relationship(back_populates="pages")

@@ -55,6 +55,17 @@ export interface IllustrationMetadata {
 export type TextAlign    = "left" | "center" | "right";
 export type TextPosition = "top"  | "center" | "bottom";
 
+export interface CanvasOverlay {
+  x: number;         // 0–1 fraction from left
+  y: number;         // 0–1 fraction from top
+  w: number;         // 0–1 fraction of page width
+  fontSize: number;  // px
+  fontFamily: string;
+  textColor: string;
+  bgStyle: "none" | "frosted" | "darkened";
+  bgOpacity: number;
+}
+
 export interface PageOut {
   id: string;
   order: number;
@@ -72,6 +83,7 @@ export interface PageOut {
   has_audio: boolean;
   text_align: TextAlign;
   text_position: TextPosition;
+  canvas_overlay: CanvasOverlay | null;
 }
 
 export function pageImageUrl(bookId: string, pageId: string): string {
@@ -115,6 +127,32 @@ export interface BookOut {
   pages: PageOut[];
   created_at: string;
   updated_at: string;
+  child_profile_id: string | null;
+}
+
+// ── Child Profile types ───────────────────────────────────────────────────────
+
+export interface ChildProfile {
+  id: string;
+  name: string;
+  age: number;
+  gender: "boy" | "girl" | "nonbinary" | "unspecified";
+  grade_level: string;
+  interests: string[];
+  reading_level: "beginner" | "early_reader" | "chapter_book";
+  avatar_emoji: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateProfileIn {
+  name: string;
+  age: number;
+  gender: "boy" | "girl" | "nonbinary" | "unspecified";
+  grade_level: string;
+  interests: string[];
+  reading_level: "beginner" | "early_reader" | "chapter_book";
+  avatar_emoji: string;
 }
 
 export interface BookSummaryOut {
@@ -215,6 +253,7 @@ export interface CreateBookIn {
   page_count: number;
   model_provider: string;
   model_name: string;
+  child_profile_id?: string | null;
 }
 
 export interface UpdatePageIn {
@@ -225,6 +264,7 @@ export interface UpdatePageIn {
   text?: string;
   text_align?: TextAlign;
   text_position?: TextPosition;
+  canvas_overlay?: CanvasOverlay | null;
 }
 
 export interface BulkTextStyleIn {
@@ -259,6 +299,7 @@ export interface CreateDraftIn {
   page_count: number;
   model_provider: string;
   model_name: string;
+  child_profile_id?: string | null;
 }
 
 export interface VoiceProfile {
@@ -586,6 +627,31 @@ export const api = {
 
     delete: (token: string, profileId: string) =>
       request<void>(`/voices/${profileId}`, {
+        method: "DELETE",
+        headers: authed(token),
+      }),
+  },
+
+  profiles: {
+    list: (token: string) =>
+      request<ChildProfile[]>("/profiles", { headers: authed(token) }),
+
+    create: (token: string, data: CreateProfileIn) =>
+      request<ChildProfile>("/profiles", {
+        method: "POST",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
+    update: (token: string, id: string, data: Partial<CreateProfileIn>) =>
+      request<ChildProfile>(`/profiles/${id}`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
+    delete: (token: string, id: string) =>
+      request<void>(`/profiles/${id}`, {
         method: "DELETE",
         headers: authed(token),
       }),

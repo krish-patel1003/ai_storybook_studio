@@ -189,6 +189,7 @@ async def create_draft(
         model_provider=data.model_provider,
         model_name=data.model_name,
         stage=GenerationStage.PENDING,
+        child_profile_id=data.child_profile_id,
     )
     db.add(book)
     await db.commit()
@@ -262,6 +263,7 @@ async def create_and_generate(
         model_provider=data.model_provider,
         model_name=data.model_name,
         stage=GenerationStage.ENHANCING,
+        child_profile_id=data.child_profile_id,
     )
     db.add(book)
     await db.flush()
@@ -332,6 +334,8 @@ async def update_page(
         page.text_align = data.text_align
     if data.text_position is not None:
         page.text_position = data.text_position
+    if "canvas_overlay" in data.model_fields_set:
+        page.canvas_overlay = data.canvas_overlay
 
     await db.commit()
     return await get_book(db, book_id, user_id)

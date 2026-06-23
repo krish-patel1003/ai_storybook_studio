@@ -4,11 +4,12 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import React, { forwardRef, useRef, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type, BookOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type, BookOpen, Download } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { pageImageUrl } from "@/lib/api";
+import { api, pageImageUrl } from "@/lib/api";
 import type { PageOut } from "@/lib/api";
+import { toast } from "sonner";
 import { READER_FONTS, type FontId } from "@/lib/fonts";
 import { useAuthImage } from "@/lib/use-auth-image";
 import type { HTMLFlipBookRef, HTMLFlipBookProps } from "react-pageflip";
@@ -539,6 +540,7 @@ function ReaderInner() {
   const [currentPage, setCurrentPage] = useState(0);
   const [font, setFont] = useReaderFont();
   const [fontSizeId, setFontSizeId] = useReaderFontSize();
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (book === null) router.replace("/library");
@@ -578,6 +580,26 @@ function ReaderInner() {
     );
   }
 
+  async function handleExport() {
+    if (!token || !book) return;
+    setExporting(true);
+    try {
+      const res = await api.books.exportPdf(token, book.id, font);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(book.brief?.title ?? book.title).replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function goNext() { bookRef.current?.pageFlip().flipNext(); }
   function goPrev() { bookRef.current?.pageFlip().flipPrev(); }
 
@@ -613,6 +635,15 @@ function ReaderInner() {
                 : <Volume2 className="h-4 w-4" strokeWidth={2.5} />}
             </button>
           )}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            title="Download PDF"
+            className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+          >
+            <Download className="h-3.5 w-3.5" strokeWidth={2.5} />
+            {exporting ? "Exporting…" : "PDF"}
+          </button>
           <span className="text-sm font-bold text-muted-foreground">
             {currentPage === 0 ? "Cover"
               : currentPage === totalPages - 1 ? "The End"

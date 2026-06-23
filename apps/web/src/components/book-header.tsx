@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User } from "lucide-react";
+import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useState, useRef, useEffect } from "react";
 
 const navItems = [
-  { href: "/create",  label: "Create"        },
-  { href: "/library", label: "Library"       },
-  { href: "/reader",  label: "Reader"        },
-  { href: "/voices",  label: "Voice Studio"  },
-  { href: "/kdp",     label: "Publish"       },
+  { href: "/create",   label: "Create"       },
+  { href: "/library",  label: "Library"      },
+  { href: "/profiles", label: "Profiles"     },
+  { href: "/reader",   label: "Reader"       },
+  { href: "/voices",   label: "Voice Studio" },
+  { href: "/kdp",      label: "Publish"      },
 ] as const;
 
 export function BookHeader() {
@@ -120,6 +121,15 @@ export function BookHeader() {
                     >
                       <Library className="h-4 w-4" strokeWidth={2.5} />
                       My Library
+                    </Link>
+
+                    <Link
+                      href="/profiles"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-bold transition-colors hover:bg-highlight"
+                    >
+                      <Baby className="h-4 w-4" strokeWidth={2.5} />
+                      Child Profiles
                     </Link>
 
                     <Link

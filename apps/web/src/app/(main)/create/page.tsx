@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, type BookOut, type BriefOut, type ExpandedPromptOut, type PageOut, type ProviderInfo, type StorySeedOut } from "@/lib/api";
+import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type ProviderInfo, type StorySeedOut } from "@/lib/api";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { toast } from "sonner";
 
@@ -245,6 +245,73 @@ const ONE_CLICK_HINTS: Record<string, string[]> = {
   ],
 };
 
+// ── Animated loading character ────────────────────────────────────────────────
+
+const LOADING_CHARACTERS: Record<string, { emoji: string; name: string; msgs: string[] }> = {
+  boy: {
+    emoji: "🧙‍♂️",
+    name: "Zap the Wizard",
+    msgs: [
+      "Zap is mixing the story potion…",
+      "Zap lost his wand again…",
+      "Zap is consulting the magic book…",
+      "Zap is stirring the imagination cauldron…",
+    ],
+  },
+  girl: {
+    emoji: "🧚‍♀️",
+    name: "Luna the Fairy",
+    msgs: [
+      "Luna is sprinkling story dust…",
+      "Luna is weaving your adventure…",
+      "Luna is collecting magic words…",
+      "Luna is flying through your story…",
+    ],
+  },
+  nonbinary: {
+    emoji: "🤖",
+    name: "Pixel the Robot",
+    msgs: [
+      "Pixel is computing your story…",
+      "Pixel is processing imagination…",
+      "Pixel is uploading adventure…",
+      "Pixel is calculating the perfect ending…",
+    ],
+  },
+  default: {
+    emoji: "🦄",
+    name: "Star the Unicorn",
+    msgs: [
+      "Star is galloping through your story…",
+      "Star is painting rainbows on every page…",
+      "Star is making your story magical…",
+      "Star is adding a sprinkle of wonder…",
+    ],
+  },
+};
+
+function MagicalLoadingCharacter({ gender, stage }: { gender?: string; stage?: string }) {
+  const [bounce, setBounce] = useState(false);
+  const char = LOADING_CHARACTERS[gender ?? "default"] ?? LOADING_CHARACTERS.default;
+
+  useEffect(() => {
+    const t = setInterval(() => setBounce((b) => !b), 600);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div
+        className="text-6xl transition-transform duration-300 select-none"
+        style={{ transform: bounce ? "translateY(-10px) rotate(-5deg)" : "translateY(0px) rotate(5deg)" }}
+      >
+        {char.emoji}
+      </div>
+      <p className="text-xs font-extrabold text-primary">{char.name}</p>
+    </div>
+  );
+}
+
 type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
 
 const ONE_CLICK_STAGES: { id: OneClickStage; icon: React.ReactNode; label: string }[] = [
@@ -254,11 +321,12 @@ const ONE_CLICK_STAGES: { id: OneClickStage; icon: React.ReactNode; label: strin
   { id: "narrating",    icon: <Mic className="h-4 w-4" />,       label: "Narrating"    },
 ];
 
-function OneClickOverlay({ stage, progress, book, onView }: {
+function OneClickOverlay({ stage, progress, book, onView, profileGender }: {
   stage: OneClickStage;
   progress: { done: number; total: number };
   book: BookOut | null;
   onView: () => void;
+  profileGender?: string;
 }) {
   const [hintIdx, setHintIdx] = useState(0);
   const timer = useElapsedTimer(stage !== "done");
@@ -303,9 +371,9 @@ function OneClickOverlay({ stage, progress, book, onView }: {
           </motion.div>
         ) : (
           <motion.div key="progress" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
-            <div className="relative grid h-24 w-24 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
-              <Wand2 className="h-10 w-10 text-primary-foreground" strokeWidth={2} />
-              <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+            <div className="relative">
+              <MagicalLoadingCharacter gender={profileGender} stage={stage} />
+              <span className="absolute -right-1 -top-1 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
             </div>
             <div>
               <h2 className="font-display text-3xl font-black">Making your book…</h2>
@@ -1000,11 +1068,21 @@ export default function CreatePage() {
   const [draft, setDraft] = useState<BookOut | null>(null);
   const [currentBook, setCurrentBook] = useState<BookOut | null>(null);
 
+  // Child profile
+  const [profiles, setProfiles] = useState<ChildProfile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
+
   // One-click
   const [oneClickRunning, setOneClickRunning] = useState(false);
   const [oneClickStage, setOneClickStage] = useState<OneClickStage>("writing");
   const [oneClickProgress, setOneClickProgress] = useState({ done: 0, total: 0 });
   const [oneClickBook, setOneClickBook] = useState<BookOut | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    api.profiles.list(token).then(setProfiles).catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -1131,6 +1209,7 @@ export default function CreatePage() {
         book = await api.books.create(token, {
           raw_prompt: prompt, age_range: age, tone, art_style: style,
           safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName,
+          ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}),
         });
       }
       setCurrentBook(book);
@@ -1155,7 +1234,7 @@ export default function CreatePage() {
     if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
     setOneClickRunning(true); setOneClickStage("writing"); setOneClickProgress({ done: 0, total: 0 });
     try {
-      const savedDraft = await api.books.createDraft(token, { raw_prompt: prompt, age_range: age, tone: tone.length > 0 ? tone : ["Whimsical"], safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName });
+      const savedDraft = await api.books.createDraft(token, { raw_prompt: prompt, age_range: age, tone: tone.length > 0 ? tone : ["Whimsical"], safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName, ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}) });
       setBook(savedDraft);
       const generated = await api.books.generate(token, savedDraft.id, style);
       setBook(generated);
@@ -1205,7 +1284,7 @@ export default function CreatePage() {
   return (
     <>
       {oneClickRunning && (
-        <OneClickOverlay stage={oneClickStage} progress={oneClickProgress} book={oneClickBook} onView={() => router.push("/reader")} />
+        <OneClickOverlay stage={oneClickStage} progress={oneClickProgress} book={oneClickBook} onView={() => router.push("/reader")} profileGender={selectedProfile?.gender} />
       )}
 
       <main className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
@@ -1245,6 +1324,30 @@ export default function CreatePage() {
                     className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
                     <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
                     <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
+
+                    {/* Child profile selector */}
+                    {profiles.length > 0 && (
+                      <div className="mt-5 flex items-center gap-3">
+                        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground shrink-0">For</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => setSelectedProfileId(null)}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${!selectedProfileId ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                          >
+                            Anyone
+                          </button>
+                          {profiles.map((p) => (
+                            <button
+                              key={p.id}
+                              onClick={() => setSelectedProfileId(p.id === selectedProfileId ? null : p.id)}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${selectedProfileId === p.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                            >
+                              {p.avatar_emoji} {p.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="relative mt-6">
                       <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
@@ -1528,9 +1631,9 @@ export default function CreatePage() {
                 {flowState === "writing" && (
                   <motion.div key="writing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex min-h-full items-center justify-center px-6 py-10">
                     <div className="flex flex-col items-center gap-6 text-center max-w-sm">
-                      <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
-                        <FileText className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
-                        <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+                      <div className="relative">
+                        <MagicalLoadingCharacter gender={selectedProfile?.gender} stage="writing" />
+                        <span className="absolute -right-1 -top-1 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
                       </div>
                       <div>
                         <h2 className="font-display text-3xl font-black">Writing your pages…</h2>
