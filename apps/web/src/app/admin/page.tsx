@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Users, BookOpen, ImageIcon, Mic, TrendingUp,
   LogOut, RefreshCw, CheckCircle, Chrome, Shield,
-  BarChart2, Clock, Loader2, DollarSign, X, Activity, AlertCircle,
+  BarChart2, Clock, DollarSign, X, Activity, AlertCircle,
 } from "lucide-react";
+import { XsSpinner, LgSpinner, MdSpinner } from "@/components/character-spinner";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 const CRED_KEY = "sb_admin_creds";
@@ -184,7 +185,7 @@ function UserDetailPanel({
 
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <MdSpinner />
           </div>
         ) : !detail ? (
           <p className="text-center text-muted-foreground p-12">Failed to load user</p>
@@ -357,7 +358,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => void }) {
             disabled={loading}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3 font-extrabold text-primary-foreground chunky-border chunky-shadow-sm disabled:opacity-60"
           >
-            {loading && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />}
+            {loading && <XsSpinner />}
             {loading ? "Signing in…" : "Sign in to dashboard"}
           </button>
         </form>
@@ -476,7 +477,7 @@ export default function AdminDashboard() {
 
       {!stats || loading ? (
         <div className="flex h-96 items-center justify-center">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <LgSpinner />
         </div>
       ) : (
         <div className="mx-auto max-w-7xl px-4 py-8 space-y-10">

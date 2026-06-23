@@ -7,7 +7,6 @@ import {
   BookOpen,
   Plus,
   Sparkles,
-  Loader2,
   AlertCircle,
   Clock,
   CheckCircle2,
@@ -15,11 +14,11 @@ import {
   Trash2,
   Globe,
   Lock,
-  ArrowRight,
   Pencil,
   Eye,
   ImageIcon,
 } from "lucide-react";
+import { XsSpinner, LgSpinner } from "@/components/character-spinner";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
@@ -103,7 +102,7 @@ function StageBadge({ stage }: { stage: string }) {
     }`}>
       {isComplete && <CheckCircle2 className="h-3 w-3" />}
       {isFailed && <XCircle className="h-3 w-3" />}
-      {!isComplete && !isFailed && !isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+      {!isComplete && !isFailed && !isPending && <XsSpinner />}
       {label}
     </span>
   );
@@ -125,7 +124,7 @@ function DeleteDialog({
         <div className="mt-5 flex gap-2">
           <button onClick={onConfirm} disabled={deleting}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-destructive px-4 py-2.5 text-sm font-extrabold text-white chunky-border disabled:opacity-60">
-            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" strokeWidth={2.5} />}
+            {deleting ? <XsSpinner /> : <Trash2 className="h-4 w-4" strokeWidth={2.5} />}
             Delete
           </button>
           <button onClick={onCancel} className="rounded-xl bg-background px-4 py-2.5 text-sm font-extrabold chunky-border">
@@ -192,7 +191,7 @@ function BookCard({
               isPublic ? "bg-accent text-accent-foreground" : "bg-background text-muted-foreground hover:bg-secondary"
             }`}>
             {loadingVisibility
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ? <XsSpinner />
               : isPublic ? <Globe className="h-3.5 w-3.5" strokeWidth={2.5} />
               : <Lock className="h-3.5 w-3.5" strokeWidth={2.5} />}
           </button>
@@ -244,7 +243,7 @@ function BookCard({
         <button onClick={onContinue} disabled={!canContinue || loadingContinue}
           className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:translate-y-0">
           {loadingContinue
-            ? <Loader2 className="h-4 w-4 animate-spin" />
+            ? <XsSpinner />
             : <>{continueIcon} {continueLabel}</>}
         </button>
 
@@ -252,7 +251,7 @@ function BookCard({
           <button onClick={onPreview} disabled={loadingPreview}
             title="Preview book"
             className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-accent text-accent-foreground chunky-border transition-transform hover:-translate-y-0.5">
-            {loadingPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" strokeWidth={2.5} />}
+            {loadingPreview ? <XsSpinner /> : <Eye className="h-4 w-4" strokeWidth={2.5} />}
           </button>
         )}
 
@@ -396,7 +395,7 @@ export default function LibraryPage() {
 
         {fetching ? (
           <div className="flex justify-center py-32">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <LgSpinner />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">

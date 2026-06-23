@@ -8,7 +8,6 @@ import {
   Sparkles,
   Shield,
   Check,
-  Loader2,
   BookOpen,
   RefreshCw,
   Cpu,
@@ -28,6 +27,7 @@ import {
   RotateCcw,
   ChevronRight,
 } from "lucide-react";
+import { XsSpinner, SmSpinner, CornerSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type ProviderInfo, type StorySeedOut } from "@/lib/api";
@@ -400,7 +400,7 @@ function OneClickOverlay({ stage, progress, book, onView, profileGender }: {
           <motion.div key="progress" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
             <div className="relative">
               <MagicalLoadingCharacter gender={profileGender} />
-              <span className="absolute -right-1 -top-1 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+              <CornerSpinner className="absolute -right-1 -top-1" />
             </div>
             <div>
               <h2 className="font-display text-3xl font-black">Making your book…</h2>
@@ -569,7 +569,7 @@ function OptionsPanel({
       <div>
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">AI model</p>
         {modelsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Detecting models…</div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground"><SmSpinner /> Detecting models…</div>
         ) : (
           <div className="space-y-2">
             {(providers.length > 0 ? providers : [{ id: "gemini", name: "Google Gemini", description: "Cloud-hosted", available: true, models: [{ id: "gemini-3.5-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" }, { id: "gemini-3.1-pro-preview", name: "Gemini Pro", description: "Highest quality", size: "cloud" }] }]).map((provider) => (
@@ -737,7 +737,7 @@ function EditableField({ label, value, multiline, onSave, onRegenerate, regenera
           )}
           {onRegenerate && (
             <button onClick={onRegenerate} disabled={regenerating} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50" title="Regenerate">
-              {regenerating ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <RefreshCw className="h-3 w-3" strokeWidth={2.5} />}
+              {regenerating ? <XsSpinner /> : <RefreshCw className="h-3 w-3" strokeWidth={2.5} />}
             </button>
           )}
         </div>
@@ -835,7 +835,7 @@ function PageReviewCard({ page, bookId, token, onUpdate }: {
           )}
           <button onClick={handleRegenerate} disabled={regenerating || editing}
             className="rounded-full bg-background px-2.5 py-1 text-xs font-bold chunky-border hover:-translate-y-0.5 transition-transform flex items-center gap-1 disabled:opacity-50">
-            {regenerating ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <RotateCcw className="h-3 w-3" strokeWidth={2.5} />}
+            {regenerating ? <XsSpinner /> : <RotateCcw className="h-3 w-3" strokeWidth={2.5} />}
             {regenerating ? "Rewriting…" : "Regenerate"}
           </button>
         </div>
@@ -855,7 +855,7 @@ function PageReviewCard({ page, bookId, token, onUpdate }: {
             <div className="mt-2 flex gap-2">
               <button onClick={handleSave} disabled={saving}
                 className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border disabled:opacity-50">
-                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={3} />}
+                {saving ? <XsSpinner /> : <Check className="h-3 w-3" strokeWidth={3} />}
                 {saving ? "Saving…" : "Save changes"}
               </button>
               <button onClick={() => { setEditing(false); setDraft(page.text ?? ""); }} className="rounded-full bg-background px-3 py-1.5 text-xs font-extrabold chunky-border">Cancel</button>
@@ -902,7 +902,7 @@ function EnhancedPromptReview({
       <div className="flex flex-1 flex-col items-center justify-center gap-5 py-20 text-center">
         <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
           <Wand2 className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
-          <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+          <CornerSpinner className="absolute -right-2 -top-2" />
         </div>
         <div>
           <p className="font-display text-2xl font-black">Expanding your idea…</p>
@@ -1400,7 +1400,7 @@ export default function CreatePage() {
                           {brainstormLoading ? "Generating ideas…" : "Need inspiration? Brainstorm ideas"}
                         </div>
                         {brainstormLoading
-                          ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ? <XsSpinner />
                           : brainstormSeeds.length > 0
                             ? <ChevronDown className={`h-4 w-4 transition-transform ${brainstormOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
                             : <Sparkles className="h-4 w-4 text-muted-foreground" strokeWidth={2.5} />
@@ -1531,7 +1531,7 @@ export default function CreatePage() {
                       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
                         <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow">
                           <Sparkles className="h-7 w-7 text-primary-foreground" strokeWidth={1.5} />
-                          <span className="absolute -right-1.5 -top-1.5 h-4 w-4 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+                          <CornerSpinner className="absolute -right-1.5 -top-1.5" />
                         </div>
                         <div className="text-center">
                           <p className="font-display text-xl font-black">Building your brief…</p>
@@ -1660,7 +1660,7 @@ export default function CreatePage() {
                     <div className="flex flex-col items-center gap-6 text-center max-w-sm">
                       <div className="relative">
                         <MagicalLoadingCharacter gender={selectedProfile?.gender} />
-                        <span className="absolute -right-1 -top-1 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+                        <CornerSpinner className="absolute -right-1 -top-1" />
                       </div>
                       <div>
                         <h2 className="font-display text-3xl font-black">Writing your pages…</h2>

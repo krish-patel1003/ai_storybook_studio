@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { CheckCircle, XCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { LgSpinner } from "@/components/character-spinner";
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -51,8 +52,8 @@ function VerifyEmailContent() {
 
         {status === "loading" && (
           <>
-            <div className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-3xl bg-card chunky-border chunky-shadow">
-              <Loader2 className="h-10 w-10 animate-spin text-primary" strokeWidth={2} />
+            <div className="mx-auto mb-6 flex justify-center">
+              <LgSpinner />
             </div>
             <h1 className="font-display text-3xl font-black">Verifying your email…</h1>
             <p className="mt-3 text-muted-foreground">Just a moment!</p>
@@ -116,7 +117,7 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><span style={{ animation: "char-jump 1.6s ease-in-out infinite", fontSize: "56px", display: "inline-block" }}>🦄</span></div>}>
       <VerifyEmailContent />
     </Suspense>
   );

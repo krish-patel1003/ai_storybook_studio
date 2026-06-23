@@ -6,7 +6,6 @@ import {
   Sparkles,
   RefreshCw,
   BookOpen,
-  Loader2,
   ImageIcon,
   Check,
   ArrowLeft,
@@ -26,6 +25,7 @@ import {
   MoveVertical,
   Shuffle,
 } from "lucide-react";
+import { XsSpinner, SmSpinner, MdSpinner, LgSpinner, CornerSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile, type TextAlign, type TextPosition } from "@/lib/api";
@@ -390,7 +390,7 @@ function PageCard({
       <div className="relative aspect-[4/3] bg-muted border-b-[2.5px] border-foreground overflow-hidden">
         {status === "generating" ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-3">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <LgSpinner />
             <div className="text-center">
               <AnimatePresence mode="wait">
                 <motion.p
@@ -417,8 +417,7 @@ function PageCard({
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
               {page.has_image && !blobUrl ? (
                 <>
-                  <Loader2 className="h-6 w-6 animate-spin opacity-40" />
-                  <span className="text-xs font-bold opacity-50">Loading…</span>
+                  <MdSpinner className="opacity-60" />
                 </>
               ) : !blobUrl ? (
                 <>
@@ -494,7 +493,7 @@ function PageCard({
           className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-secondary transition-colors disabled:opacity-40"
         >
           {status === "generating" ? (
-            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+            <><XsSpinner /> Generating…</>
           ) : page.has_image ? (
             <><RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Reillustrate</>
           ) : (
@@ -514,7 +513,7 @@ function PageCard({
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary chunky-border hover:bg-primary/20 transition-colors disabled:opacity-40"
               >
                 {previewLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <XsSpinner />
                 ) : previewing ? (
                   <span className="h-3 w-3 rounded-sm bg-primary" />
                 ) : (
@@ -531,7 +530,7 @@ function PageCard({
               className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-secondary transition-colors disabled:opacity-40"
             >
               {narrateStatus === "narrating" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <XsSpinner />
               ) : (
                 <Mic className="h-3.5 w-3.5" strokeWidth={2.5} />
               )}
@@ -661,7 +660,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
               disabled={makingPublic}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border disabled:opacity-60"
             >
-              {makingPublic ? <Loader2 className="h-4 w-4 animate-spin" /> : copied ? <Check className="h-4 w-4" strokeWidth={3} /> : <Share2 className="h-4 w-4" strokeWidth={2.5} />}
+              {makingPublic ? <XsSpinner /> : copied ? <Check className="h-4 w-4" strokeWidth={3} /> : <Share2 className="h-4 w-4" strokeWidth={2.5} />}
               {copied ? "Copied!" : isPublic ? "Copy link" : "Make public & copy link"}
             </button>
           </div>
@@ -708,7 +707,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
               disabled={downloadingPdf}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-2.5 text-sm font-extrabold text-background chunky-border disabled:opacity-60"
             >
-              {downloadingPdf ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download PDF</>}
+              {downloadingPdf ? <><XsSpinner /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download PDF</>}
             </button>
           </div>
 
@@ -728,7 +727,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
               disabled={downloadingEpub}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-2.5 text-sm font-extrabold text-background chunky-border disabled:opacity-60"
             >
-              {downloadingEpub ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download Kindle Edition</>}
+              {downloadingEpub ? <><XsSpinner /> Generating…</> : <><Download className="h-4 w-4" strokeWidth={2.5} /> Download Kindle Edition</>}
             </button>
           </div>
 
@@ -1128,7 +1127,7 @@ export default function EditorPage() {
             className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-extrabold text-background chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
           >
             {textStyleSaving ? (
-              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…</>
+              <><XsSpinner /> Applying…</>
             ) : textStyleMode === "randomize" ? (
               <><Shuffle className="h-3.5 w-3.5" /> Randomize & apply</>
             ) : (
@@ -1143,12 +1142,12 @@ export default function EditorPage() {
         <div className="flex-1 min-w-0">
           {job?.sheetsGenerating ? (
             <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+              <SmSpinner />
               <p className="text-sm font-extrabold">Generating character sheets for consistency…</p>
             </div>
           ) : isRunning ? (
             <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+              <SmSpinner />
               <p className="text-sm font-extrabold">
                 Illustrating {job?.done ?? 0} of {job?.total ?? totalCount} pages…
                 <span className="ml-1.5 font-semibold text-muted-foreground text-xs">You can switch tabs — it keeps going.</span>
@@ -1173,7 +1172,7 @@ export default function EditorPage() {
           className="shrink-0 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
         >
           {isRunning ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Illustrating…</>
+            <><XsSpinner /> Illustrating…</>
           ) : allDone ? (
             <><Sparkles className="h-4 w-4" strokeWidth={3} /> Re-illustrate all</>
           ) : (
@@ -1252,7 +1251,7 @@ export default function EditorPage() {
             >
               {narratingBook ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <XsSpinner />
                   {narrateProgress ? `Narrating ${narrateProgress.done + 1} of ${narrateProgress.total}…` : "Starting…"}
                 </>
               ) : (

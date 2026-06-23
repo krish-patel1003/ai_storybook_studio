@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import React, { forwardRef, useRef, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, ImageIcon, BookOpen } from "lucide-react";
+import { LgSpinner } from "@/components/character-spinner";
 import { api, publicPageImageUrl, type BookOut, type PageOut } from "@/lib/api";
 import type { HTMLFlipBookRef, HTMLFlipBookProps } from "react-pageflip";
 
@@ -158,7 +159,7 @@ export default function PublicReaderPage() {
   if (book === null) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <LgSpinner />
       </div>
     );
   }

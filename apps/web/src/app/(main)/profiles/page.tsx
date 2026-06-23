@@ -5,6 +5,7 @@ import { Plus, Trash2, Pencil, Baby, Check, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { api, type ChildProfile, type CreateProfileIn } from "@/lib/api";
 import { toast } from "sonner";
+import { LgSpinner } from "@/components/character-spinner";
 
 const GRADE_OPTIONS = ["preschool", "K", "1", "2", "3", "4", "5", "6+"];
 const READING_LEVELS = [
@@ -308,7 +309,7 @@ export default function ProfilesPage() {
 
       {loading ? (
         <div className="flex justify-center py-16">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <LgSpinner />
         </div>
       ) : profiles.length === 0 && !showNew ? (
         <div className="flex flex-col items-center gap-4 py-20 text-center">

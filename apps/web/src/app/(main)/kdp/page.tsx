@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Check, Copy, ExternalLink, RefreshCw, Loader2, Rocket,
+  Check, Copy, ExternalLink, RefreshCw, Rocket,
   BookOpen, Pencil, X, Plus, ArrowLeft,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { api, type KDPOut, type BookOut } from "@/lib/api";
 import { BookPicker } from "@/components/book-picker";
+import { XsSpinner, SmSpinner } from "@/components/character-spinner";
 
 // ── Copy button ───────────────────────────────────────────────────────────────
 
@@ -426,7 +427,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
             className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 h-9 text-sm font-extrabold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-50"
           >
             {regenerating
-              ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+              ? <XsSpinner />
               : <RefreshCw className="h-4 w-4" strokeWidth={2.5} />}
             {regenerating ? "Regenerating…" : "Regenerate"}
           </button>
@@ -452,7 +453,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
       {loading ? (
         <>
           <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <SmSpinner />
             Generating your KDP fields with AI — this takes about 5 seconds…
           </div>
           <Skeleton />

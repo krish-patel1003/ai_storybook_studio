@@ -6,13 +6,13 @@ import {
   Mic,
   Plus,
   Trash2,
-  Loader2,
   Wand2,
   Check,
   X,
   Play,
   Square,
 } from "lucide-react";
+import { XsSpinner, CornerSpinner, MdSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { api, type VoiceProfile } from "@/lib/api";
 import { VoiceRecorder } from "@/components/voice-recorder";
@@ -140,7 +140,7 @@ function RecordModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           <div className="flex flex-col items-center gap-5 py-6">
             <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
               <Mic className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
-              <span className="absolute -right-2 -top-2 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
+              <CornerSpinner className="absolute -right-2 -top-2" />
             </div>
             <div className="text-center">
               <p className="font-extrabold">Uploading &amp; cloning…</p>
@@ -243,7 +243,7 @@ function VoiceCard({ profile, onDelete }: { profile: VoiceProfile; onDelete: (id
           title={playing ? "Stop" : "Play recording"}
         >
           {loadingAudio ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <XsSpinner />
           ) : playing ? (
             <Square className="h-4 w-4" strokeWidth={2.5} />
           ) : (
@@ -269,7 +269,7 @@ function VoiceCard({ profile, onDelete }: { profile: VoiceProfile; onDelete: (id
               disabled={deleting}
               className="rounded-full bg-destructive px-3 py-1 text-xs font-extrabold text-white chunky-border disabled:opacity-50"
             >
-              {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes"}
+              {deleting ? <XsSpinner /> : "Yes"}
             </button>
             <button
               onClick={() => setConfirming(false)}
@@ -371,8 +371,8 @@ export default function VoicesPage() {
 
         {/* Voice profiles */}
         {loading ? (
-          <div className="flex items-center gap-3 text-muted-foreground py-10 justify-center">
-            <Loader2 className="h-5 w-5 animate-spin" />
+          <div className="flex flex-col items-center gap-3 text-muted-foreground py-10 justify-center">
+            <MdSpinner />
             <span className="font-bold">Loading voices…</span>
           </div>
         ) : profiles.length === 0 ? (

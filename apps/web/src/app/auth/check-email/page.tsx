@@ -90,7 +90,7 @@ function CheckEmailContent() {
 
 export default function CheckEmailPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><span style={{ animation: "char-wiggle 0.7s ease-in-out infinite", fontSize: "56px", display: "inline-block" }}>🦊</span></div>}>
       <CheckEmailContent />
     </Suspense>
   );

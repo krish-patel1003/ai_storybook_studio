@@ -5,12 +5,13 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import {
   FileText, Link2, BookOpen, Check, Download, Copy,
-  Loader2, Rocket, ArrowLeft, Type,
+  Rocket, ArrowLeft, Type,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { api, type BookOut } from "@/lib/api";
 import { BookPicker } from "@/components/book-picker";
 import { READER_FONTS, type FontId } from "@/lib/fonts";
+import { XsSpinner } from "@/components/character-spinner";
 
 const formats = [
   {
@@ -215,7 +216,7 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-6 py-3 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.5} />
+              <XsSpinner />
             ) : picked === "link" ? (
               <Copy className="h-5 w-5" strokeWidth={2.5} />
             ) : (

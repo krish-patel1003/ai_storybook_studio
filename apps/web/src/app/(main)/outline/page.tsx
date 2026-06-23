@@ -13,9 +13,9 @@ import {
   BookOpen,
   Check,
   X,
-  Loader2,
   User,
 } from "lucide-react";
+import { XsSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, characterImageUrl, type CharacterOut, type PageOut } from "@/lib/api";
@@ -59,7 +59,7 @@ function BeatEditor({
           disabled={saving}
           className="flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border"
         >
-          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={3} />}
+          {saving ? <XsSpinner /> : <Check className="h-3 w-3" strokeWidth={3} />}
           Save
         </button>
         <button
@@ -120,7 +120,7 @@ function AddPageForm({
             disabled={saving || beat.trim().length < 5}
             className="flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={3} />}
+            {saving ? <XsSpinner /> : <Check className="h-3 w-3" strokeWidth={3} />}
             Add page
           </button>
           <button
@@ -260,7 +260,7 @@ function AddCharacterModal({
             disabled={saving || name.trim().length === 0}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <User className="h-4 w-4" strokeWidth={2.5} />}
+            {saving ? <XsSpinner /> : <User className="h-4 w-4" strokeWidth={2.5} />}
             Add character
           </button>
           <button
@@ -346,7 +346,7 @@ function CharacterCard({
           className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-secondary disabled:opacity-40"
         >
           {regenerating
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ? <XsSpinner />
             : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
         </button>
       </div>
@@ -660,7 +660,7 @@ export default function OutlinePage() {
                         }`}
                       >
                         {togglingId === page.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <XsSpinner />
                         ) : page.is_locked ? (
                           <Lock className="h-4 w-4" strokeWidth={2.5} />
                         ) : (
@@ -681,7 +681,7 @@ export default function OutlinePage() {
                         className="grid h-9 w-9 place-items-center rounded-full bg-background hover:bg-accent chunky-border disabled:opacity-50"
                       >
                         {regeneratingId === page.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <XsSpinner />
                         ) : (
                           <RefreshCw className="h-4 w-4" strokeWidth={2.5} />
                         )}
@@ -723,7 +723,7 @@ export default function OutlinePage() {
                   className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border disabled:opacity-50"
                 >
                   {generatingSheets
-                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Generating…</>
+                    ? <><XsSpinner /> Generating…</>
                     : <><Sparkles className="h-3 w-3" strokeWidth={2.5} /> Generate sheets</>}
                 </button>
               )}
