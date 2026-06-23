@@ -247,67 +247,94 @@ const ONE_CLICK_HINTS: Record<string, string[]> = {
 
 // ── Animated loading character ────────────────────────────────────────────────
 
-const LOADING_CHARACTERS: Record<string, { emoji: string; name: string; msgs: string[] }> = {
+type CharAnim = "run" | "jump" | "flip" | "wiggle" | "bounce-x" | "float";
+
+const LOADING_CHARACTERS: Record<string, {
+  emoji: string; name: string; anim: CharAnim; speed: number; trail: string;
+}> = {
   boy: {
     emoji: "🧙‍♂️",
     name: "Zap the Wizard",
-    msgs: [
-      "Zap is mixing the story potion…",
-      "Zap lost his wand again…",
-      "Zap is consulting the magic book…",
-      "Zap is stirring the imagination cauldron…",
-    ],
+    anim: "run",
+    speed: 2.4,
+    trail: "✨",
   },
   girl: {
     emoji: "🧚‍♀️",
     name: "Luna the Fairy",
-    msgs: [
-      "Luna is sprinkling story dust…",
-      "Luna is weaving your adventure…",
-      "Luna is collecting magic words…",
-      "Luna is flying through your story…",
-    ],
+    anim: "float",
+    speed: 2.0,
+    trail: "⭐",
   },
   nonbinary: {
     emoji: "🤖",
     name: "Pixel the Robot",
-    msgs: [
-      "Pixel is computing your story…",
-      "Pixel is processing imagination…",
-      "Pixel is uploading adventure…",
-      "Pixel is calculating the perfect ending…",
-    ],
+    anim: "bounce-x",
+    speed: 0.8,
+    trail: "⚡",
   },
   default: {
     emoji: "🦄",
     name: "Star the Unicorn",
-    msgs: [
-      "Star is galloping through your story…",
-      "Star is painting rainbows on every page…",
-      "Star is making your story magical…",
-      "Star is adding a sprinkle of wonder…",
-    ],
+    anim: "jump",
+    speed: 1.6,
+    trail: "🌈",
   },
 };
 
-function MagicalLoadingCharacter({ gender, stage }: { gender?: string; stage?: string }) {
-  const [bounce, setBounce] = useState(false);
-  const char = LOADING_CHARACTERS[gender ?? "default"] ?? LOADING_CHARACTERS.default;
+const ANIM_CSS: Record<CharAnim, string> = {
+  "run":      "char-run",
+  "jump":     "char-jump",
+  "flip":     "char-flip",
+  "wiggle":   "char-wiggle",
+  "bounce-x": "char-bounce-x",
+  "float":    "char-float",
+};
 
-  useEffect(() => {
-    const t = setInterval(() => setBounce((b) => !b), 600);
-    return () => clearInterval(t);
-  }, []);
+function MagicalLoadingCharacter({ gender }: { gender?: string }) {
+  const char = LOADING_CHARACTERS[gender ?? "default"] ?? LOADING_CHARACTERS.default;
+  const animClass = ANIM_CSS[char.anim];
+  const isRunner = char.anim === "run";
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div
-        className="text-6xl transition-transform duration-300 select-none"
-        style={{ transform: bounce ? "translateY(-10px) rotate(-5deg)" : "translateY(0px) rotate(5deg)" }}
-      >
-        {char.emoji}
+    <div className="flex flex-col items-center gap-3 select-none">
+      {/* Stage — wider for runners */}
+      <div className={`relative flex items-end justify-center ${isRunner ? "w-56 h-20" : "w-32 h-20"}`}>
+
+        {/* Trail particles (only for non-runners) */}
+        {!isRunner && (
+          <>
+            <span className="absolute top-1 left-2 text-base opacity-40" style={{ animation: `char-float ${char.speed * 1.3}s ease-in-out infinite`, animationDelay: "0.3s" }}>{char.trail}</span>
+            <span className="absolute top-4 right-3 text-sm opacity-30" style={{ animation: `char-float ${char.speed * 1.5}s ease-in-out infinite`, animationDelay: "0.7s" }}>{char.trail}</span>
+          </>
+        )}
+
+        {/* The character */}
+        <div
+          className="text-6xl leading-none"
+          style={{
+            animation: `${animClass} ${char.speed}s ${char.anim === "flip" ? "linear" : "ease-in-out"} infinite`,
+            display: "inline-block",
+            willChange: "transform",
+          }}
+        >
+          {char.emoji}
+        </div>
+
+        {/* Ground shadow — only for jumpers */}
+        {(char.anim === "jump" || char.anim === "run") && (
+          <div
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-2 rounded-full bg-foreground/20"
+            style={{ animation: `shadow-pulse ${char.speed}s ease-in-out infinite` }}
+          />
+        )}
       </div>
-      <p className="text-xs font-extrabold text-primary">{char.name}</p>
+
+      {/* Name badge */}
+      <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 chunky-border">
+        <span className="text-sm">{char.trail}</span>
+        <span className="text-xs font-extrabold text-primary">{char.name}</span>
+      </div>
     </div>
   );
 }
@@ -372,7 +399,7 @@ function OneClickOverlay({ stage, progress, book, onView, profileGender }: {
         ) : (
           <motion.div key="progress" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
             <div className="relative">
-              <MagicalLoadingCharacter gender={profileGender} stage={stage} />
+              <MagicalLoadingCharacter gender={profileGender} />
               <span className="absolute -right-1 -top-1 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
             </div>
             <div>
@@ -1632,7 +1659,7 @@ export default function CreatePage() {
                   <motion.div key="writing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex min-h-full items-center justify-center px-6 py-10">
                     <div className="flex flex-col items-center gap-6 text-center max-w-sm">
                       <div className="relative">
-                        <MagicalLoadingCharacter gender={selectedProfile?.gender} stage="writing" />
+                        <MagicalLoadingCharacter gender={selectedProfile?.gender} />
                         <span className="absolute -right-1 -top-1 h-5 w-5 animate-spin rounded-full border-[3px] border-foreground border-t-transparent" />
                       </div>
                       <div>
