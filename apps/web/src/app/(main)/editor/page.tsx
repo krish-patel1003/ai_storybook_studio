@@ -809,14 +809,26 @@ export default function EditorPage() {
   async function handleApplyTextStyle() {
     if (!token || !book) return;
     setTextStyleSaving(true);
+
+    const ALIGNS: TextAlign[]    = ["left", "center", "right"];
+    const POSITIONS: TextPosition[] = ["top", "center", "bottom"];
+
+    const contentPages = book.pages.filter((p) => !p.is_cover);
     try {
-      const updated = await api.books.bulkTextStyle(token, book.id, {
-        randomize: textStyleMode === "randomize",
-        ...(textStyleMode === "static"
-          ? { text_align: textStyleAlign, text_position: textStylePosition }
-          : {}),
-      });
-      updateBook(updated);
+      await Promise.all(
+        contentPages.map((page) => {
+          const text_align: TextAlign = textStyleMode === "randomize"
+            ? ALIGNS[Math.floor(Math.random() * ALIGNS.length)]
+            : textStyleAlign;
+          const text_position: TextPosition = textStyleMode === "randomize"
+            ? POSITIONS[Math.floor(Math.random() * POSITIONS.length)]
+            : textStylePosition;
+          return api.books.updatePage(token!, book!.id, page.id, { text_align, text_position });
+        })
+      );
+      // Refresh once after all updates so the UI reflects every page's new style
+      const refreshed = await api.books.get(token, book.id);
+      updateBook(refreshed);
       toast.success(textStyleMode === "randomize" ? "Text style randomized!" : "Text style applied to all pages!");
     } catch {
       toast.error("Failed to apply text style.");
