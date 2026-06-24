@@ -193,54 +193,73 @@ function PageThumb({
   );
 }
 
-// ── Center: Mode 1 preview (overlay) ──────────────────────────────────────────
+// ── Shared preview size (portrait, matching reader's flip page ratio) ──────────
+
+const PREVIEW_STYLE: React.CSSProperties = {
+  height: "min(560px, calc(100vh - 220px))",
+  aspectRatio: "3/4",
+  flexShrink: 0,
+};
+
+// Reader bg color — used for the gradient blend
+const READER_BG = "#faf8f3";
+
+// ── Center: Mode 1 preview (reader-exact gradient blend) ──────────────────────
 
 type DragHandle = "move" | "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l";
 
 function Mode1Preview({
-  blobUrl, text, settings, canvasRef, onSettingsChange,
+  blobUrl, text, settings,
 }: {
   blobUrl: string | null;
   text: string;
   settings: BookTextSettings;
-  canvasRef: React.RefObject<HTMLDivElement>;
-  onSettingsChange: (patch: Partial<BookTextSettings>) => void;
 }) {
-  // Compute overlay position from settings (fixed zone at bottom/center/top)
-  const zoneH = 0.36;
-  const yMap: Record<TextPosition, number> = { bottom: 1 - zoneH, center: (1 - zoneH) / 2, top: 0 };
-  const overlayY = yMap[settings.m1Position];
-  const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
+  const font     = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
+  const tPos     = settings.m1Position;
+  const tAlign   = settings.m1Align as React.CSSProperties["textAlign"];
+  const textZone = "38%";
+  const gradH    = "47%";
 
-  const bg: React.CSSProperties =
-    settings.m1BgStyle === "none"     ? {} :
-    settings.m1BgStyle === "frosted"  ? { backdropFilter: "blur(14px) saturate(1.4)", backgroundColor: `rgba(255,255,255,${settings.m1BgOpacity * 0.82})` } :
-    { backgroundColor: `rgba(0,0,0,${settings.m1BgOpacity})` };
+  // Exact gradient from reader/page.tsx
+  const gradStyle: React.CSSProperties =
+    tPos === "top"
+      ? { top: 0, bottom: "auto", background: `linear-gradient(to top, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, ${READER_BG} 90%)` }
+    : tPos === "center"
+      ? { top: "26%", bottom: "26%", background: `radial-gradient(ellipse at center, rgba(250,248,243,0.90) 30%, transparent 90%)` }
+    : { bottom: 0, top: "auto", background: `linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, ${READER_BG} 90%)` };
+
+  const posStyle: React.CSSProperties =
+    tPos === "top"    ? { top: 0, bottom: "auto" }
+    : tPos === "center" ? { top: "31%", bottom: "31%" }
+    : { bottom: 0, top: "auto" };
+
+  const justifyClass =
+    tPos === "top"    ? "justify-start"
+    : tPos === "center" ? "justify-center"
+    : "justify-end";
 
   return (
-    <div ref={canvasRef} className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
-      style={{ width: "min(640px, calc(100vw - 520px))", aspectRatio: "4/3", flexShrink: 0 }}>
+    <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
+      style={{ ...PREVIEW_STYLE, background: READER_BG }}>
       {blobUrl ? (
-        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: "center top" }} draggable={false} />
       ) : (
         <div className="absolute inset-0 bg-muted flex items-center justify-center">
           <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
         </div>
       )}
+      {/* Gradient blend — matches reader exactly */}
+      <div className="absolute inset-x-0 pointer-events-none" style={{ height: gradH, ...gradStyle }} />
       {/* Text zone */}
-      <div style={{
-        position: "absolute",
-        left: "3%", top: `${overlayY * 100}%`,
-        width: "94%", height: `${zoneH * 100}%`,
-        ...bg, borderRadius: 8,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "8px 14px",
-      }}>
+      <div className={`absolute inset-x-0 flex flex-col items-center ${justifyClass} overflow-hidden`}
+        style={{ height: textZone, padding: "8px 28px 24px 28px", ...posStyle }}>
         <p style={{
           margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
           fontFamily: font.stack, fontWeight: font.weight,
-          fontSize: settings.fontSize, color: settings.textColor,
-          textAlign: settings.m1Align, lineHeight: 1.35,
+          fontSize: `${settings.fontSize}px`, color: settings.textColor,
+          textAlign: tAlign, lineHeight: 1.85,
         }}>
           {text || <span style={{ opacity: 0.3, fontStyle: "italic" }}>No text yet</span>}
         </p>
@@ -299,11 +318,7 @@ function Mode2Preview({
 
   return (
     <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
-      style={{
-        width: "min(640px, calc(100vw - 520px))", aspectRatio: "4/3",
-        flexShrink: 0, display: "flex",
-        flexDirection: isTextBottom ? "column" : "column-reverse",
-      }}>
+      style={{ ...PREVIEW_STYLE, display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
       {imgBlock}
       {textBlock}
     </div>
@@ -344,7 +359,7 @@ function Mode3Preview({
   return (
     // No overflow-hidden here — handles extend slightly outside the image edge
     <div ref={canvasRef} className="relative rounded-2xl chunky-border chunky-shadow"
-      style={{ width: "min(640px, calc(100vw - 520px))", aspectRatio: "4/3", flexShrink: 0 }}>
+      style={{ ...PREVIEW_STYLE }}>
       {/* Image clipped inside the rounded container */}
       <div className="absolute inset-0 rounded-2xl overflow-hidden">
         {blobUrl ? (
@@ -444,7 +459,7 @@ function useAudioPreview(bookId: string, pageId: string, token: string | null) {
 // ── Default canvas overlay ─────────────────────────────────────────────────────
 
 const DEFAULT_OVERLAY: CanvasOverlay = {
-  x: 0.03, y: 0.66, w: 0.94, h: 0.30,
+  x: 0.03, y: 0.62, w: 0.94, h: 0.34,
   fontSize: 14, fontFamily: "unkempt",
   textColor: "#1a1a2e", bgStyle: "frosted", bgOpacity: 0.82,
 };
@@ -882,13 +897,7 @@ function StudioInner() {
 
           {/* The preview — switches based on mode */}
           {settings.mode === 1 && (
-            <Mode1Preview
-              blobUrl={blobUrl}
-              text={text}
-              settings={settings}
-              canvasRef={canvasRef as React.RefObject<HTMLDivElement>}
-              onSettingsChange={patchSettings}
-            />
+            <Mode1Preview blobUrl={blobUrl} text={text} settings={settings} />
           )}
           {settings.mode === 2 && (
             <Mode2Preview blobUrl={blobUrl} text={text} settings={settings} />
@@ -1039,6 +1048,9 @@ function StudioInner() {
 
             {settings.mode === 1 && (
               <>
+                <p className="text-[11px] text-muted-foreground">
+                  Matches the reader — gradient blends the image into a text zone.
+                </p>
                 <div>
                   <SL>Text position</SL>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -1066,26 +1078,6 @@ function StudioInner() {
                       </button>
                     ))}
                   </div>
-                </div>
-                <div>
-                  <SL>Background</SL>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["none", "frosted", "darkened"] as const).map(style => (
-                      <button key={style} onClick={() => patchSettings({ m1BgStyle: style })}
-                        className={cn("rounded-xl py-1.5 text-xs font-extrabold capitalize chunky-border transition-colors",
-                          settings.m1BgStyle === style ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                        {style === "darkened" ? "Dark" : style === "frosted" ? "Frosted" : "None"}
-                      </button>
-                    ))}
-                  </div>
-                  {settings.m1BgStyle !== "none" && (
-                    <div className="mt-2">
-                      <p className="text-[10px] font-bold text-muted-foreground mb-1">Opacity — {Math.round(settings.m1BgOpacity * 100)}%</p>
-                      <input type="range" min={0.1} max={1} step={0.05} value={settings.m1BgOpacity}
-                        onChange={e => patchSettings({ m1BgOpacity: parseFloat(e.target.value) })}
-                        className="w-full h-2 accent-primary" />
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -1150,7 +1142,7 @@ function StudioInner() {
                   <SL>Snap position</SL>
                   <div className="grid grid-cols-3 gap-1.5">
                     {(["top", "center", "bottom"] as const).map(pos => {
-                      const yMap = { top: 0.03, center: 0.35, bottom: 0.66 };
+                      const yMap = { top: 0.03, center: 0.33, bottom: 0.62 };
                       return (
                         <button key={pos} onClick={() => { setOverlay(prev => ({ ...prev, x: 0.03, y: yMap[pos], w: 0.94 })); setDirty(true); }}
                           className="rounded-xl py-1.5 text-xs font-extrabold capitalize bg-background chunky-border hover:bg-muted transition-colors">
