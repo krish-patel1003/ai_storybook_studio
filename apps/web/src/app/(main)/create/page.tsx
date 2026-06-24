@@ -921,10 +921,10 @@ const STEPS = [
   { id: "review",  label: "Review"  },
 ];
 
-type FlowState = "input" | "enhancing" | "enhanced" | "brief" | "writing" | "pages";
+type FlowState = "profile" | "input" | "enhancing" | "enhanced" | "brief" | "writing" | "pages";
 
 function flowToStepIdx(state: FlowState): number {
-  if (state === "input")     return 0;
+  if (state === "profile" || state === "input") return 0;
   if (state === "enhancing" || state === "enhanced") return 1;
   if (state === "brief")     return 2;
   return 3; // writing | pages
@@ -972,7 +972,7 @@ export default function CreatePage() {
   const [modelName, setModelName] = useState("gemini-3.1-pro-preview");
 
   // Flow
-  const [flowState, setFlowState] = useState<FlowState>("input");
+  const [flowState, setFlowState] = useState<FlowState>("profile");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Brainstorm (idea sparks on input screen)
@@ -1227,8 +1227,8 @@ export default function CreatePage() {
 
         {/* ── Top bar ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between border-b-[2.5px] border-foreground bg-background px-6 py-3">
-          <StepBar current={flowState} />
-          {flowState !== "input" && (
+          {flowState !== "profile" && <StepBar current={flowState} />}
+          {flowState !== "input" && flowState !== "profile" && (
             <button
               onClick={() => {
                 if (flowState === "pages") setFlowState("pages");
@@ -1254,6 +1254,49 @@ export default function CreatePage() {
             <div className="flex-1 overflow-y-auto">
               <AnimatePresence mode="wait">
 
+                {/* ── PROFILE PICKER ── */}
+                {flowState === "profile" && (
+                  <motion.div key="profile" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={{ duration: 0.2 }}
+                    className="flex flex-col items-center justify-center min-h-full px-6 py-16">
+                    <h1 className="font-display text-4xl font-black md:text-5xl text-center">Who&apos;s creating today?</h1>
+                    <p className="mt-3 text-muted-foreground text-center">Pick a profile — we&apos;ll personalise the story for them.</p>
+                    <div className="mt-10 flex flex-wrap justify-center gap-6 max-w-2xl">
+                      {/* Parent card */}
+                      <button
+                        onClick={() => { setSelectedProfileId(null); setFlowState("input"); }}
+                        className="group flex flex-col items-center gap-3 rounded-3xl bg-card p-6 w-36 chunky-border chunky-shadow-sm hover:-translate-y-1.5 transition-transform focus:outline-none focus:ring-4 focus:ring-primary/30"
+                      >
+                        <span className="grid h-20 w-20 place-items-center rounded-2xl bg-primary text-4xl font-black text-primary-foreground chunky-border group-hover:scale-105 transition-transform">
+                          {(user?.username ?? "?").charAt(0).toUpperCase()}
+                        </span>
+                        <div className="text-center">
+                          <p className="font-extrabold text-sm leading-tight">{user?.author_name || user?.username || "Me"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Parent</p>
+                        </div>
+                      </button>
+                      {/* Child profile cards */}
+                      {profiles.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => { setSelectedProfileId(p.id); setFlowState("input"); }}
+                          className="group flex flex-col items-center gap-3 rounded-3xl bg-card p-6 w-36 chunky-border chunky-shadow-sm hover:-translate-y-1.5 transition-transform focus:outline-none focus:ring-4 focus:ring-primary/30"
+                        >
+                          <span className="grid h-20 w-20 place-items-center rounded-2xl bg-secondary text-5xl chunky-border group-hover:scale-105 transition-transform">
+                            {p.avatar_emoji}
+                          </span>
+                          <div className="text-center">
+                            <p className="font-extrabold text-sm leading-tight">{p.author_name || p.name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Age {p.age}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <a href="/profiles" className="mt-10 text-xs font-bold text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
+                      Manage profiles
+                    </a>
+                  </motion.div>
+                )}
+
                 {/* ── INPUT ── */}
                 {flowState === "input" && (
                   <motion.div key="input" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}
@@ -1261,28 +1304,18 @@ export default function CreatePage() {
                     <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
                     <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
 
-                    {/* Author picker — parent or child profile */}
-                    <div className="mt-5 flex items-start gap-3">
-                      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground shrink-0 pt-1.5">Author</p>
-                      <div className="flex flex-wrap gap-2">
-                        {/* Parent option */}
-                        <button
-                          onClick={() => setSelectedProfileId(null)}
-                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${!selectedProfileId ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
-                        >
-                          👤 {user?.author_name || user?.username || "Me"}
-                        </button>
-                        {profiles.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => setSelectedProfileId(p.id === selectedProfileId ? null : p.id)}
-                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${selectedProfileId === p.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
-                          >
-                            {p.avatar_emoji} {p.author_name || p.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    {/* Active author chip — click to switch */}
+                    <button
+                      onClick={() => setFlowState("profile")}
+                      className="mt-4 inline-flex items-center gap-2 self-start rounded-full bg-card px-3 py-1.5 text-xs font-bold chunky-border hover:bg-muted transition-colors"
+                    >
+                      <span className="text-base leading-none">
+                        {selectedProfile ? selectedProfile.avatar_emoji : (user?.username ?? "?").charAt(0).toUpperCase()}
+                      </span>
+                      <span>{selectedProfile ? (selectedProfile.author_name || selectedProfile.name) : (user?.author_name || user?.username || "Me")}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground font-normal">Switch</span>
+                    </button>
 
                     <div className="relative mt-6">
                       <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
