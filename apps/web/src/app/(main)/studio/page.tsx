@@ -1011,16 +1011,26 @@ function StudioInner() {
 
             {/* ── Font size ── */}
             <div>
-              <SL>Font size — {settings.fontSize}pt</SL>
+              <SL>Font size</SL>
               <div className="flex items-center gap-2">
                 <button onClick={() => patchSettings({ fontSize: Math.max(8, settings.fontSize - 1) })}
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors">
                   <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
                 </button>
-                <input type="range" min={8} max={48} step={1} value={settings.fontSize}
+                <input
+                  type="number" min={8} max={96} step={1}
+                  value={settings.fontSize}
+                  onChange={e => {
+                    const v = parseInt(e.target.value);
+                    if (!isNaN(v)) patchSettings({ fontSize: Math.min(96, Math.max(8, v)) });
+                  }}
+                  className="w-14 rounded-lg bg-background px-2 py-1 text-center text-sm font-extrabold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 select-text [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <span className="text-xs font-bold text-muted-foreground shrink-0">pt</span>
+                <input type="range" min={8} max={96} step={1} value={settings.fontSize}
                   onChange={e => patchSettings({ fontSize: parseInt(e.target.value) })}
                   className="flex-1 h-2 accent-primary" />
-                <button onClick={() => patchSettings({ fontSize: Math.min(48, settings.fontSize + 1) })}
+                <button onClick={() => patchSettings({ fontSize: Math.min(96, settings.fontSize + 1) })}
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors">
                   <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
                 </button>
