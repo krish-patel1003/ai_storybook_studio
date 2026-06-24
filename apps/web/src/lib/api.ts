@@ -71,6 +71,7 @@ export interface PageOut {
   id: string;
   order: number;
   is_cover: boolean;
+  is_back_cover: boolean;
   is_locked: boolean;
   narrative_role: string;
   beat: string;
@@ -85,6 +86,10 @@ export interface PageOut {
   text_align: TextAlign;
   text_position: TextPosition;
   canvas_overlay: CanvasOverlay | null;
+  font_size: number | null;
+  font_family: string | null;
+  text_color: string | null;
+  text_mode: number | null;
 }
 
 export function pageImageUrl(bookId: string, pageId: string): string {
@@ -266,6 +271,10 @@ export interface UpdatePageIn {
   text_align?: TextAlign;
   text_position?: TextPosition;
   canvas_overlay?: CanvasOverlay | null;
+  font_size?: number;
+  font_family?: string;
+  text_color?: string;
+  text_mode?: number;
 }
 
 export interface BulkTextStyleIn {
@@ -610,6 +619,24 @@ export const api = {
 
     pageAudioUrl: (bookId: string, pageId: string) =>
       `${API_URL}/books/${bookId}/pages/${pageId}/audio`,
+
+    splitPage: (token: string, bookId: string, pageId: string) =>
+      request<BookOut>(`/books/${bookId}/pages/${pageId}/split`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    createBackCover: (token: string, bookId: string) =>
+      request<BookOut>(`/books/${bookId}/back-cover`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    illustrateBackCover: (token: string, bookId: string) =>
+      request<BookOut>(`/books/${bookId}/back-cover/illustrate`, {
+        method: "POST",
+        headers: authed(token),
+      }),
   },
 
   voices: {

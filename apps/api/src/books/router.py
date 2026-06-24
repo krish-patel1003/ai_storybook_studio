@@ -504,6 +504,34 @@ async def illustrate_page(
     return BookOut.model_validate(updated)
 
 
+@router.post("/{book_id}/back-cover", response_model=BookOut)
+async def create_back_cover(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.create_back_cover_page(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/back-cover/illustrate", response_model=BookOut)
+async def illustrate_back_cover(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.illustrate_back_cover(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/pages/{page_id}/split", response_model=BookOut)
+async def split_page(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.split_page(db, book.id, page_id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
 @router.get("/{book_id}/pages/{page_id}/image")
 async def get_page_image(
     page_id: uuid.UUID,

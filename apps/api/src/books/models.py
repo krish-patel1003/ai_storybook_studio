@@ -135,6 +135,7 @@ class Page(Base):
 
     order: Mapped[int] = mapped_column(Integer, nullable=False)
     is_cover: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_back_cover: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Beat (outline)
@@ -164,5 +165,11 @@ class Page(Base):
     # Canvas-style text overlay — set by the canvas editor; overrides text_align/text_position when present
     # Schema: { x, y, w, fontSize, fontFamily, textColor, bgStyle, bgOpacity }
     canvas_overlay: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Per-page style (set by studio; null = use reader/export defaults)
+    font_size: Mapped[float | None] = mapped_column(nullable=True)
+    font_family: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    text_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    text_mode: Mapped[int | None] = mapped_column(nullable=True)
 
     book: Mapped["Book"] = relationship(back_populates="pages")

@@ -61,6 +61,7 @@ class ExportPage:
     author: str = ""
     text_align: str = "center"    # left | center | right
     text_position: str = "bottom" # top | center | bottom
+    is_back_cover: bool = False
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
@@ -295,6 +296,10 @@ def _build_pdf_sync(
     TEXT_ZONE_FRAC = 0.36   # must match reader + _story_page_composite
 
     for page in sorted(pages, key=lambda p: p.order):
+        # Back cover is rendered separately at the end — skip it in the main loop
+        if getattr(page, 'is_back_cover', False):
+            continue
+
         pdf.add_page()
 
         if page.is_cover:
@@ -399,10 +404,15 @@ def _build_pdf_sync(
     # ── Back cover ────────────────────────────────────────────────────────────
     pdf.add_page()
     cover_page = next((p for p in pages if p.is_cover), None)
+    back_cover_page = next((p for p in pages if getattr(p, 'is_back_cover', False)), None)
     pdf.set_fill_color(20, 18, 40)
     pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
 
-    if cover_page and cover_page.image_bytes:
+    if back_cover_page and back_cover_page.image_bytes:
+        # Dedicated back cover illustration — full-bleed, no darkening composite
+        bc_img = _cover_crop(back_cover_page.image_bytes, PAGE_W, PAGE_H)
+        pdf.image(io.BytesIO(bc_img), x=0, y=0, w=PAGE_W, h=PAGE_H)
+    elif cover_page and cover_page.image_bytes:
         bc_img = _back_cover_composite(cover_page.image_bytes, PAGE_W, PAGE_H)
         pdf.image(io.BytesIO(bc_img), x=0, y=0, w=PAGE_W, h=PAGE_H)
 
@@ -706,7 +716,10 @@ body {{
         chapters.append(cover_ch)
 
     # ── Story pages ───────────────────────────────────────────────────────────
-    content_pages = [p for p in sorted(pages, key=lambda x: x.order) if not p.is_cover]
+    content_pages = [
+        p for p in sorted(pages, key=lambda x: x.order)
+        if not p.is_cover and not getattr(p, 'is_back_cover', False)
+    ]
 
     for page in content_pages:
         safe_text = html_mod.escape(page.text or "").replace("\n", "<br/>")

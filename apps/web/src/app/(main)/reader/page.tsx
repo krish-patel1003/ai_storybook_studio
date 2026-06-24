@@ -136,9 +136,15 @@ const StoryPage = forwardRef<
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Per-page style overrides saved from studio take precedence over reader-level controls
+  const pageFont = page.font_family ? FONTS.find(f => f.id === page.font_family) : null;
+  const effectiveFontStack  = pageFont?.stack  ?? fontStack;
+  const effectiveFontWeight = pageFont?.weight ?? fontWeight;
+  // page.font_size is in px; convert to rem for the reader's sizing system
+  const effectiveFontSize   = page.font_size ? page.font_size / 16 : fontSize;
+  const effectiveTextColor  = page.text_color ?? undefined;
+
   // Auto-shrink font if text overflows the container.
-  // Uses ResizeObserver so it re-fires once HTMLFlipBook (dynamic import) settles
-  // to its actual dimensions — fixes the "tiny text on first load" bug.
   useEffect(() => {
     const el = textRef.current;
     const container = containerRef.current;
@@ -146,14 +152,13 @@ const StoryPage = forwardRef<
 
     const fit = () => {
       if (!page.text || container.clientHeight === 0) return;
-      el.style.fontSize = `${fontSize}rem`;
-      let px = fontSize * 16;
+      el.style.fontSize = `${effectiveFontSize}rem`;
+      let px = effectiveFontSize * 16;
       const minPx = 9;
       while (el.scrollHeight > container.clientHeight && px > minPx) {
         px -= 0.5;
         el.style.fontSize = `${px}px`;
       }
-      // Hard cap: if text still overflows at minimum size, clip it
       el.style.overflow = el.scrollHeight > container.clientHeight ? "hidden" : "";
     };
 
@@ -161,7 +166,7 @@ const StoryPage = forwardRef<
     const ro = new ResizeObserver(fit);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [page.text, fontStack, fontSize]);
+  }, [page.text, effectiveFontStack, effectiveFontSize]);
 
   const textZone     = "38%";
   const gradientZone = "47%";
@@ -218,12 +223,12 @@ const StoryPage = forwardRef<
               <p
                 ref={textRef}
                 className="text-foreground w-full"
-                style={{ fontFamily: fontStack, fontSize: `${fontSize}rem`, fontWeight, lineHeight: 1.85, textAlign: tAlign }}
+                style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : {}) }}
               >
                 {page.text}
               </p>
             ) : (
-              <p className="italic text-muted-foreground text-sm" style={{ fontFamily: fontStack }}>
+              <p className="italic text-muted-foreground text-sm" style={{ fontFamily: effectiveFontStack }}>
                 No text yet
               </p>
             )}
@@ -236,7 +241,7 @@ const StoryPage = forwardRef<
         <div className="absolute top-3 right-3 select-none pointer-events-none max-w-[55%] text-right">
           <span
             style={{
-              fontFamily: fontStack,
+              fontFamily: effectiveFontStack,
               fontSize: "0.6rem",
               fontWeight: 400,
               letterSpacing: "0.06em",

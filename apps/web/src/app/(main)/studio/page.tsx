@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Mic, Sparkles, RefreshCw, Play, Pause,
   Square as StopIcon, Volume2, Check, Minus, Plus, AlignLeft,
   AlignCenter, AlignRight, ChevronLeft, ChevronRight, ImageIcon,
-  Layers, Paintbrush, Grid3X3, Pipette,
+  Layers, Paintbrush, Grid3X3, Pipette, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -140,6 +140,49 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+// ── Canvas box (Mode 3) ────────────────────────────────────────────────────────
+
+type BoxShape = "rect" | "rounded" | "pill";
+type BoxBg    = "none" | "frosted" | "darkened";
+
+interface CanvasBox {
+  id: string;
+  x: number; y: number; w: number; h: number;
+  text: string;
+  shape: BoxShape;
+  bgStyle: BoxBg;
+  bgOpacity: number;
+}
+
+function makeBox(text = "", offsetIdx = 0): CanvasBox {
+  return {
+    id: Math.random().toString(36).slice(2),
+    x: 0.03 + offsetIdx * 0.03,
+    y: Math.max(0.03, 0.62 - offsetIdx * 0.22),
+    w: 0.90,
+    h: 0.30,
+    text,
+    shape: "rounded",
+    bgStyle: "frosted",
+    bgOpacity: 0.82,
+  };
+}
+
+function loadBoxes(bookId: string, pageId: string): CanvasBox[] | null {
+  try {
+    const raw = localStorage.getItem(`canvas3-${bookId}-${pageId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function persistBoxes(bookId: string, pageId: string, boxes: CanvasBox[]) {
+  try { localStorage.setItem(`canvas3-${bookId}-${pageId}`, JSON.stringify(boxes)); } catch {}
+}
+
+function boxBorderRadius(shape: BoxShape): number | string {
+  return shape === "rect" ? 3 : shape === "pill" ? 999 : 12;
+}
+
 // ── Page thumbnail ─────────────────────────────────────────────────────────────
 
 function PageThumb({
@@ -181,7 +224,7 @@ function PageThumb({
           "absolute bottom-0 inset-x-0 py-0.5 text-center text-[9px] font-extrabold",
           isActive ? "bg-primary text-primary-foreground" : "bg-black/50 text-white"
         )}>
-          {page.is_cover ? "Cover" : `p.${page.order}`}
+          {page.is_cover ? "Cover" : (page as PageOut & { is_back_cover?: boolean }).is_back_cover ? "Back" : `p.${page.order}`}
           {page.has_audio && <span className="ml-1 opacity-70">♪</span>}
         </div>
       </div>
@@ -192,7 +235,8 @@ function PageThumb({
 // ── Shared preview size (portrait, matching reader's flip page ratio) ──────────
 
 const PREVIEW_STYLE: React.CSSProperties = {
-  height: "min(680px, calc(100vh - 170px))",
+  // 64px nav + 56px studio bar + 40px bottom bar + ~90px (page nav, padding, hint)
+  height: "min(800px, calc(100vh - 250px))",
   aspectRatio: "3/4",
   flexShrink: 0,
 };
@@ -205,14 +249,22 @@ const READER_BG = "#faf8f3";
 type DragHandle = "move" | "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l";
 
 function Mode1Preview({
-  blobUrl, text, settings, position, align,
+  blobUrl, text, settings, position, align, onOverflow,
 }: {
   blobUrl: string | null;
   text: string;
   settings: BookTextSettings;
   position: TextPosition;
   align: TextAlign;
+  onOverflow?: (overflows: boolean) => void;
 }) {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el || !onOverflow) return;
+    onOverflow(el.scrollHeight > el.parentElement!.clientHeight + 4);
+  });
+
   const font     = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
   const tPos     = position;
   const tAlign   = align as React.CSSProperties["textAlign"];
@@ -253,7 +305,7 @@ function Mode1Preview({
       {/* Text zone */}
       <div className={`absolute inset-x-0 flex flex-col items-center ${justifyClass} overflow-hidden`}
         style={{ height: textZone, padding: "8px 28px 24px 28px", ...posStyle }}>
-        <p style={{
+        <p ref={textRef} style={{
           margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
           fontFamily: font.stack, fontWeight: font.weight,
           fontSize: `${settings.fontSize}px`, color: settings.textColor,
@@ -269,12 +321,20 @@ function Mode1Preview({
 // ── Center: Mode 2 preview (stacked) ──────────────────────────────────────────
 
 function Mode2Preview({
-  blobUrl, text, settings,
+  blobUrl, text, settings, onOverflow,
 }: {
   blobUrl: string | null;
   text: string;
   settings: BookTextSettings;
+  onOverflow?: (overflows: boolean) => void;
 }) {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el || !onOverflow) return;
+    onOverflow(el.scrollHeight > el.parentElement!.clientHeight + 4);
+  });
+
   const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
   const isTextBottom = settings.m2Position === "bottom";
 
@@ -304,9 +364,9 @@ function Mode2Preview({
     <div style={{
       flex: 1, background: settings.m2BgColor,
       display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "10px 16px",
+      padding: "10px 16px", overflow: "hidden",
     }}>
-      <p style={{
+      <p ref={textRef} style={{
         margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
         fontFamily: font.stack, fontWeight: font.weight,
         fontSize: settings.fontSize, color: settings.textColor,
@@ -326,42 +386,41 @@ function Mode2Preview({
   );
 }
 
-// ── Center: Mode 3 preview (canvas / drag-resize) ─────────────────────────────
+// ── Center: Mode 3 preview (multi-box canvas) ────────────────────────────────
+
+const DRAG_HANDLES: { id: DragHandle; s: React.CSSProperties; cursor: string }[] = [
+  { id: "tl", s: { top: -5, left: -5 },                   cursor: "nw-resize" },
+  { id: "t",  s: { top: -5, left: "calc(50% - 5px)" },    cursor: "n-resize"  },
+  { id: "tr", s: { top: -5, right: -5 },                  cursor: "ne-resize" },
+  { id: "r",  s: { top: "calc(50% - 5px)", right: -5 },   cursor: "e-resize"  },
+  { id: "br", s: { bottom: -5, right: -5 },               cursor: "se-resize" },
+  { id: "b",  s: { bottom: -5, left: "calc(50% - 5px)" }, cursor: "s-resize"  },
+  { id: "bl", s: { bottom: -5, left: -5 },                cursor: "sw-resize" },
+  { id: "l",  s: { top: "calc(50% - 5px)", left: -5 },    cursor: "w-resize"  },
+];
 
 function Mode3Preview({
-  blobUrl, text, overlay, canvasRef,
-  onMoveStart, onHandleStart,
+  blobUrl, boxes, activeBoxIdx, settings, canvasRef,
+  onBoxClick, onMoveStart, onHandleStart, onAdd, onDuplicate, onRemove,
 }: {
   blobUrl: string | null;
-  text: string;
-  overlay: CanvasOverlay;
+  boxes: CanvasBox[];
+  activeBoxIdx: number;
+  settings: BookTextSettings;
   canvasRef: React.RefObject<HTMLDivElement>;
-  onMoveStart: (e: React.MouseEvent) => void;
-  onHandleStart: (e: React.MouseEvent, h: DragHandle) => void;
+  onBoxClick: (idx: number) => void;
+  onMoveStart: (e: React.MouseEvent, idx: number) => void;
+  onHandleStart: (e: React.MouseEvent, h: DragHandle, idx: number) => void;
+  onAdd: () => void;
+  onDuplicate: (idx: number) => void;
+  onRemove: (idx: number) => void;
 }) {
-  const font = READER_FONTS.find(f => f.id === overlay.fontFamily) ?? READER_FONTS[0];
-
-  const bg: React.CSSProperties =
-    overlay.bgStyle === "none"     ? {} :
-    overlay.bgStyle === "frosted"  ? { backdropFilter: "blur(14px)", backgroundColor: `rgba(255,255,255,${overlay.bgOpacity * 0.82})` } :
-    { backgroundColor: `rgba(0,0,0,${overlay.bgOpacity})` };
-
-  const HANDLES: { id: DragHandle; s: React.CSSProperties; cursor: string }[] = [
-    { id: "tl", s: { top: -5, left: -5 },                   cursor: "nw-resize" },
-    { id: "t",  s: { top: -5, left: "calc(50% - 5px)" },    cursor: "n-resize"  },
-    { id: "tr", s: { top: -5, right: -5 },                  cursor: "ne-resize" },
-    { id: "r",  s: { top: "calc(50% - 5px)", right: -5 },   cursor: "e-resize"  },
-    { id: "br", s: { bottom: -5, right: -5 },               cursor: "se-resize" },
-    { id: "b",  s: { bottom: -5, left: "calc(50% - 5px)" }, cursor: "s-resize"  },
-    { id: "bl", s: { bottom: -5, left: -5 },                cursor: "sw-resize" },
-    { id: "l",  s: { top: "calc(50% - 5px)", left: -5 },    cursor: "w-resize"  },
-  ];
+  const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
 
   return (
-    // No overflow-hidden here — handles extend slightly outside the image edge
     <div ref={canvasRef} className="relative rounded-2xl chunky-border chunky-shadow"
       style={{ ...PREVIEW_STYLE }}>
-      {/* Image clipped inside the rounded container */}
+      {/* Image layer */}
       <div className="absolute inset-0 rounded-2xl overflow-hidden">
         {blobUrl ? (
           <img src={blobUrl} alt="" className="h-full w-full object-cover" draggable={false} />
@@ -371,47 +430,133 @@ function Mode3Preview({
           </div>
         )}
       </div>
-      {/* Draggable text box */}
-      <div
-        style={{
-          position: "absolute",
-          left: `${overlay.x * 100}%`, top: `${overlay.y * 100}%`,
-          width: `${overlay.w * 100}%`, height: `${overlay.h * 100}%`,
-          cursor: "move", userSelect: "none",
-        }}
-        onMouseDown={onMoveStart}
-      >
-        <div style={{ position: "absolute", inset: 0, borderRadius: 8, ...bg }} />
-        <div style={{
-          position: "relative", zIndex: 1, height: "100%",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "8px 14px", overflow: "hidden",
-          fontFamily: font.stack, fontWeight: font.weight,
-          fontSize: overlay.fontSize, color: overlay.textColor,
-          textAlign: "center", lineHeight: 1.3,
-        }}>
-          <p style={{ margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            {text || <span style={{ opacity: 0.3, fontStyle: "italic" }}>No text</span>}
-          </p>
-        </div>
-        {/* Selection ring */}
-        <div style={{
-          position: "absolute", inset: 0,
-          border: "2px dashed oklch(0.7 0.18 35)",
-          borderRadius: 8, pointerEvents: "none",
-        }} />
-        {HANDLES.map(({ id, s, cursor }) => (
-          <div key={id}
+
+      {/* Boxes */}
+      {boxes.map((box, idx) => {
+        const isActive = idx === activeBoxIdx;
+        const br = boxBorderRadius(box.shape);
+        const bg: React.CSSProperties =
+          box.bgStyle === "none"     ? {} :
+          box.bgStyle === "frosted"  ? { backdropFilter: "blur(14px)", backgroundColor: `rgba(255,255,255,${box.bgOpacity * 0.82})` } :
+          { backgroundColor: `rgba(0,0,0,${box.bgOpacity})` };
+
+        return (
+          <div key={box.id}
             style={{
-              position: "absolute", width: 11, height: 11,
-              background: "oklch(0.99 0.01 85)",
-              border: "2.5px solid oklch(0.7 0.18 35)",
-              borderRadius: 3, cursor, zIndex: 20, ...s,
+              position: "absolute",
+              left: `${box.x * 100}%`, top: `${box.y * 100}%`,
+              width: `${box.w * 100}%`, height: `${box.h * 100}%`,
+              cursor: isActive ? "move" : "pointer", userSelect: "none", zIndex: isActive ? 10 : 5,
             }}
-            onMouseDown={e => { e.stopPropagation(); onHandleStart(e, id); }}
-          />
-        ))}
-      </div>
+            onMouseDown={e => isActive ? onMoveStart(e, idx) : (e.preventDefault(), onBoxClick(idx))}
+          >
+            {/* Background fill */}
+            <div style={{ position: "absolute", inset: 0, borderRadius: br, ...bg }} />
+            {/* Text */}
+            <div style={{
+              position: "relative", zIndex: 1, height: "100%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "8px 14px", overflow: "hidden",
+              fontFamily: font.stack, fontWeight: font.weight,
+              fontSize: settings.fontSize, color: settings.textColor,
+              textAlign: "center", lineHeight: 1.3,
+            }}>
+              <p style={{ margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {box.text || <span style={{ opacity: 0.3, fontStyle: "italic" }}>Box {idx + 1}</span>}
+              </p>
+            </div>
+            {/* Border ring */}
+            <div style={{
+              position: "absolute", inset: 0,
+              border: isActive ? "2px dashed oklch(0.7 0.18 35)" : "1.5px solid rgba(100,100,220,0.45)",
+              borderRadius: br, pointerEvents: "none",
+            }} />
+            {/* Number badge on inactive boxes */}
+            {!isActive && (
+              <div style={{
+                position: "absolute", top: -8, left: -8,
+                background: "oklch(0.55 0.16 260)", color: "#fff",
+                borderRadius: "50%", width: 16, height: 16,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 9, fontWeight: 800, pointerEvents: "none",
+              }}>{idx + 1}</div>
+            )}
+            {/* Floating toolbar above active box */}
+            {isActive && (
+              <div
+                style={{
+                  position: "absolute", top: -34, left: "50%", transform: "translateX(-50%)",
+                  display: "flex", gap: 4, zIndex: 30,
+                }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                {/* Box label */}
+                <div style={{
+                  background: "oklch(0.55 0.16 260)", color: "#fff",
+                  borderRadius: 6, padding: "2px 7px",
+                  fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center",
+                }}>Box {idx + 1}</div>
+                {/* Duplicate */}
+                <button
+                  title="Duplicate box"
+                  onClick={e => { e.stopPropagation(); onDuplicate(idx); }}
+                  style={{
+                    background: "oklch(0.99 0.01 85)", border: "2px solid oklch(0.7 0.18 35)",
+                    borderRadius: 6, width: 26, height: 26, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                </button>
+                {/* Add */}
+                <button
+                  title="Add box"
+                  onClick={e => { e.stopPropagation(); onAdd(); }}
+                  style={{
+                    background: "oklch(0.99 0.01 85)", border: "2px solid oklch(0.7 0.18 35)",
+                    borderRadius: 6, width: 26, height: 26, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                </button>
+                {/* Delete — only if more than 1 box */}
+                {boxes.length > 1 && (
+                  <button
+                    title="Delete box"
+                    onClick={e => { e.stopPropagation(); onRemove(idx); }}
+                    style={{
+                      background: "oklch(0.99 0.01 85)", border: "2px solid oklch(0.65 0.2 25)",
+                      borderRadius: 6, width: 26, height: 26, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", color: "oklch(0.55 0.22 25)",
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Resize handles — only for active box */}
+            {isActive && DRAG_HANDLES.map(({ id, s, cursor }) => (
+              <div key={id}
+                style={{
+                  position: "absolute", width: 11, height: 11,
+                  background: "oklch(0.99 0.01 85)",
+                  border: "2.5px solid oklch(0.7 0.18 35)",
+                  borderRadius: 3, cursor, zIndex: 20, ...s,
+                }}
+                onMouseDown={e => { e.stopPropagation(); onHandleStart(e, id, idx); }}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -610,13 +755,17 @@ function StudioInner() {
   const { book, setBook } = useBook();
 
   const [pageIdx,  setPageIdx]  = useState(0);
-  const [text,         setText]        = useState("");
-  const [settings,    setSettings]    = useState<BookTextSettings>(DEFAULT_SETTINGS);
-  const [overlay,     setOverlay]     = useState<CanvasOverlay>(DEFAULT_OVERLAY);
+  const [text,          setText]         = useState("");
+  const [settings,     setSettings]     = useState<BookTextSettings>(DEFAULT_SETTINGS);
+  const [boxes,        setBoxes]        = useState<CanvasBox[]>([]);
+  const [activeBoxIdx, setActiveBoxIdx] = useState(0);
   const [pagePosition, setPagePosition] = useState<TextPosition>("bottom");
   const [pageAlign,    setPageAlign]    = useState<TextAlign>("center");
-  const [saving,   setSaving]   = useState(false);
-  const [dirty,    setDirty]    = useState(false);
+  const [saving,        setSaving]       = useState(false);
+  const [dirty,         setDirty]        = useState(false);
+  const [textOverflows, setTextOverflows] = useState(false);
+  const [splitting,     setSplitting]    = useState(false);
+  const [backCoverLoading, setBackCoverLoading] = useState(false);
 
   const [illustrating, setIllustrating]  = useState(false);
   const [reIllLoading, setReIllLoading]  = useState(false);
@@ -624,8 +773,8 @@ function StudioInner() {
   const [exportModal,  setExportModal]   = useState(false);
 
   const canvasRef  = useRef<HTMLDivElement>(null);
-  const dragRef    = useRef<{ handle: DragHandle; sx: number; sy: number; snap: CanvasOverlay } | null>(null);
-  const latestRef  = useRef({ text, overlay, settings, pagePosition, pageAlign });
+  const dragRef    = useRef<{ handle: DragHandle; sx: number; sy: number; snap: {x:number;y:number;w:number;h:number}; boxIdx: number } | null>(null);
+  const latestRef  = useRef({ text, boxes, settings, pagePosition, pageAlign });
   const saveTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pages = book?.pages ?? [];
@@ -640,17 +789,30 @@ function StudioInner() {
 
   // Sync page data when switching
   useEffect(() => {
-    if (!page) return;
+    if (!page || !book) return;
     setText(page.text ?? "");
     setPagePosition((page.text_position as TextPosition) ?? "bottom");
     setPageAlign((page.text_align as TextAlign) ?? "center");
-    const ov = page.canvas_overlay;
-    setOverlay(ov ? { ...DEFAULT_OVERLAY, ...ov } : { ...DEFAULT_OVERLAY, fontSize: settings.fontSize, fontFamily: settings.fontFamily, textColor: settings.textColor });
+    // Load per-page style settings saved by a previous studio session
+    if (page.font_size || page.font_family || page.text_color || page.text_mode) {
+      setSettings(prev => ({
+        ...prev,
+        ...(page.font_size   ? { fontSize:   page.font_size }              : {}),
+        ...(page.font_family ? { fontFamily: page.font_family as FontId }  : {}),
+        ...(page.text_color  ? { textColor:  page.text_color }             : {}),
+        ...(page.text_mode   ? { mode: page.text_mode as TextMode }        : {}),
+      }));
+    }
+    // Load canvas boxes from localStorage, or init from page text
+    const saved = loadBoxes(book.id, page.id);
+    setBoxes(saved ?? [makeBox(page.text ?? "")]);
+    setActiveBoxIdx(0);
+    setTextOverflows(false);
     setDirty(false);
   }, [pageIdx, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep latestRef in sync
-  useEffect(() => { latestRef.current = { text, overlay, settings, pagePosition, pageAlign }; });
+  useEffect(() => { latestRef.current = { text, boxes, settings, pagePosition, pageAlign }; });
 
   // Auto-start illustration if coming from outline
   useEffect(() => {
@@ -673,13 +835,16 @@ function StudioInner() {
 
   const save = useCallback(async () => {
     if (!token || !book || !page) return;
-    const { text: tx, overlay: ov, settings: st, pagePosition: pos, pageAlign: align } = latestRef.current;
+    const { text: tx, boxes: bxs, settings: st, pagePosition: pos, pageAlign: align } = latestRef.current;
 
-    // Decide what overlay to save based on mode
+    // Persist canvas boxes locally
+    if (st.mode === 3) persistBoxes(book.id, page.id, bxs);
+
+    // Build canvas_overlay for backend (used by exports)
     let overlayToSave: CanvasOverlay | null = null;
     if (st.mode === 1) {
       overlayToSave = {
-        ...ov,
+        ...DEFAULT_OVERLAY,
         fontSize: st.fontSize,
         fontFamily: st.fontFamily,
         textColor: st.textColor,
@@ -696,7 +861,13 @@ function StudioInner() {
         bgOpacity: 1,
       };
     } else {
-      overlayToSave = { ...ov };
+      // Save first box position for basic export compat
+      const b = bxs[0];
+      overlayToSave = b ? {
+        x: b.x, y: b.y, w: b.w, h: b.h,
+        fontSize: st.fontSize, fontFamily: st.fontFamily, textColor: st.textColor,
+        bgStyle: b.bgStyle as CanvasOverlay["bgStyle"], bgOpacity: b.bgOpacity,
+      } : DEFAULT_OVERLAY;
     }
 
     setSaving(true);
@@ -706,6 +877,10 @@ function StudioInner() {
         text_align: align,
         text_position: pos,
         canvas_overlay: overlayToSave,
+        font_size: st.fontSize,
+        font_family: st.fontFamily,
+        text_color: st.textColor,
+        text_mode: st.mode,
       });
       setBook(updated as unknown as BookOut);
       setDirty(false);
@@ -730,14 +905,16 @@ function StudioInner() {
 
   // ── Canvas drag/resize (Mode 3) ────────────────────────────────────────────
 
-  function startInteraction(e: React.MouseEvent, handle: DragHandle) {
+  function startInteraction(e: React.MouseEvent, handle: DragHandle, boxIdx: number) {
     e.preventDefault();
-    dragRef.current = { handle, sx: e.clientX, sy: e.clientY, snap: { ...overlay } };
+    setActiveBoxIdx(boxIdx);
+    const box = latestRef.current.boxes[boxIdx];
+    if (!box) return;
+    dragRef.current = { handle, sx: e.clientX, sy: e.clientY, snap: { x: box.x, y: box.y, w: box.w, h: box.h }, boxIdx };
 
     function onMove(ev: MouseEvent) {
       const dr = dragRef.current;
       if (!dr || !canvasRef.current) return;
-      // Use clientWidth/clientHeight (excludes border) so fractions match position: absolute children
       const cw = canvasRef.current.clientWidth;
       const ch = canvasRef.current.clientHeight;
       const dx = (ev.clientX - dr.sx) / cw;
@@ -756,7 +933,7 @@ function StudioInner() {
         case "b":  h = clamp(s.h + dy, MIN_H, 1 - s.y); break;
         case "t":  { const ny = clamp(s.y + dy, 0, s.y + s.h - MIN_H); h = s.y + s.h - ny; y = ny; break; }
       }
-      setOverlay(prev => ({ ...prev, x, y, w, h }));
+      setBoxes(prev => { const next = [...prev]; if (next[dr.boxIdx]) next[dr.boxIdx] = { ...next[dr.boxIdx], x, y, w, h }; return next; });
     }
 
     function onUp() {
@@ -767,6 +944,76 @@ function StudioInner() {
     }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+  }
+
+  function patchActiveBox(patch: Partial<CanvasBox>) {
+    setBoxes(prev => { const next = [...prev]; if (next[activeBoxIdx]) next[activeBoxIdx] = { ...next[activeBoxIdx], ...patch }; return next; });
+    setDirty(true);
+  }
+
+  function addBox() {
+    if (boxes.length >= 3) {
+      toast.error("Cannot exceed 3 text boxes per page");
+      return;
+    }
+    const idx = boxes.length;
+    setBoxes(prev => [...prev, makeBox("", idx)]);
+    setActiveBoxIdx(idx);
+    setDirty(true);
+  }
+
+  function duplicateBox(idx: number) {
+    if (boxes.length >= 3) {
+      toast.error("Cannot exceed 3 text boxes per page");
+      return;
+    }
+    const src = boxes[idx];
+    if (!src) return;
+    const copy: CanvasBox = {
+      ...src,
+      id: Math.random().toString(36).slice(2),
+      x: Math.min(src.x + 0.04, 1 - src.w),
+      y: Math.min(src.y + 0.04, 1 - src.h),
+    };
+    setBoxes(prev => [...prev, copy]);
+    setActiveBoxIdx(boxes.length);
+    setDirty(true);
+  }
+
+  function removeBox(idx: number) {
+    if (boxes.length <= 1) return;
+    setBoxes(prev => prev.filter((_, i) => i !== idx));
+    setActiveBoxIdx(Math.max(0, idx - 1));
+    setDirty(true);
+  }
+
+  // ── Split page ────────────────────────────────────────────────────────────
+
+  async function splitPage() {
+    if (!token || !book || !page) return;
+    setSplitting(true);
+    try {
+      const updated = await api.books.splitPage(token, book.id, page.id);
+      setBook(updated as unknown as BookOut);
+      toast.success("Page split — a new page was added after this one");
+      setTextOverflows(false);
+    } catch { toast.error("Split failed"); }
+    finally { setSplitting(false); }
+  }
+
+  // ── Back cover ────────────────────────────────────────────────────────────
+
+  async function handleBackCoverIllustrate() {
+    if (!token || !book) return;
+    setBackCoverLoading(true);
+    try {
+      const withCover = await api.books.createBackCover(token, book.id).catch(() => book);
+      setBook(withCover as unknown as BookOut);
+      const updated = await api.books.illustrateBackCover(token, book.id);
+      setBook(updated as unknown as BookOut);
+      toast.success("Back cover illustrated!");
+    } catch { toast.error("Back cover illustration failed"); }
+    finally { setBackCoverLoading(false); }
   }
 
   // ── Per-page re-illustrate ─────────────────────────────────────────────────
@@ -805,6 +1052,7 @@ function StudioInner() {
 
   const illustrated = pages.filter(p => !p.is_cover && p.has_image).length;
   const total       = pages.filter(p => !p.is_cover).length;
+  const [thumbsOpen, setThumbsOpen] = useState(false);
 
   // ── Guard ──────────────────────────────────────────────────────────────────
 
@@ -825,7 +1073,7 @@ function StudioInner() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen flex-col bg-background overflow-hidden select-none">
+    <div className="flex h-[calc(100vh-4rem)] flex-col bg-background overflow-hidden select-none">
 
       {/* ── Top bar ── */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b-[2.5px] border-foreground bg-card px-4">
@@ -867,114 +1115,71 @@ function StudioInner() {
       </header>
 
       {/* ── Body ── */}
+      <div className="flex flex-1 overflow-hidden flex-col">
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── Left sidebar ── */}
-        <aside className="flex w-44 shrink-0 flex-col border-r-[2.5px] border-foreground bg-card overflow-y-auto">
-          <div className="p-2 space-y-2">
-            {pages.map((p, i) => (
-              <PageThumb key={p.id} page={p} bookId={book.id} token={token ?? ""}
-                isActive={i === pageIdx}
-                illStatus={illJob?.statuses[p.id]}
-                onClick={() => switchPage(i)}
-              />
-            ))}
-          </div>
-        </aside>
+        {/* ── Left panel: page actions + text + layout ── */}
+        <aside className="flex w-[280px] shrink-0 flex-col border-r-[2.5px] border-foreground bg-card overflow-y-auto">
+          <div className="p-4 space-y-4">
 
-        {/* ── Center: preview ── */}
-        <main className="flex flex-1 flex-col items-center justify-center gap-2 overflow-auto px-4 py-3 bg-muted/20">
-          {/* Page nav */}
-          <div className="flex items-center gap-3">
-            <button onClick={() => switchPage(Math.max(0, pageIdx - 1))} disabled={pageIdx === 0}
-              className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border disabled:opacity-30 hover:-translate-y-0.5 transition-transform">
-              <ChevronLeft className="h-4 w-4" strokeWidth={2.5} />
-            </button>
-            <span className="text-xs font-extrabold text-muted-foreground">
-              {page?.is_cover ? "Cover" : `Page ${page?.order}`}
-            </span>
-            <button onClick={() => switchPage(Math.min(pages.length - 1, pageIdx + 1))} disabled={pageIdx === pages.length - 1}
-              className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border disabled:opacity-30 hover:-translate-y-0.5 transition-transform">
-              <ChevronRight className="h-4 w-4" strokeWidth={2.5} />
-            </button>
-          </div>
+            {/* Page actions */}
+            {page?.is_back_cover ? (
+              <div className="flex gap-2">
+                <button onClick={handleBackCoverIllustrate} disabled={backCoverLoading}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-muted transition-colors disabled:opacity-40">
+                  {backCoverLoading ? <XsSpinner /> : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                  {page?.has_image ? "Re-illustrate back cover" : "Illustrate back cover"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={reIllustrate} disabled={reIllLoading || illustrating}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-muted transition-colors disabled:opacity-40">
+                  {reIllLoading ? <XsSpinner /> : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                  {page?.has_image ? "Re-illustrate" : "Illustrate"}
+                </button>
+                <button onClick={audio.toggle} disabled={!page?.has_audio || audio.loading}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-muted transition-colors disabled:opacity-40">
+                  {audio.loading ? <XsSpinner /> : audio.playing ? <Pause className="h-4 w-4" strokeWidth={2.5} /> : <Play className="h-4 w-4" strokeWidth={2.5} />}
+                </button>
+                <button onClick={reNarrate} disabled={narratingPage}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-muted transition-colors disabled:opacity-40">
+                  {narratingPage ? <XsSpinner /> : <Mic className="h-4 w-4" strokeWidth={2.5} />}
+                </button>
+              </div>
+            )}
 
-          {/* The preview — switches based on mode */}
-          {settings.mode === 1 && (
-            <Mode1Preview blobUrl={blobUrl} text={text} settings={settings}
-              position={pagePosition} align={pageAlign} />
-          )}
-          {settings.mode === 2 && (
-            <Mode2Preview blobUrl={blobUrl} text={text} settings={settings} />
-          )}
-          {settings.mode === 3 && (
-            <Mode3Preview
-              blobUrl={blobUrl}
-              text={text}
-              overlay={overlay}
-              canvasRef={canvasRef as React.RefObject<HTMLDivElement>}
-              onMoveStart={e => startInteraction(e, "move")}
-              onHandleStart={(e, h) => startInteraction(e, h)}
-            />
-          )}
-
-          {settings.mode === 3 && (
-            <p className="text-[11px] font-semibold text-muted-foreground">
-              Drag text box to reposition · Corner/edge handles to resize
-            </p>
-          )}
-          {illustrating && illJob?.statuses[page?.id ?? ""] === "pending" && (
-            <p className="text-[11px] font-bold text-primary flex items-center gap-1.5">
-              <SmSpinner /> Illustrating this page…
-            </p>
-          )}
-        </main>
-
-        {/* ── Right panel ── */}
-        <aside className="flex w-[280px] shrink-0 flex-col border-l-[2.5px] border-foreground bg-card overflow-y-auto">
-          <div className="p-4 space-y-5">
-
-            {/* ── Page actions ── */}
-            <div className="flex gap-2">
-              <button onClick={reIllustrate} disabled={reIllLoading || illustrating}
-                className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-muted transition-colors disabled:opacity-40">
-                {reIllLoading ? <XsSpinner /> : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
-                {page?.has_image ? "Re-illustrate" : "Illustrate"}
-              </button>
-              <button onClick={audio.toggle} disabled={!page?.has_audio || audio.loading}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-muted transition-colors disabled:opacity-40">
-                {audio.loading ? <XsSpinner /> : audio.playing ? <Pause className="h-4 w-4" strokeWidth={2.5} /> : <Play className="h-4 w-4" strokeWidth={2.5} />}
-              </button>
-              <button onClick={reNarrate} disabled={narratingPage}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-muted transition-colors disabled:opacity-40">
-                {narratingPage ? <XsSpinner /> : <Mic className="h-4 w-4" strokeWidth={2.5} />}
-              </button>
-            </div>
-
-            {/* ── Text content ── */}
-            {!page?.is_cover && (
+            {/* Page text (hidden in mode 3 or for cover/back-cover pages) */}
+            {!page?.is_cover && !page?.is_back_cover && settings.mode !== 3 && (
               <div>
                 <SL>Page text</SL>
                 <textarea
                   value={text}
                   onChange={e => { setText(e.target.value); setDirty(true); }}
-                  rows={5}
+                  rows={6}
                   placeholder="Story text for this page…"
                   className="w-full rounded-xl bg-background px-3 py-2.5 text-sm leading-relaxed chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none select-text"
                 />
               </div>
             )}
 
-            <div className="border-t-[1.5px] border-foreground/15" />
+            {!page?.is_back_cover && <div className="border-t-[1.5px] border-foreground/15" />}
 
-            {/* ── Text mode selector ── */}
+            {/* Text layout mode selector — not shown for back cover */}
+            {page?.is_back_cover && (
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                The back cover is a full-bleed illustration — no text overlay. Use "Re-illustrate back cover" to generate new artwork.
+              </p>
+            )}
+            {/* Text layout mode selector + mode-specific — hidden for back cover */}
+            {!page?.is_back_cover && (
             <div>
               <SL>Text layout</SL>
               <div className="grid grid-cols-3 gap-1.5">
                 {([
-                  { id: 1 as TextMode, icon: Layers,      label: "Overlay",  desc: "Over image" },
-                  { id: 2 as TextMode, icon: Grid3X3,     label: "Stacked",  desc: "Split view" },
-                  { id: 3 as TextMode, icon: Paintbrush,  label: "Canvas",   desc: "Free place" },
+                  { id: 1 as TextMode, icon: Layers,     label: "Overlay", desc: "Over image" },
+                  { id: 2 as TextMode, icon: Grid3X3,    label: "Stacked", desc: "Split view" },
+                  { id: 3 as TextMode, icon: Paintbrush, label: "Canvas",  desc: "Free place" },
                 ] as const).map(opt => (
                   <button key={opt.id} onClick={() => patchSettings({ mode: opt.id })}
                     className={cn("flex flex-col items-center gap-0.5 rounded-xl py-2 px-1 chunky-border transition-colors",
@@ -988,88 +1193,12 @@ function StudioInner() {
                 ))}
               </div>
             </div>
+            )}
 
-            <div className="border-t-[1.5px] border-foreground/15" />
-
-            {/* ── Font ── */}
-            <div>
-              <SL>Font</SL>
-              <div className="space-y-1">
-                {READER_FONTS.map(f => (
-                  <button key={f.id} onClick={() => patchSettings({ fontFamily: f.id as FontId })}
-                    className={cn("flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-sm chunky-border transition-colors",
-                      settings.fontFamily === f.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}
-                    style={{ fontFamily: f.stack, fontWeight: f.weight }}>
-                    <span>{f.label}</span>
-                    <span className="text-base opacity-70">{f.sample}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="border-t-[1.5px] border-foreground/15" />
-
-            {/* ── Font size ── */}
-            <div>
-              <SL>Font size</SL>
-              <div className="flex items-center gap-2">
-                <button onClick={() => patchSettings({ fontSize: Math.max(8, settings.fontSize - 1) })}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors">
-                  <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                </button>
-                <input
-                  type="number" min={8} max={96} step={1}
-                  value={settings.fontSize}
-                  onChange={e => {
-                    const v = parseInt(e.target.value);
-                    if (!isNaN(v)) patchSettings({ fontSize: Math.min(96, Math.max(8, v)) });
-                  }}
-                  className="w-14 rounded-lg bg-background px-2 py-1 text-center text-sm font-extrabold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 select-text [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-                <span className="text-xs font-bold text-muted-foreground shrink-0">pt</span>
-                <input type="range" min={8} max={96} step={1} value={settings.fontSize}
-                  onChange={e => patchSettings({ fontSize: parseInt(e.target.value) })}
-                  className="flex-1 h-2 accent-primary" />
-                <button onClick={() => patchSettings({ fontSize: Math.min(96, settings.fontSize + 1) })}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors">
-                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                </button>
-              </div>
-            </div>
-
-            {/* ── Text color ── */}
-            <div>
-              <SL>Text color</SL>
-              <div className="flex flex-wrap gap-2">
-                {TEXT_COLORS.map(c => (
-                  <button key={c} onClick={() => patchSettings({ textColor: c })}
-                    className={cn("h-7 w-7 rounded-lg chunky-border transition-all hover:scale-110",
-                      settings.textColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
-                    style={{ background: c }} />
-                ))}
-                <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer hover:scale-110 transition-all flex items-center justify-center",
-                  !TEXT_COLORS.includes(settings.textColor) ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
-                  style={{ background: TEXT_COLORS.includes(settings.textColor) ? "#e5e7eb" : settings.textColor }}
-                  title="Custom color">
-                  <Pipette className="h-3.5 w-3.5 pointer-events-none"
-                    style={{ color: TEXT_COLORS.includes(settings.textColor) ? "#374151" : settings.textColor === "#ffffff" || settings.textColor === "#fff7ed" ? "#374151" : "#fff" }}
-                    strokeWidth={2} />
-                  <input type="color" value={settings.textColor}
-                    onChange={e => patchSettings({ textColor: e.target.value })}
-                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
-                </label>
-              </div>
-            </div>
-
-            <div className="border-t-[1.5px] border-foreground/15" />
-
-            {/* ── Mode-specific controls ── */}
-
-            {settings.mode === 1 && (
+            {/* Mode 1 — overlay controls */}
+            {!page?.is_back_cover && settings.mode === 1 && (
               <>
-                <p className="text-[11px] text-muted-foreground">
-                  Matches the reader. Position and alignment are saved per page.
-                </p>
+                <p className="text-[11px] text-muted-foreground">Matches the reader. Position and alignment are saved per page.</p>
                 <div>
                   <SL>Text position</SL>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -1101,14 +1230,15 @@ function StudioInner() {
               </>
             )}
 
-            {settings.mode === 2 && (
+            {/* Mode 2 — stacked controls */}
+            {!page?.is_back_cover && settings.mode === 2 && (
               <>
                 <div>
                   <SL>Text area position</SL>
                   <div className="grid grid-cols-2 gap-1.5">
                     {(["bottom", "top"] as const).map(pos => (
                       <button key={pos} onClick={() => patchSettings({ m2Position: pos })}
-                        className={cn("rounded-xl py-1.5 text-xs font-extrabold capitalize chunky-border transition-colors",
+                        className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
                           settings.m2Position === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                         {pos === "bottom" ? "Image top, text bottom" : "Text top, image bottom"}
                       </button>
@@ -1138,47 +1268,292 @@ function StudioInner() {
               </>
             )}
 
-            {settings.mode === 3 && (
-              <>
-                <div>
-                  <SL>Text box background</SL>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["none", "frosted", "darkened"] as const).map(style => (
-                      <button key={style} onClick={() => { setOverlay(prev => ({ ...prev, bgStyle: style })); setDirty(true); }}
-                        className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
-                          overlay.bgStyle === style ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                        {style === "darkened" ? "Dark" : style === "frosted" ? "Frosted" : "None"}
-                      </button>
-                    ))}
+            {/* Mode 3 — canvas box controls */}
+            {!page?.is_back_cover && settings.mode === 3 && boxes.length > 0 && (() => {
+              const activeBox = boxes[activeBoxIdx];
+              if (!activeBox) return null;
+              return (
+                <>
+                  <div>
+                    <SL>Text boxes</SL>
+                    <div className="flex items-center gap-1.5">
+                      {boxes.map((b, i) => (
+                        <button key={b.id} onClick={() => setActiveBoxIdx(i)}
+                          className={cn("flex-1 rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
+                            i === activeBoxIdx ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                          Box {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-muted-foreground font-semibold">Use the toolbar above each box on the canvas to add, copy, or delete</p>
                   </div>
-                  {overlay.bgStyle !== "none" && (
-                    <div className="mt-2">
-                      <p className="text-[10px] font-bold text-muted-foreground mb-1">Opacity — {Math.round(overlay.bgOpacity * 100)}%</p>
-                      <input type="range" min={0.1} max={1} step={0.05} value={overlay.bgOpacity}
-                        onChange={e => { setOverlay(prev => ({ ...prev, bgOpacity: parseFloat(e.target.value) })); setDirty(true); }}
-                        className="w-full h-2 accent-primary" />
+                  {!page?.is_cover && (
+                    <div>
+                      <SL>Box {activeBoxIdx + 1} text</SL>
+                      <textarea
+                        value={activeBox.text}
+                        onChange={e => patchActiveBox({ text: e.target.value })}
+                        rows={4}
+                        placeholder={`Text for box ${activeBoxIdx + 1}…`}
+                        className="w-full rounded-xl bg-background px-3 py-2.5 text-sm leading-relaxed chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none select-text"
+                      />
                     </div>
                   )}
-                </div>
-                <div>
-                  <SL>Snap position</SL>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["top", "center", "bottom"] as const).map(pos => {
-                      const yMap = { top: 0.03, center: 0.33, bottom: 0.62 };
-                      return (
-                        <button key={pos} onClick={() => { setOverlay(prev => ({ ...prev, x: 0.03, y: yMap[pos], w: 0.94 })); setDirty(true); }}
-                          className="rounded-xl py-1.5 text-xs font-extrabold capitalize bg-background chunky-border hover:bg-muted transition-colors">
-                          {pos}
+                  <div>
+                    <SL>Shape</SL>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(["rect", "rounded", "pill"] as const).map(shape => (
+                        <button key={shape} onClick={() => patchActiveBox({ shape })}
+                          className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
+                            activeBox.shape === shape ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                          {shape === "rect" ? "Sharp" : shape === "rounded" ? "Rounded" : "Pill"}
                         </button>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                  <div>
+                    <SL>Background</SL>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(["none", "frosted", "darkened"] as const).map(style => (
+                        <button key={style} onClick={() => patchActiveBox({ bgStyle: style })}
+                          className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
+                            activeBox.bgStyle === style ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                          {style === "darkened" ? "Dark" : style === "frosted" ? "Frosted" : "None"}
+                        </button>
+                      ))}
+                    </div>
+                    {activeBox.bgStyle !== "none" && (
+                      <div className="mt-2">
+                        <p className="text-[10px] font-bold text-muted-foreground mb-1">Opacity — {Math.round(activeBox.bgOpacity * 100)}%</p>
+                        <input type="range" min={0.1} max={1} step={0.05} value={activeBox.bgOpacity}
+                          onChange={e => patchActiveBox({ bgOpacity: parseFloat(e.target.value) })}
+                          className="w-full h-2 accent-primary" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <SL>Snap to</SL>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(["top", "center", "bottom"] as const).map(pos => {
+                        const yMap = { top: 0.03, center: 0.33, bottom: 0.62 };
+                        return (
+                          <button key={pos} onClick={() => patchActiveBox({ x: 0.03, y: yMap[pos], w: 0.94 })}
+                            className="rounded-xl py-1.5 text-xs font-extrabold capitalize bg-background chunky-border hover:bg-muted transition-colors">
+                            {pos}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
           </div>
         </aside>
+
+        {/* ── Center: preview ── */}
+        <main className="flex flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-3 bg-muted/20">
+          {/* Page nav */}
+          <div className="flex items-center gap-3">
+            <button onClick={() => switchPage(Math.max(0, pageIdx - 1))} disabled={pageIdx === 0}
+              className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border disabled:opacity-30 hover:-translate-y-0.5 transition-transform">
+              <ChevronLeft className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+            <span className="text-xs font-extrabold text-muted-foreground">
+              {page?.is_cover ? "Cover" : page?.is_back_cover ? "Back Cover" : `Page ${page?.order}`}
+            </span>
+            <button onClick={() => switchPage(Math.min(pages.length - 1, pageIdx + 1))} disabled={pageIdx === pages.length - 1}
+              className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border disabled:opacity-30 hover:-translate-y-0.5 transition-transform">
+              <ChevronRight className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          </div>
+
+          {/* The preview — switches based on mode */}
+          {settings.mode === 1 && (
+            <Mode1Preview blobUrl={blobUrl} text={text} settings={settings}
+              position={pagePosition} align={pageAlign}
+              onOverflow={setTextOverflows} />
+          )}
+          {settings.mode === 2 && (
+            <Mode2Preview blobUrl={blobUrl} text={text} settings={settings}
+              onOverflow={setTextOverflows} />
+          )}
+          {settings.mode === 3 && (
+            <Mode3Preview
+              blobUrl={blobUrl}
+              boxes={boxes}
+              activeBoxIdx={activeBoxIdx}
+              settings={settings}
+              canvasRef={canvasRef as React.RefObject<HTMLDivElement>}
+              onBoxClick={idx => setActiveBoxIdx(idx)}
+              onMoveStart={(e, idx) => startInteraction(e, "move", idx)}
+              onHandleStart={(e, h, idx) => startInteraction(e, h, idx)}
+              onAdd={addBox}
+              onDuplicate={duplicateBox}
+              onRemove={removeBox}
+            />
+          )}
+
+          {settings.mode === 3 && (
+            <p className="text-[11px] font-semibold text-muted-foreground">
+              Drag boxes to reposition · Corner/edge handles to resize · Click to select
+            </p>
+          )}
+
+          {/* Overflow warning — shown in modes 1 & 2 when text exceeds the text zone */}
+          {textOverflows && !page?.is_cover && settings.mode !== 3 && (
+            <div className="flex items-center gap-2 rounded-xl border-[2px] border-amber-400 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+              <span>⚠ Text overflows the page</span>
+              <button
+                onClick={splitPage}
+                disabled={splitting}
+                className="ml-auto flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-1 text-xs font-extrabold text-amber-900 hover:bg-amber-500 transition-colors disabled:opacity-50"
+              >
+                {splitting ? <XsSpinner /> : null}
+                {splitting ? "Splitting…" : "Split page →"}
+              </button>
+            </div>
+          )}
+
+          {illustrating && illJob?.statuses[page?.id ?? ""] === "pending" && (
+            <p className="text-[11px] font-bold text-primary flex items-center gap-1.5">
+              <SmSpinner /> Illustrating this page…
+            </p>
+          )}
+        </main>
+
+        {/* ── Right panel: font + size + color ── */}
+        <aside className="flex w-[280px] shrink-0 flex-col border-l-[2.5px] border-foreground bg-card overflow-y-auto">
+          <div className="p-4 space-y-5">
+
+            {/* Font family */}
+            <div>
+              <SL>Font</SL>
+              <div className="space-y-1">
+                {READER_FONTS.map(f => (
+                  <button key={f.id} onClick={() => patchSettings({ fontFamily: f.id as FontId })}
+                    className={cn("flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-sm chunky-border transition-colors",
+                      settings.fontFamily === f.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}
+                    style={{ fontFamily: f.stack, fontWeight: f.weight }}>
+                    <span>{f.label}</span>
+                    <span className="text-base opacity-70">{f.sample}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t-[1.5px] border-foreground/15" />
+
+            {/* Font size */}
+            <div>
+              <SL>Font size</SL>
+              <div className="flex items-center gap-2">
+                <button onClick={() => patchSettings({ fontSize: Math.max(8, settings.fontSize - 1) })}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors">
+                  <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+                <input
+                  type="number" min={8} max={96} step={1}
+                  defaultValue={settings.fontSize}
+                  key={settings.fontSize}
+                  onBlur={e => {
+                    const v = parseInt(e.target.value);
+                    patchSettings({ fontSize: isNaN(v) ? settings.fontSize : Math.min(96, Math.max(8, v)) });
+                  }}
+                  onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                  className="w-16 rounded-lg bg-background px-2 py-1.5 text-center text-sm font-extrabold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 select-text [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                <span className="text-xs font-bold text-muted-foreground shrink-0">pt</span>
+                <button onClick={() => patchSettings({ fontSize: Math.min(96, settings.fontSize + 1) })}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors">
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t-[1.5px] border-foreground/15" />
+
+            {/* Text color */}
+            <div>
+              <SL>Text color</SL>
+              <div className="flex flex-wrap gap-2">
+                {TEXT_COLORS.map(c => (
+                  <button key={c} onClick={() => patchSettings({ textColor: c })}
+                    className={cn("h-7 w-7 rounded-lg chunky-border transition-all hover:scale-110",
+                      settings.textColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
+                    style={{ background: c }} />
+                ))}
+                <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer hover:scale-110 transition-all flex items-center justify-center",
+                  !TEXT_COLORS.includes(settings.textColor) ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
+                  style={{ background: TEXT_COLORS.includes(settings.textColor) ? "#e5e7eb" : settings.textColor }}
+                  title="Custom color">
+                  <Pipette className="h-3.5 w-3.5 pointer-events-none"
+                    style={{ color: TEXT_COLORS.includes(settings.textColor) ? "#374151" : settings.textColor === "#ffffff" || settings.textColor === "#fff7ed" ? "#374151" : "#fff" }}
+                    strokeWidth={2} />
+                  <input type="color" value={settings.textColor}
+                    onChange={e => patchSettings({ textColor: e.target.value })}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+                </label>
+              </div>
+            </div>
+
+          </div>
+        </aside>
+      </div>
+
+      {/* ── Bottom: collapsible page thumbnails ── */}
+      <div className="shrink-0 border-t-[2.5px] border-foreground bg-card">
+        {/* Toggle bar */}
+        <button
+          onClick={() => setThumbsOpen(o => !o)}
+          className="flex w-full items-center justify-between px-4 py-2 hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Pages</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+              {pages.length}
+            </span>
+            {illustrated > 0 && (
+              <span className="text-[10px] font-semibold text-muted-foreground">{illustrated}/{total} illustrated</span>
+            )}
+            {(() => {
+              const hasBackCover = pages.some(p => p.is_back_cover);
+              if (hasBackCover) return null;
+              return (
+                <button
+                  onClick={e => { e.stopPropagation(); handleBackCoverIllustrate(); }}
+                  disabled={backCoverLoading}
+                  className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                >
+                  {backCoverLoading ? <XsSpinner /> : <Plus className="h-2.5 w-2.5" strokeWidth={3} />}
+                  Back cover
+                </button>
+              );
+            })()}
+          </div>
+          <ChevronLeft
+            className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", thumbsOpen ? "-rotate-90" : "rotate-90")}
+            strokeWidth={2.5}
+          />
+        </button>
+        {/* Thumbnail strip */}
+        {thumbsOpen && (
+          <div className="overflow-x-auto">
+            <div className="flex gap-2 px-4 pb-3 pt-1">
+              {pages.map((p, i) => (
+                <div key={p.id} className="shrink-0 w-24">
+                  <PageThumb page={p} bookId={book.id} token={token ?? ""}
+                    isActive={i === pageIdx}
+                    illStatus={illJob?.statuses[p.id]}
+                    onClick={() => switchPage(i)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       </div>
 
       {/* ── Modals ── */}

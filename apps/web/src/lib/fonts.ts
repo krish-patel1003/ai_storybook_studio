@@ -11,6 +11,7 @@
 export const READER_FONTS = [
   { id: "unkempt",       label: "Unkempt",       stack: 'var(--font-unkempt), cursive',        weight: 400, sample: "Aa" },
   { id: "mochibop",      label: "Mochibop",       stack: 'var(--font-mochibop), sans-serif',    weight: 400, sample: "Aa" },
+  { id: "fredoka",       label: "Fredoka",        stack: '"Fredoka", sans-serif',               weight: 700, sample: "Aa" },
   { id: "nunito",        label: "Nunito",         stack: 'var(--font-nunito), sans-serif',       weight: 600, sample: "Aa" },
   { id: "patrick-hand",  label: "Patrick Hand",   stack: 'var(--font-patrick-hand), cursive',   weight: 400, sample: "Aa" },
   { id: "caveat",        label: "Caveat",         stack: 'var(--font-caveat), cursive',          weight: 700, sample: "Aa" },

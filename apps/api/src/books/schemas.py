@@ -41,6 +41,10 @@ class UpdatePageIn(BaseModel):
     text_align: str | None = Field(default=None, pattern=r"^(left|center|right)$")
     text_position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
     canvas_overlay: dict | None = None
+    font_size: float | None = None
+    font_family: str | None = None
+    text_color: str | None = None
+    text_mode: int | None = None
 
 
 class BulkTextStyleIn(BaseModel):
@@ -101,6 +105,7 @@ class PageOut(BaseModel):
     id: uuid.UUID
     order: int
     is_cover: bool
+    is_back_cover: bool = False
     is_locked: bool
     narrative_role: str
     beat: str
@@ -117,6 +122,10 @@ class PageOut(BaseModel):
     text_align: str = "center"
     text_position: str = "bottom"
     canvas_overlay: dict | None = None
+    font_size: float | None = None
+    font_family: str | None = None
+    text_color: str | None = None
+    text_mode: int | None = None
 
     model_config = {"from_attributes": True}
 

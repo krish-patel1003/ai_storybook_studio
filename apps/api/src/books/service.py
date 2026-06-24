@@ -336,6 +336,14 @@ async def update_page(
         page.text_position = data.text_position
     if "canvas_overlay" in data.model_fields_set:
         page.canvas_overlay = data.canvas_overlay
+    if data.font_size is not None:
+        page.font_size = data.font_size
+    if data.font_family is not None:
+        page.font_family = data.font_family
+    if data.text_color is not None:
+        page.text_color = data.text_color
+    if data.text_mode is not None:
+        page.text_mode = data.text_mode
 
     await db.commit()
     return await get_book(db, book_id, user_id)
@@ -541,6 +549,181 @@ async def illustrate_page(
     return await get_book(db, book_id, user_id)
 
 
+# ── Back cover ───────────────────────────────────────────────────────────────
+
+async def create_back_cover_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    book = await get_book(db, book_id, user_id)
+
+    # Check for existing back cover
+    existing = next((p for p in book.pages if getattr(p, "is_back_cover", False)), None)
+    if existing is not None:
+        raise ValueError("Back cover already exists")
+
+    max_order = max((p.order for p in book.pages), default=-1)
+    db.add(Page(
+        book_id=book_id,
+        order=max_order + 1,
+        is_cover=False,
+        is_back_cover=True,
+        is_locked=False,
+        narrative_role="back_cover",
+        beat="Back cover — a warm closing scene",
+        emotional_note="warm, hopeful, complete",
+        setting_note="A peaceful final vignette",
+        characters_present=[],
+        text=None,
+        word_count=None,
+        illustration_metadata=None,
+    ))
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def illustrate_back_cover(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from src.storage import minio_client
+
+    book = await get_book(db, book_id, user_id)
+    back_cover_page = next((p for p in book.pages if getattr(p, "is_back_cover", False)), None)
+    if back_cover_page is None:
+        raise NotFoundError("Back cover page not found — create it first")
+
+    # Build illustration metadata
+    assembled_prompt = (
+        f"Children's picture book back cover illustration. "
+        f"Art style: {book.art_style}. "
+        f"Story: '{book.title}'. "
+        f"A warm, peaceful closing vignette — the adventure has ended, "
+        f"characters are content and at rest. Soft colors, gentle composition, "
+        f"suitable for the back cover of a children's picture book. "
+        f"No text in the image."
+    )
+    meta = {
+        "assembled_prompt": assembled_prompt,
+        "negative_prompt": "text, words, letters, harsh colors",
+    }
+    back_cover_page.illustration_metadata = meta
+
+    # Inherit characters_present from front cover if available
+    front_cover = next((p for p in book.pages if p.is_cover), None)
+    if front_cover and front_cover.characters_present:
+        back_cover_page.characters_present = list(front_cover.characters_present)
+
+    # Fetch character reference images
+    character_refs: dict[str, bytes] = {}
+    present = set(back_cover_page.characters_present or [])
+    for char in book.characters:
+        if char.name in present and char.reference_image_key:
+            try:
+                data, _ = minio_client.download(char.reference_image_key)
+                character_refs[char.name] = data
+            except Exception:
+                pass
+
+    pipeline = _pipeline()
+    img = await pipeline.illustrate_single(
+        page=back_cover_page,
+        visual_seed=book.visual_seed,
+        character_refs=character_refs if character_refs else None,
+    )
+
+    if back_cover_page.image_key:
+        minio_client.delete_image(back_cover_page.image_key)
+    key = minio_client.upload_image(
+        book_id=str(book_id),
+        page_id=str(back_cover_page.id),
+        data=img.image_data,
+        mime_type=img.mime_type,
+    )
+    back_cover_page.image_key = key
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+# ── Page split ────────────────────────────────────────────────────────────────
+
+async def split_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    page_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from pydantic import BaseModel as _BM
+    from src.generation.gemini import GeminiClient
+
+    book = await get_book(db, book_id, user_id)
+    page = next((p for p in book.pages if p.id == page_id), None)
+    if page is None:
+        raise NotFoundError("Page not found")
+    if not page.text:
+        raise ValueError("Page has no text to split")
+    if page.is_cover:
+        raise ValueError("Cannot split the cover page")
+    if getattr(page, "is_back_cover", False):
+        raise ValueError("Cannot split the back cover page")
+
+    # Call Gemini to split the text
+    class _SplitResult(_BM):
+        part1: str
+        part2: str
+
+    client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+    split_result = await client.generate(
+        prompt=(
+            f'Split this children\'s story page text into two parts at the most natural '
+            f'narrative sentence boundary.\n'
+            f'Return JSON: {{"part1": "...", "part2": "..."}}\n'
+            f'Part 1 should be roughly half the text or end at a natural pause.\n'
+            f'Text: "{page.text}"'
+        ),
+        schema=_SplitResult,
+        system="You are a children's book editor. Split story text cleanly at sentence boundaries.",
+        model="gemini-2.0-flash",
+        temperature=0.3,
+    )
+
+    part1 = split_result.part1.strip()
+    part2 = split_result.part2.strip()
+
+    # Update current page with part1
+    page.text = part1
+    page.word_count = len(part1.split())
+
+    # Shift all later non-back-cover pages up by 1
+    for p in book.pages:
+        if p.order > page.order and not getattr(p, "is_back_cover", False):
+            p.order += 1
+
+    # Create new page with part2
+    new_page = Page(
+        book_id=book_id,
+        order=page.order + 1,
+        is_cover=False,
+        is_back_cover=False,
+        is_locked=False,
+        narrative_role=page.narrative_role,
+        beat=page.beat,
+        emotional_note=page.emotional_note,
+        characters_present=list(page.characters_present or []),
+        setting_note=page.setting_note,
+        text=part2,
+        word_count=len(part2.split()),
+        illustration_metadata=dict(page.illustration_metadata) if page.illustration_metadata else None,
+        image_key=None,
+    )
+    db.add(new_page)
+
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
 # ── Narration ────────────────────────────────────────────────────────────────
 
 async def narrate_page(
@@ -706,6 +889,7 @@ async def build_export_pages(db: AsyncSession, book: Book) -> list:
         result.append(ExportPage(
             order=page.order,
             is_cover=page.is_cover,
+            is_back_cover=getattr(page, "is_back_cover", False),
             text=page.text,
             image_bytes=image_bytes,
             text_align=getattr(page, "text_align", "center"),
