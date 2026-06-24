@@ -102,6 +102,46 @@ def _cover_crop(image_bytes: bytes, w_mm: float, h_mm: float, dpi: int = 150) ->
     return buf.read()
 
 
+def _back_cover_composite(image_bytes: bytes, w_mm: float, h_mm: float, dpi: int = 150) -> bytes:
+    """
+    Back cover: the cover art scaled to fill the page, then a heavy dark navy
+    overlay (~85% opaque) to create a rich dark background that still hints at
+    the original illustration.  Returns JPEG bytes.
+    """
+    import numpy as np
+    from PIL import Image as PILImage
+
+    mm_per_inch = 25.4
+    tw = int(w_mm * dpi / mm_per_inch)
+    th = int(h_mm * dpi / mm_per_inch)
+
+    img = PILImage.open(io.BytesIO(image_bytes))
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGB")
+    iw, ih = img.size
+
+    scale = max(tw / iw, th / ih)
+    nw, nh = int(iw * scale), int(ih * scale)
+    img = img.resize((nw, nh), PILImage.LANCZOS)
+    left = (nw - tw) // 2
+    top  = (nh - th) // 2
+    img = img.crop((left, top, left + tw, top + th))
+
+    if img.mode == "RGBA":
+        bg = PILImage.new("RGB", img.size, (20, 18, 40))
+        bg.paste(img, mask=img.split()[3])
+        img = bg
+
+    # Uniform dark navy overlay (85 % opacity) — art bleeds through subtly
+    overlay = PILImage.new("RGBA", (tw, th), (12, 10, 30, 217))
+    composited = PILImage.alpha_composite(img.convert("RGBA"), overlay)
+
+    buf = io.BytesIO()
+    composited.convert("RGB").save(buf, format="JPEG", quality=88)
+    buf.seek(0)
+    return buf.read()
+
+
 def _cover_composite(image_bytes: bytes, w_mm: float, h_mm: float, dpi: int = 150) -> bytes:
     """
     Cover page: crop/scale to fill page, then composite a dark navy gradient
@@ -275,10 +315,11 @@ def _build_pdf_sync(
             pdf.set_text_color(255, 255, 255)
             pdf.multi_cell(PAGE_W - MARGIN * 2, 9, title, align="C")
 
-            if author:
-                pdf.set_font("StoryBody", "", 9)
-                pdf.set_text_color(200, 195, 220)
-                pdf.cell(PAGE_W, 6, f"by {author}", align="C")
+            author_display = author or "AI Storybook Studio"
+            pdf.set_x(0)
+            pdf.set_font("StoryBody", "", 9)
+            pdf.set_text_color(200, 195, 220)
+            pdf.cell(PAGE_W, 6, f"by {author_display}", align="C")
 
         else:
             t_pos   = getattr(page, "text_position", "bottom")
@@ -355,18 +396,53 @@ def _build_pdf_sync(
             pdf.set_text_color(160, 155, 170)
             pdf.cell(PAGE_W, 5, str(page.order), align="C")
 
-    # Back cover
+    # ── Back cover ────────────────────────────────────────────────────────────
     pdf.add_page()
+    cover_page = next((p for p in pages if p.is_cover), None)
     pdf.set_fill_color(20, 18, 40)
     pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
-    pdf.set_xy(0, PAGE_H / 2 - 16)
-    pdf.set_font("Kranky", "", 30)
+
+    if cover_page and cover_page.image_bytes:
+        bc_img = _back_cover_composite(cover_page.image_bytes, PAGE_W, PAGE_H)
+        pdf.image(io.BytesIO(bc_img), x=0, y=0, w=PAGE_W, h=PAGE_H)
+
+    # Centre-block: decorative top star row
+    mid = PAGE_H / 2
+    pdf.set_xy(0, mid - 30)
+    pdf.set_font("StoryBody", "", 11)
+    pdf.set_text_color(200, 185, 240)
+    pdf.cell(PAGE_W, 8, "✦  ✦  ✦", align="C")
+
+    # "The End" headline
+    pdf.set_xy(0, mid - 18)
+    pdf.set_font("Kranky", "", 34)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(PAGE_W, 14, "The End", align="C")
-    pdf.set_xy(0, PAGE_H / 2 + 4)
+    pdf.cell(PAGE_W, 16, "The End", align="C")
+
+    # Thin rule (simulated with dots)
+    pdf.set_xy(0, mid + 2)
+    pdf.set_font("StoryBody", "", 7)
+    pdf.set_text_color(140, 130, 180)
+    pdf.cell(PAGE_W, 5, "· · · · · · · · · · · · · · · · · · · · ·", align="C")
+
+    # Title echo
+    pdf.set_xy(0, mid + 10)
+    pdf.set_font("StoryBody", "", 9)
+    pdf.set_text_color(200, 195, 220)
+    pdf.multi_cell(PAGE_W, 6, title, align="C")
+
+    # Author credit
+    author_display = author or "AI Storybook Studio"
+    pdf.set_x(0)
     pdf.set_font("StoryBody", "", 8)
-    pdf.set_text_color(160, 155, 200)
-    pdf.cell(PAGE_W, 6, "AI Storybook Studio", align="C")
+    pdf.set_text_color(150, 140, 190)
+    pdf.cell(PAGE_W, 5, f"by {author_display}", align="C")
+
+    # App footer at bottom
+    pdf.set_xy(0, PAGE_H - 14)
+    pdf.set_font("StoryBody", "", 7)
+    pdf.set_text_color(100, 95, 140)
+    pdf.cell(PAGE_W, 5, "Created with AI Storybook Studio", align="C")
 
     return bytes(pdf.output())
 
@@ -378,6 +454,56 @@ async def build_pdf(
     font_id: str = DEFAULT_EXPORT_FONT,
 ) -> bytes:
     return await asyncio.to_thread(_build_pdf_sync, title, pages, author, font_id)
+
+
+def _build_cover_pdf_sync(
+    title: str,
+    cover_page: ExportPage,
+    author: str = "",
+) -> bytes:
+    """Single-page PDF containing only the front cover — for Amazon publishing upload."""
+    from fpdf import FPDF
+
+    PAGE_W, PAGE_H = 148, 210
+    MARGIN = 12
+
+    pdf = FPDF(orientation="P", unit="mm", format="A5")
+    pdf.set_auto_page_break(False)
+    pdf.set_margins(0, 0, 0)
+    pdf.add_font("Kranky",    style="", fname=_FONT_TITLE)
+    font_cfg = EXPORT_FONTS[DEFAULT_EXPORT_FONT]
+    pdf.add_font("StoryBody", style="", fname=font_cfg["file_regular"])
+
+    pdf.add_page()
+    pdf.set_fill_color(20, 18, 40)
+    pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
+
+    if cover_page.image_bytes:
+        img_bytes = _cover_composite(cover_page.image_bytes, PAGE_W, PAGE_H)
+        pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=PAGE_H)
+
+    overlay_h = PAGE_H * 0.45
+    title_y   = PAGE_H - overlay_h + overlay_h * 0.30
+    pdf.set_xy(MARGIN, title_y)
+    pdf.set_font("Kranky", "", 22)
+    pdf.set_text_color(255, 255, 255)
+    pdf.multi_cell(PAGE_W - MARGIN * 2, 9, title, align="C")
+
+    author_display = author or "AI Storybook Studio"
+    pdf.set_x(0)
+    pdf.set_font("StoryBody", "", 9)
+    pdf.set_text_color(200, 195, 220)
+    pdf.cell(PAGE_W, 6, f"by {author_display}", align="C")
+
+    return bytes(pdf.output())
+
+
+async def build_cover_pdf(
+    title: str,
+    cover_page: ExportPage,
+    author: str = "",
+) -> bytes:
+    return await asyncio.to_thread(_build_cover_pdf_sync, title, cover_page, author)
 
 
 # ── EPUB image crop (shorter portrait — leaves room for text) ─────────────────

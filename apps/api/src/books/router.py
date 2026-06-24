@@ -321,6 +321,35 @@ async def export_pdf(
     )
 
 
+@router.get("/{book_id}/export/cover-pdf")
+async def export_cover_pdf(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> Response:
+    """Single-page PDF of the front cover — needed for Amazon publishing."""
+    import re as _re
+    from src.books import service
+    from src.books.export import build_cover_pdf
+    from fastapi.responses import Response as FastAPIResponse
+
+    export_pages = await service.build_export_pages(db, book)
+    cover = next((p for p in export_pages if p.is_cover), None)
+    if not cover:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No cover page found")
+
+    title  = book.brief.get("title", book.title) if book.brief else book.title
+    author = getattr(user, "pen_name", "") or ""
+    pdf_bytes  = await build_cover_pdf(title, cover, author=author)
+    safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}_cover.pdf"'},
+    )
+
+
 @router.get("/{book_id}/export/epub")
 async def export_epub(
     font: str = Query(default="nunito"),

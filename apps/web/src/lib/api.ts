@@ -547,6 +547,9 @@ export const api = {
     exportEpub: (token: string, bookId: string, fontId?: string): Promise<globalThis.Response> =>
       fetch(`${API_URL}/books/${bookId}/export/epub${fontId ? `?font=${fontId}` : ""}`, { headers: authed(token) }),
 
+    exportCoverPdf: (token: string, bookId: string): Promise<globalThis.Response> =>
+      fetch(`${API_URL}/books/${bookId}/export/cover-pdf`, { headers: authed(token) }),
+
     kdp: (token: string, bookId: string) =>
       request<KDPOut>(`/books/${bookId}/kdp`, { headers: authed(token) }),
 

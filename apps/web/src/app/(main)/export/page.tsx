@@ -25,12 +25,21 @@ const formats = [
   },
   {
     id: "pdf",
-    title: "PDF",
-    desc: "Print-ready A5 with cover, perfect for home printing.",
+    title: "Full Book PDF",
+    desc: "Print-ready A5 with cover + all pages, perfect for home printing.",
     icon: FileText,
     bg: "bg-primary",
     fg: "text-primary-foreground",
     cta: "Download PDF",
+  },
+  {
+    id: "cover-pdf",
+    title: "Cover PDF",
+    desc: "Single-page cover — required when uploading to Amazon for publishing.",
+    icon: FileText,
+    bg: "bg-highlight",
+    fg: "text-foreground",
+    cta: "Download Cover PDF",
   },
   {
     id: "epub",
@@ -76,15 +85,16 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
     setLoading(true);
     try {
       const res =
-        picked === "pdf"
-          ? await api.books.exportPdf(token, book.id, fontId)
-          : await api.books.exportEpub(token, book.id, fontId);
+        picked === "pdf"        ? await api.books.exportPdf(token, book.id, fontId)
+        : picked === "cover-pdf" ? await api.books.exportCoverPdf(token, book.id)
+        :                          await api.books.exportEpub(token, book.id, fontId);
 
       if (!res.ok) throw new Error("Export failed");
 
       const blob = await res.blob();
-      const ext = picked === "pdf" ? "pdf" : "epub";
-      const filename = `${(book.brief?.title ?? book.title).replace(/\s+/g, "_")}.${ext}`;
+      const ext      = picked === "epub" ? "epub" : "pdf";
+      const suffix   = picked === "cover-pdf" ? "_cover" : "";
+      const filename = `${(book.brief?.title ?? book.title).replace(/\s+/g, "_")}${suffix}.${ext}`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -147,8 +157,8 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
           })}
         </div>
 
-        {/* Font picker — only for PDF/EPUB */}
-        {picked !== "link" && (
+        {/* Font picker — only for full PDF/EPUB (cover-pdf uses a fixed font) */}
+        {picked !== "link" && picked !== "cover-pdf" && (
           <div className="mt-6 rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <Type className="h-4 w-4 text-primary" strokeWidth={2.5} />
