@@ -27,7 +27,7 @@ import {
   RotateCcw,
   ChevronRight,
 } from "lucide-react";
-import { XsSpinner, SmSpinner, CornerSpinner } from "@/components/character-spinner";
+import { XsSpinner, SmSpinner, LgSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type ProviderInfo, type StorySeedOut } from "@/lib/api";
@@ -247,97 +247,6 @@ const ONE_CLICK_HINTS: Record<string, string[]> = {
 
 // ── Animated loading character ────────────────────────────────────────────────
 
-type CharAnim = "run" | "jump" | "flip" | "wiggle" | "bounce-x" | "float";
-
-const LOADING_CHARACTERS: Record<string, {
-  emoji: string; name: string; anim: CharAnim; speed: number; trail: string;
-}> = {
-  boy: {
-    emoji: "🧙‍♂️",
-    name: "Zap the Wizard",
-    anim: "run",
-    speed: 2.4,
-    trail: "✨",
-  },
-  girl: {
-    emoji: "🧚‍♀️",
-    name: "Luna the Fairy",
-    anim: "float",
-    speed: 2.0,
-    trail: "⭐",
-  },
-  nonbinary: {
-    emoji: "🤖",
-    name: "Pixel the Robot",
-    anim: "bounce-x",
-    speed: 0.8,
-    trail: "⚡",
-  },
-  default: {
-    emoji: "🦄",
-    name: "Star the Unicorn",
-    anim: "jump",
-    speed: 1.6,
-    trail: "🌈",
-  },
-};
-
-const ANIM_CSS: Record<CharAnim, string> = {
-  "run":      "char-run",
-  "jump":     "char-jump",
-  "flip":     "char-flip",
-  "wiggle":   "char-wiggle",
-  "bounce-x": "char-bounce-x",
-  "float":    "char-float",
-};
-
-function MagicalLoadingCharacter({ gender }: { gender?: string }) {
-  const char = LOADING_CHARACTERS[gender ?? "default"] ?? LOADING_CHARACTERS.default;
-  const animClass = ANIM_CSS[char.anim];
-  const isRunner = char.anim === "run";
-
-  return (
-    <div className="flex flex-col items-center gap-3 select-none">
-      {/* Stage — wider for runners */}
-      <div className={`relative flex items-end justify-center ${isRunner ? "w-56 h-20" : "w-32 h-20"}`}>
-
-        {/* Trail particles (only for non-runners) */}
-        {!isRunner && (
-          <>
-            <span className="absolute top-1 left-2 text-base opacity-40" style={{ animation: `char-float ${char.speed * 1.3}s ease-in-out infinite`, animationDelay: "0.3s" }}>{char.trail}</span>
-            <span className="absolute top-4 right-3 text-sm opacity-30" style={{ animation: `char-float ${char.speed * 1.5}s ease-in-out infinite`, animationDelay: "0.7s" }}>{char.trail}</span>
-          </>
-        )}
-
-        {/* The character */}
-        <div
-          className="text-6xl leading-none"
-          style={{
-            animation: `${animClass} ${char.speed}s ${char.anim === "flip" ? "linear" : "ease-in-out"} infinite`,
-            display: "inline-block",
-            willChange: "transform",
-          }}
-        >
-          {char.emoji}
-        </div>
-
-        {/* Ground shadow — only for jumpers */}
-        {(char.anim === "jump" || char.anim === "run") && (
-          <div
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-2 rounded-full bg-foreground/20"
-            style={{ animation: `shadow-pulse ${char.speed}s ease-in-out infinite` }}
-          />
-        )}
-      </div>
-
-      {/* Name badge */}
-      <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 chunky-border">
-        <span className="text-sm">{char.trail}</span>
-        <span className="text-xs font-extrabold text-primary">{char.name}</span>
-      </div>
-    </div>
-  );
-}
 
 type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
 
@@ -348,12 +257,11 @@ const ONE_CLICK_STAGES: { id: OneClickStage; icon: React.ReactNode; label: strin
   { id: "narrating",    icon: <Mic className="h-4 w-4" />,       label: "Narrating"    },
 ];
 
-function OneClickOverlay({ stage, progress, book, onView, profileGender }: {
+function OneClickOverlay({ stage, progress, book, onView }: {
   stage: OneClickStage;
   progress: { done: number; total: number };
   book: BookOut | null;
   onView: () => void;
-  profileGender?: string;
 }) {
   const [hintIdx, setHintIdx] = useState(0);
   const timer = useElapsedTimer(stage !== "done");
@@ -398,10 +306,7 @@ function OneClickOverlay({ stage, progress, book, onView, profileGender }: {
           </motion.div>
         ) : (
           <motion.div key="progress" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
-            <div className="relative">
-              <MagicalLoadingCharacter gender={profileGender} />
-              <CornerSpinner className="absolute -right-1 -top-1" />
-            </div>
+            <LgSpinner />
             <div>
               <h2 className="font-display text-3xl font-black">Making your book…</h2>
               <AnimatePresence mode="wait">
@@ -900,10 +805,7 @@ function EnhancedPromptReview({
   if (loading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 py-20 text-center">
-        <div className="relative grid h-20 w-20 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
-          <Wand2 className="h-9 w-9 text-primary-foreground" strokeWidth={1.5} />
-          <CornerSpinner className="absolute -right-2 -top-2" />
-        </div>
+        <LgSpinner />
         <div>
           <p className="font-display text-2xl font-black">Expanding your idea…</p>
           <AnimatePresence mode="wait">
@@ -1311,7 +1213,7 @@ export default function CreatePage() {
   return (
     <>
       {oneClickRunning && (
-        <OneClickOverlay stage={oneClickStage} progress={oneClickProgress} book={oneClickBook} onView={() => router.push("/reader")} profileGender={selectedProfile?.gender} />
+        <OneClickOverlay stage={oneClickStage} progress={oneClickProgress} book={oneClickBook} onView={() => router.push("/reader")} />
       )}
 
       <main className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
@@ -1529,10 +1431,7 @@ export default function CreatePage() {
 
                     {briefLoading ? (
                       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
-                        <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow">
-                          <Sparkles className="h-7 w-7 text-primary-foreground" strokeWidth={1.5} />
-                          <CornerSpinner className="absolute -right-1.5 -top-1.5" />
-                        </div>
+                        <LgSpinner />
                         <div className="text-center">
                           <p className="font-display text-xl font-black">Building your brief…</p>
                           <AnimatePresence mode="wait">
@@ -1658,10 +1557,7 @@ export default function CreatePage() {
                 {flowState === "writing" && (
                   <motion.div key="writing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex min-h-full items-center justify-center px-6 py-10">
                     <div className="flex flex-col items-center gap-6 text-center max-w-sm">
-                      <div className="relative">
-                        <MagicalLoadingCharacter gender={selectedProfile?.gender} />
-                        <CornerSpinner className="absolute -right-1 -top-1" />
-                      </div>
+                      <LgSpinner />
                       <div>
                         <h2 className="font-display text-3xl font-black">Writing your pages…</h2>
                         <AnimatePresence mode="wait">
