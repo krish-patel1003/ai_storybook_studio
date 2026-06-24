@@ -999,6 +999,7 @@ export default function CreatePage() {
 
   // Child profile
   const [profiles, setProfiles] = useState<ChildProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
 
@@ -1010,7 +1011,10 @@ export default function CreatePage() {
 
   useEffect(() => {
     if (!token) return;
-    api.profiles.list(token).then(setProfiles).catch(() => {});
+    api.profiles.list(token)
+      .then(setProfiles)
+      .catch(() => {})
+      .finally(() => setProfilesLoading(false));
   }, [token]);
 
   useEffect(() => {
@@ -1261,7 +1265,7 @@ export default function CreatePage() {
                     <h1 className="font-display text-4xl font-black md:text-5xl text-center">Who&apos;s creating today?</h1>
                     <p className="mt-3 text-muted-foreground text-center">Pick a profile — we&apos;ll personalise the story for them.</p>
                     <div className="mt-10 flex flex-wrap justify-center gap-6 max-w-2xl">
-                      {/* Parent card */}
+                      {/* Parent card — always shown */}
                       <button
                         onClick={() => { setSelectedProfileId(null); setFlowState("input"); }}
                         className="group flex flex-col items-center gap-3 rounded-3xl bg-card p-6 w-36 chunky-border chunky-shadow-sm hover:-translate-y-1.5 transition-transform focus:outline-none focus:ring-4 focus:ring-primary/30"
@@ -1274,8 +1278,15 @@ export default function CreatePage() {
                           <p className="text-xs text-muted-foreground mt-0.5">Parent</p>
                         </div>
                       </button>
+                      {/* Loading skeletons while profiles fetch */}
+                      {profilesLoading && [0, 1].map((i) => (
+                        <div key={i} className="flex flex-col items-center gap-3 rounded-3xl bg-card p-6 w-36 chunky-border animate-pulse">
+                          <div className="h-20 w-20 rounded-2xl bg-muted" />
+                          <div className="h-4 w-20 rounded-full bg-muted" />
+                        </div>
+                      ))}
                       {/* Child profile cards */}
-                      {profiles.map((p) => (
+                      {!profilesLoading && profiles.map((p) => (
                         <button
                           key={p.id}
                           onClick={() => { setSelectedProfileId(p.id); setFlowState("input"); }}
