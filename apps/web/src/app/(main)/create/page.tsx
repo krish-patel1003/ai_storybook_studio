@@ -1315,19 +1315,6 @@ export default function CreatePage() {
                     <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
                     <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
 
-                    {/* Active author chip — click to switch */}
-                    <button
-                      onClick={() => setFlowState("profile")}
-                      className="mt-4 inline-flex items-center gap-2 self-start rounded-full bg-card px-3 py-1.5 text-xs font-bold chunky-border hover:bg-muted transition-colors"
-                    >
-                      <span className="text-base leading-none">
-                        {selectedProfile ? selectedProfile.avatar_emoji : (user?.username ?? "?").charAt(0).toUpperCase()}
-                      </span>
-                      <span>{selectedProfile ? (selectedProfile.author_name || selectedProfile.name) : (user?.author_name || user?.username || "Me")}</span>
-                      <span className="text-muted-foreground">·</span>
-                      <span className="text-muted-foreground font-normal">Switch</span>
-                    </button>
-
                     <div className="relative mt-6">
                       <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
                         placeholder="A brave little fox who learns to share…"
