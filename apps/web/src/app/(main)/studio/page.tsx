@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  useState, useEffect, useRef, useCallback, useReducer,
+  useState, useEffect, useRef, useCallback, useReducer, Suspense,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -583,7 +583,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string; o
 
 // ── Main Studio page ──────────────────────────────────────────────────────────
 
-export default function StudioPage() {
+function StudioInner() {
   const router        = useRouter();
   const searchParams  = useSearchParams();
   const { token }     = useAuth();
@@ -1169,5 +1169,13 @@ export default function StudioPage() {
         <ExportModal book={book} token={token} onClose={() => setExportModal(false)} />
       )}
     </div>
+  );
+}
+
+export default function StudioPage() {
+  return (
+    <Suspense>
+      <StudioInner />
+    </Suspense>
   );
 }

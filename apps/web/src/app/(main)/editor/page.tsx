@@ -1,2 +1,6 @@
-// Editor has been merged into /studio
-export { default } from "@/app/(main)/studio/page";
+import { redirect } from "next/navigation";
+
+// Editor merged into /studio
+export default function EditorPage() {
+  redirect("/studio");
+}
