@@ -192,7 +192,7 @@ function PageThumb({
 // ── Shared preview size (portrait, matching reader's flip page ratio) ──────────
 
 const PREVIEW_STYLE: React.CSSProperties = {
-  height: "min(560px, calc(100vh - 220px))",
+  height: "min(680px, calc(100vh - 170px))",
   aspectRatio: "3/4",
   flexShrink: 0,
 };
@@ -281,18 +281,21 @@ function Mode2Preview({
   const imgBlock = (
     <div className="relative" style={{ flex: "0 0 63%" }}>
       {blobUrl ? (
-        <img src={blobUrl} alt="" className="h-full w-full object-cover" draggable={false} />
+        <img src={blobUrl} alt="" className="h-full w-full object-cover"
+          style={{ objectPosition: "center top" }} draggable={false} />
       ) : (
         <div className="h-full bg-muted flex items-center justify-center">
           <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
         </div>
       )}
-      {/* Gradient blending edge */}
+      {/* Gradient blend: transparent on the image side → solid on the text-area side */}
       <div style={{
         position: "absolute",
         [isTextBottom ? "bottom" : "top"]: 0,
-        left: 0, right: 0, height: "38%",
-        background: `linear-gradient(${isTextBottom ? "to bottom" : "to top"}, ${settings.m2BgColor}, transparent)`,
+        left: 0, right: 0, height: "40%",
+        background: isTextBottom
+          ? `linear-gradient(to bottom, transparent, ${settings.m2BgColor})`
+          : `linear-gradient(to top, transparent, ${settings.m2BgColor})`,
       }} />
     </div>
   );
@@ -880,7 +883,7 @@ function StudioInner() {
         </aside>
 
         {/* ── Center: preview ── */}
-        <main className="flex flex-1 flex-col items-center justify-center gap-3 overflow-auto p-6 bg-muted/20">
+        <main className="flex flex-1 flex-col items-center justify-center gap-2 overflow-auto px-4 py-3 bg-muted/20">
           {/* Page nav */}
           <div className="flex items-center gap-3">
             <button onClick={() => switchPage(Math.max(0, pageIdx - 1))} disabled={pageIdx === 0}
