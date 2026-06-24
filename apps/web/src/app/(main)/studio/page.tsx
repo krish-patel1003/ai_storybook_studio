@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Mic, Sparkles, RefreshCw, Play, Pause,
   Square as StopIcon, Volume2, Check, Minus, Plus, AlignLeft,
   AlignCenter, AlignRight, ChevronLeft, ChevronRight, ImageIcon,
-  Layers, Paintbrush, Grid3X3,
+  Layers, Paintbrush, Grid3X3, Pipette,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -1034,9 +1034,13 @@ function StudioInner() {
                       settings.textColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
                     style={{ background: c }} />
                 ))}
-                <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer overflow-hidden hover:scale-110 transition-all",
+                <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer hover:scale-110 transition-all flex items-center justify-center",
                   !TEXT_COLORS.includes(settings.textColor) ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
-                  style={{ background: settings.textColor }}>
+                  style={{ background: TEXT_COLORS.includes(settings.textColor) ? "#e5e7eb" : settings.textColor }}
+                  title="Custom color">
+                  <Pipette className="h-3.5 w-3.5 pointer-events-none"
+                    style={{ color: TEXT_COLORS.includes(settings.textColor) ? "#374151" : settings.textColor === "#ffffff" || settings.textColor === "#fff7ed" ? "#374151" : "#fff" }}
+                    strokeWidth={2} />
                   <input type="color" value={settings.textColor}
                     onChange={e => patchSettings({ textColor: e.target.value })}
                     className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
@@ -1107,8 +1111,11 @@ function StudioInner() {
                           settings.m2BgColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
                         style={{ background: c }} />
                     ))}
-                    <label className="relative h-7 w-7 rounded-lg chunky-border cursor-pointer overflow-hidden hover:scale-110 transition-all"
-                      style={{ background: settings.m2BgColor }}>
+                    <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer hover:scale-110 transition-all flex items-center justify-center",
+                      !["#faf8f3","#ffffff","#1a1a2e","#141228","#fff7ed","#f0f9ff"].includes(settings.m2BgColor) ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
+                      style={{ background: ["#faf8f3","#ffffff","#1a1a2e","#141228","#fff7ed","#f0f9ff"].includes(settings.m2BgColor) ? "#e5e7eb" : settings.m2BgColor }}
+                      title="Custom color">
+                      <Pipette className="h-3.5 w-3.5 pointer-events-none text-gray-600" strokeWidth={2} />
                       <input type="color" value={settings.m2BgColor}
                         onChange={e => patchSettings({ m2BgColor: e.target.value })}
                         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
