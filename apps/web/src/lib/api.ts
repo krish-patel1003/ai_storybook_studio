@@ -63,7 +63,7 @@ export interface CanvasOverlay {
   fontSize: number;  // px
   fontFamily: string;
   textColor: string;
-  bgStyle: "none" | "frosted" | "darkened";
+  bgStyle: "none" | "frosted" | "darkened" | "stacked-bottom" | "stacked-top";
   bgOpacity: number;
 }
 

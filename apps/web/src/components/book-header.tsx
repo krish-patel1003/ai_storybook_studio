@@ -9,7 +9,7 @@ import { useState, useRef, useEffect } from "react";
 const navItems = [
   { href: "/create",   label: "Create"       },
   { href: "/library",  label: "Library"      },
-  { href: "/profiles", label: "Profiles"     },
+  { href: "/studio",   label: "Studio"       },
   { href: "/reader",   label: "Reader"       },
   { href: "/voices",   label: "Voice Studio" },
   { href: "/kdp",      label: "Publish"      },

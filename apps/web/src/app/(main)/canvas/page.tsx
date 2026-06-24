@@ -376,7 +376,7 @@ export default function CanvasPage() {
       {/* ── Header ────────────────────────────────────────────────────────────── */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b-[2.5px] border-foreground bg-card px-4">
         <button
-          onClick={() => { if (dirty) save(); router.push("/editor"); }}
+          onClick={() => { if (dirty) save(); router.push("/studio"); }}
           className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Editor

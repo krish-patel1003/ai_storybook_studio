@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   GripVertical,
   RefreshCw,
@@ -394,6 +395,7 @@ function NoBook() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function OutlinePage() {
+  const router = useRouter();
   const { token } = useAuth();
   const { book, updateBook } = useBook();
   const lastSaved = useRelativeTime(book?.updated_at);
@@ -410,6 +412,20 @@ export default function OutlinePage() {
   const [savingChar, setSavingChar] = useState(false);
   const [generatingSheets, setGeneratingSheets] = useState(false);
   const [regeneratingCharId, setRegeneratingCharId] = useState<string | null>(null);
+  const [illustratingBook, setIllustratingBook] = useState(false);
+
+  async function handleIllustrateBook() {
+    if (!token || !book) return;
+    setIllustratingBook(true);
+    try {
+      // Generate character sheets first (needed for consistent illustration)
+      await api.books.generateCharacterSheets(token, book.id);
+    } catch {
+      // Non-fatal — proceed even if sheets fail
+    }
+    // Navigate to studio; it will auto-start page illustration
+    router.push("/studio?illustrating=true");
+  }
 
   if (!book) return <main className="mx-auto max-w-7xl px-4 py-10"><NoBook /></main>;
 
@@ -560,12 +576,17 @@ export default function OutlinePage() {
                 <p className="mt-1 text-xs font-bold text-muted-foreground">Saved {lastSaved}</p>
               )}
             </div>
-            <Link
-              href="/editor"
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+            <button
+              onClick={handleIllustrateBook}
+              disabled={illustratingBook}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-70 disabled:translate-y-0"
             >
-              <Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate it
-            </Link>
+              {illustratingBook ? (
+                <><XsSpinner /> Preparing…</>
+              ) : (
+                <><Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate the Book</>
+              )}
+            </button>
           </div>
 
           {/* Brief summary */}
