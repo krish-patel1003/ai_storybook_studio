@@ -35,7 +35,7 @@ const formats = [
   {
     id: "epub",
     title: "Amazon Kindle Ready",
-    desc: "Reflowable e-book ready to upload to Kindle Direct Publishing (KDP).",
+    desc: "Reflowable e-book ready to upload to Amazon Kindle Direct Publishing.",
     icon: BookOpen,
     bg: "bg-accent",
     fg: "text-accent-foreground",
@@ -234,7 +234,7 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
             className="inline-flex items-center gap-1.5 rounded-full bg-card px-6 py-3 text-base font-extrabold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
           >
             <Rocket className="h-5 w-5" strokeWidth={2.5} />
-            Set up KDP listing
+            Set up Amazon listing
           </Link>
         </div>
       </section>

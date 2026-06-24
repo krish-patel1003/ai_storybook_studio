@@ -720,7 +720,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
               </div>
               <div className="flex-1">
                 <p className="font-display text-base font-black">Amazon Kindle Ready</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Upload directly to KDP or send to your device.</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Upload to Amazon or send to your device.</p>
               </div>
             </div>
             <button

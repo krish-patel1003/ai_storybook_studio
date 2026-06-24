@@ -224,7 +224,7 @@ function KeywordsRow({
         <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
           Keywords{" "}
           <span className="text-muted-foreground/60 normal-case font-medium">
-            · paste each one separately into KDP
+            · paste each one separately into Amazon
           </span>
         </span>
         <button
@@ -353,7 +353,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
       const data = await api.books.kdp(token, book.id);
       setKdp(data);
     } catch {
-      setError("Could not load KDP fields. Make sure your book has a completed brief.");
+      setError("Could not load publishing fields. Make sure your book has a completed brief.");
     } finally {
       setLoading(false);
     }
@@ -394,7 +394,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Rocket className="h-5 w-5 text-primary" strokeWidth={2.5} />
-            <h1 className="font-display text-3xl font-black md:text-4xl">KDP Publishing Setup</h1>
+            <h1 className="font-display text-3xl font-black md:text-4xl">Amazon Publishing Setup</h1>
           </div>
           <p className="text-muted-foreground text-sm font-medium">
             Copy-ready fields for{" "}
@@ -454,7 +454,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
         <>
           <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
             <SmSpinner />
-            Generating your KDP fields with AI — this takes about 5 seconds…
+            Generating your publishing fields with AI — this takes about 5 seconds…
           </div>
           <Skeleton />
         </>
@@ -462,7 +462,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
         <>
           {/* Section 1 — Book Details */}
           <Section title="Book Details" step={1}>
-            <FieldRow label="Book Title" value={kdp.title} hint="Exact title field in KDP"
+            <FieldRow label="Book Title" value={kdp.title} hint="Exact title field on Amazon"
               onSave={(v) => saveField({ title: v })} />
             <FieldRow label="Subtitle" value={kdp.subtitle} hint="Optional but boosts discoverability"
               onSave={(v) => saveField({ subtitle: v })} />
@@ -471,7 +471,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
             <FieldRow
               label="Book Description"
               value={kdp.description_html}
-              hint="Paste as HTML in KDP's description field"
+              hint="Paste as HTML in Amazon's description field"
               multiline
               onSave={(v) => saveField({ description_html: v })}
             />
@@ -491,7 +491,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
             <FieldRow
               label="Reading Age"
               value={`${kdp.reading_age_min} – ${kdp.reading_age_max}`}
-              hint="Age range in KDP audience settings"
+              hint="Age range in Amazon audience settings"
               onSave={(v) => {
                 const [min, max] = v.split(/\s*[–-]\s*/).map(Number);
                 if (!isNaN(min) && !isNaN(max)) saveField({ reading_age_min: min, reading_age_max: max });
@@ -507,21 +507,21 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
           <Section title="Print Settings" step={4}>
             <FieldRow label="Trim Size" value={kdp.trim_size} hint="Paperback interior dimensions"
               onSave={(v) => saveField({ trim_size: v })} />
-            <FieldRow label="Interior Type" value={kdp.interior_type} hint="Select 'Full Color' in KDP print options"
+            <FieldRow label="Interior Type" value={kdp.interior_type} hint="Select 'Full Color' in Amazon print options"
               onSave={(v) => saveField({ interior_type: v })} />
             <FieldRow label="Paper Color" value={kdp.paper_color}
               onSave={(v) => saveField({ paper_color: v })} />
             <FieldRow
               label="Page Count"
               value={String(kdp.estimated_page_count)}
-              hint="Estimated — KDP will calculate the final count from your uploaded file"
+              hint="Estimated — Amazon will calculate the final count from your uploaded file"
               onSave={(v) => { const n = parseInt(v); if (!isNaN(n)) saveField({ estimated_page_count: n }); }}
             />
           </Section>
 
           {/* Section 5 — Rights & Pricing */}
           <Section title="Rights & Pricing" step={5}>
-            <FieldRow label="Publishing Rights" value={kdp.publishing_rights} hint="Select this option in KDP"
+            <FieldRow label="Publishing Rights" value={kdp.publishing_rights} hint="Select this option on Amazon"
               onSave={(v) => saveField({ publishing_rights: v })} />
             <FieldRow label="Territories" value={kdp.territories}
               onSave={(v) => saveField({ territories: v })} />
@@ -544,11 +544,11 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
               className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform"
             >
               <BookOpen className="h-5 w-5" strokeWidth={2.5} />
-              Open KDP Dashboard
+              Open Amazon Dashboard
               <ExternalLink className="h-4 w-4 opacity-70" strokeWidth={2.5} />
             </a>
             <p className="text-xs text-muted-foreground font-medium max-w-xs">
-              Opens Amazon KDP in a new tab. Start a new paperback title and paste these fields.
+              Opens Amazon Kindle Direct Publishing in a new tab. Start a new paperback title and paste these fields.
             </p>
           </div>
         </>
@@ -565,7 +565,7 @@ export default function KDPPage() {
   if (!book) {
     return (
       <BookPicker
-        heading="KDP Publishing Setup"
+        heading="Amazon Publishing Setup"
         subheading="Choose which book to generate publishing fields for."
         onSelect={setBook}
       />

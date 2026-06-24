@@ -25,7 +25,7 @@ const HOW_IT_WORKS = [
   {
     icon: BookMarked, bg: "bg-accent", fg: "text-accent-foreground",
     title: "3. Publish anywhere",
-    desc: "Share a reading link, download a print-ready PDF, or export KDP-formatted files for Amazon self-publishing.",
+    desc: "Share a reading link, download a print-ready PDF, or export files ready for Amazon self-publishing.",
   },
 ];
 
@@ -33,7 +33,7 @@ const TRUST_POINTS = [
   { icon: Lock,     text: "Your story stays private by default"        },
   { icon: Star,     text: "Built for ages 3–11 with safety filters"    },
   { icon: Download, text: "Export PDF at any time — no lock-in"        },
-  { icon: BookOpen, text: "Full KDP guide included with every book"    },
+  { icon: BookOpen, text: "Amazon self-publishing guide included"       },
 ];
 
 export default function HomePage() {
@@ -44,7 +44,7 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 md:grid-cols-2 md:py-28 lg:gap-16">
           <div className="relative z-10 flex flex-col justify-center">
             <span className="mb-5 inline-flex w-fit items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-accent-foreground chunky-border">
-              <Sparkles className="h-3.5 w-3.5" strokeWidth={3} /> Personalized children&apos;s books + KDP publishing
+              <Sparkles className="h-3.5 w-3.5" strokeWidth={3} /> Personalized children&apos;s books + Amazon publishing
             </span>
             <h1 className="font-display text-5xl font-black leading-[0.93] md:text-6xl lg:text-7xl">
               Every child{" "}
@@ -57,11 +57,11 @@ export default function HomePage() {
             <p className="mt-6 max-w-md text-lg text-muted-foreground">
               Type a one-line idea. In minutes you get a fully illustrated,
               narrated children&apos;s storybook — personalised for your child,
-              ready to read online or publish on Amazon KDP.
+              ready to read online or publish on Amazon.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {["AI-written story", "Consistent characters", "Print-ready PDF", "KDP export"].map((t) => (
+              {["AI-written story", "Consistent characters", "Print-ready PDF", "Amazon export"].map((t) => (
                 <span key={t} className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-bold chunky-border">
                   <span className="text-primary">✦</span> {t}
                 </span>
@@ -129,7 +129,7 @@ export default function HomePage() {
             "Consistent characters across every page",
             "Your child's name in the story",
             "Print-ready PDF",
-            "KDP self-publishing guide included",
+            "Amazon self-publishing guide included",
             "Narrated with AI voices",
             "Safe for ages 3–11",
             "No lock-in — export anytime",
@@ -235,18 +235,18 @@ export default function HomePage() {
           <div className="text-6xl shrink-0">📦</div>
           <div className="flex-1">
             <h2 className="font-display text-3xl font-black md:text-4xl">
-              Publish on Amazon KDP — we handle the hard part
+              Publish on Amazon — we handle the hard part
             </h2>
             <p className="mt-3 text-primary-foreground/80 max-w-lg">
-              Every book includes a KDP-ready export with title, description, keywords, categories,
-              author bio, and a formatting guide. Upload to Amazon in an afternoon and start earning royalties.
+              Every book includes an Amazon-ready export with title, description, keywords, categories,
+              author bio, and a formatting guide. Upload in an afternoon and start earning royalties.
             </p>
           </div>
           <Link
             href="/kdp"
             className="shrink-0 inline-flex items-center gap-2 rounded-full bg-background text-foreground px-6 py-3 text-sm font-extrabold chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"
           >
-            Learn about KDP <ArrowRight className="h-4 w-4" strokeWidth={3} />
+            Amazon self-publishing <ArrowRight className="h-4 w-4" strokeWidth={3} />
           </Link>
         </div>
       </section>
@@ -279,7 +279,7 @@ export default function HomePage() {
             <p className="font-display text-5xl font-black mt-1">$9<span className="text-2xl font-bold opacity-60">/mo</span></p>
             <p className="text-sm opacity-60 mt-1">Cancel anytime</p>
             <ul className="mt-6 space-y-2.5 text-sm font-semibold">
-              {["Everything in Free", "AI narration with voice cloning", "Custom voice studio", "Bulk illustration queue", "Priority generation", "KDP publishing assistant"].map((f) => (
+              {["Everything in Free", "AI narration with voice cloning", "Custom voice studio", "Bulk illustration queue", "Priority generation", "Amazon publishing assistant"].map((f) => (
                 <li key={f} className="flex items-center gap-2 opacity-80">
                   <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-background/20 text-[10px] font-black">✓</span> {f}
                 </li>
