@@ -342,15 +342,19 @@ function Mode3Preview({
   ];
 
   return (
-    <div ref={canvasRef} className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
+    // No overflow-hidden here — handles extend slightly outside the image edge
+    <div ref={canvasRef} className="relative rounded-2xl chunky-border chunky-shadow"
       style={{ width: "min(640px, calc(100vw - 520px))", aspectRatio: "4/3", flexShrink: 0 }}>
-      {blobUrl ? (
-        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
-      ) : (
-        <div className="absolute inset-0 bg-muted flex items-center justify-center">
-          <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
-        </div>
-      )}
+      {/* Image clipped inside the rounded container */}
+      <div className="absolute inset-0 rounded-2xl overflow-hidden">
+        {blobUrl ? (
+          <img src={blobUrl} alt="" className="h-full w-full object-cover" draggable={false} />
+        ) : (
+          <div className="h-full bg-muted flex items-center justify-center">
+            <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
+          </div>
+        )}
+      </div>
       {/* Draggable text box */}
       <div
         style={{
@@ -714,9 +718,11 @@ function StudioInner() {
     function onMove(ev: MouseEvent) {
       const dr = dragRef.current;
       if (!dr || !canvasRef.current) return;
-      const rect = canvasRef.current.getBoundingClientRect();
-      const dx = (ev.clientX - dr.sx) / rect.width;
-      const dy = (ev.clientY - dr.sy) / rect.height;
+      // Use clientWidth/clientHeight (excludes border) so fractions match position: absolute children
+      const cw = canvasRef.current.clientWidth;
+      const ch = canvasRef.current.clientHeight;
+      const dx = (ev.clientX - dr.sx) / cw;
+      const dy = (ev.clientY - dr.sy) / ch;
       const s  = dr.snap;
       let { x, y, w, h } = s;
 
