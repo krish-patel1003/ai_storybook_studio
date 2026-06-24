@@ -95,9 +95,7 @@ interface BookTextSettings {
   fontSize: number;
   fontFamily: FontId;
   textColor: string;
-  // Mode 1 – overlay
-  m1Position: TextPosition;
-  m1Align: TextAlign;
+  // Mode 1 – position/align are PAGE-LEVEL (saved on page, not here)
   m1BgStyle: "none" | "frosted" | "darkened";
   m1BgOpacity: number;
   // Mode 2 – stacked
@@ -110,8 +108,6 @@ const DEFAULT_SETTINGS: BookTextSettings = {
   fontSize: 14,
   fontFamily: "unkempt",
   textColor: "#1a1a2e",
-  m1Position: "bottom",
-  m1Align: "center",
   m1BgStyle: "frosted",
   m1BgOpacity: 0.82,
   m2Position: "bottom",
@@ -209,15 +205,17 @@ const READER_BG = "#faf8f3";
 type DragHandle = "move" | "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l";
 
 function Mode1Preview({
-  blobUrl, text, settings,
+  blobUrl, text, settings, position, align,
 }: {
   blobUrl: string | null;
   text: string;
   settings: BookTextSettings;
+  position: TextPosition;
+  align: TextAlign;
 }) {
   const font     = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
-  const tPos     = settings.m1Position;
-  const tAlign   = settings.m1Align as React.CSSProperties["textAlign"];
+  const tPos     = position;
+  const tAlign   = align as React.CSSProperties["textAlign"];
   const textZone = "38%";
   const gradH    = "47%";
 
@@ -609,9 +607,11 @@ function StudioInner() {
   const { book, setBook } = useBook();
 
   const [pageIdx,  setPageIdx]  = useState(0);
-  const [text,     setText]     = useState("");
-  const [settings, setSettings] = useState<BookTextSettings>(DEFAULT_SETTINGS);
-  const [overlay,  setOverlay]  = useState<CanvasOverlay>(DEFAULT_OVERLAY);
+  const [text,         setText]        = useState("");
+  const [settings,    setSettings]    = useState<BookTextSettings>(DEFAULT_SETTINGS);
+  const [overlay,     setOverlay]     = useState<CanvasOverlay>(DEFAULT_OVERLAY);
+  const [pagePosition, setPagePosition] = useState<TextPosition>("bottom");
+  const [pageAlign,    setPageAlign]    = useState<TextAlign>("center");
   const [saving,   setSaving]   = useState(false);
   const [dirty,    setDirty]    = useState(false);
 
@@ -622,7 +622,7 @@ function StudioInner() {
 
   const canvasRef  = useRef<HTMLDivElement>(null);
   const dragRef    = useRef<{ handle: DragHandle; sx: number; sy: number; snap: CanvasOverlay } | null>(null);
-  const latestRef  = useRef({ text, overlay, settings });
+  const latestRef  = useRef({ text, overlay, settings, pagePosition, pageAlign });
   const saveTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pages = book?.pages ?? [];
@@ -639,13 +639,15 @@ function StudioInner() {
   useEffect(() => {
     if (!page) return;
     setText(page.text ?? "");
+    setPagePosition((page.text_position as TextPosition) ?? "bottom");
+    setPageAlign((page.text_align as TextAlign) ?? "center");
     const ov = page.canvas_overlay;
     setOverlay(ov ? { ...DEFAULT_OVERLAY, ...ov } : { ...DEFAULT_OVERLAY, fontSize: settings.fontSize, fontFamily: settings.fontFamily, textColor: settings.textColor });
     setDirty(false);
   }, [pageIdx, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep latestRef in sync
-  useEffect(() => { latestRef.current = { text, overlay, settings }; });
+  useEffect(() => { latestRef.current = { text, overlay, settings, pagePosition, pageAlign }; });
 
   // Auto-start illustration if coming from outline
   useEffect(() => {
@@ -668,7 +670,7 @@ function StudioInner() {
 
   const save = useCallback(async () => {
     if (!token || !book || !page) return;
-    const { text: tx, overlay: ov, settings: st } = latestRef.current;
+    const { text: tx, overlay: ov, settings: st, pagePosition: pos, pageAlign: align } = latestRef.current;
 
     // Decide what overlay to save based on mode
     let overlayToSave: CanvasOverlay | null = null;
@@ -682,7 +684,6 @@ function StudioInner() {
         bgOpacity: st.m1BgOpacity,
       };
     } else if (st.mode === 2) {
-      // Store stacked info in overlay fields
       overlayToSave = {
         ...DEFAULT_OVERLAY,
         fontSize: st.fontSize,
@@ -699,8 +700,8 @@ function StudioInner() {
     try {
       const updated = await api.books.updatePage(token, book.id, page.id, {
         text: tx,
-        text_align: st.m1Align,
-        text_position: st.m1Position,
+        text_align: align,
+        text_position: pos,
         canvas_overlay: overlayToSave,
       });
       setBook(updated as unknown as BookOut);
@@ -897,7 +898,8 @@ function StudioInner() {
 
           {/* The preview — switches based on mode */}
           {settings.mode === 1 && (
-            <Mode1Preview blobUrl={blobUrl} text={text} settings={settings} />
+            <Mode1Preview blobUrl={blobUrl} text={text} settings={settings}
+              position={pagePosition} align={pageAlign} />
           )}
           {settings.mode === 2 && (
             <Mode2Preview blobUrl={blobUrl} text={text} settings={settings} />
@@ -1049,15 +1051,15 @@ function StudioInner() {
             {settings.mode === 1 && (
               <>
                 <p className="text-[11px] text-muted-foreground">
-                  Matches the reader — gradient blends the image into a text zone.
+                  Matches the reader. Position and alignment are saved per page.
                 </p>
                 <div>
                   <SL>Text position</SL>
                   <div className="grid grid-cols-3 gap-1.5">
                     {(["top", "center", "bottom"] as TextPosition[]).map(pos => (
-                      <button key={pos} onClick={() => patchSettings({ m1Position: pos })}
+                      <button key={pos} onClick={() => { setPagePosition(pos); setDirty(true); }}
                         className={cn("rounded-xl py-1.5 text-xs font-extrabold capitalize chunky-border transition-colors",
-                          settings.m1Position === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                          pagePosition === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                         {pos}
                       </button>
                     ))}
@@ -1071,9 +1073,9 @@ function StudioInner() {
                       { id: "center" as TextAlign, icon: AlignCenter },
                       { id: "right"  as TextAlign, icon: AlignRight  },
                     ] as const).map(({ id, icon: Icon }) => (
-                      <button key={id} onClick={() => patchSettings({ m1Align: id })}
+                      <button key={id} onClick={() => { setPageAlign(id); setDirty(true); }}
                         className={cn("flex flex-1 items-center justify-center rounded-xl py-2 chunky-border transition-colors",
-                          settings.m1Align === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                          pageAlign === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                         <Icon className="h-4 w-4" strokeWidth={2.5} />
                       </button>
                     ))}
