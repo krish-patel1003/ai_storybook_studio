@@ -59,6 +59,7 @@ export interface CanvasOverlay {
   x: number;         // 0–1 fraction from left
   y: number;         // 0–1 fraction from top
   w: number;         // 0–1 fraction of page width
+  h: number;         // 0–1 fraction of page height
   fontSize: number;  // px
   fontFamily: string;
   textColor: string;

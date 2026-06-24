@@ -24,6 +24,7 @@ import {
   AlignRight,
   MoveVertical,
   Shuffle,
+  PenLine,
 } from "lucide-react";
 import { XsSpinner, SmSpinner, MdSpinner, LgSpinner, CornerSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
@@ -944,6 +945,15 @@ export default function EditorPage() {
             <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back to outline
           </Link>
           <div className="flex items-center gap-2">
+            {illustratedCount > 0 && (
+              <Link
+                href="/canvas"
+                className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-extrabold text-primary chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+              >
+                <PenLine className="h-4 w-4" strokeWidth={2.5} />
+                Canvas Editor
+              </Link>
+            )}
             {illustratedCount > 0 && (
               <Link
                 href="/reader?from=editor"
