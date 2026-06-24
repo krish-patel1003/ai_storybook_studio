@@ -969,7 +969,7 @@ export default function CreatePage() {
   const [customPageCountInput, setCustomPageCountInput] = useState("");
   const [style, setStyle] = useState("watercolor");
   const [modelProvider, setModelProvider] = useState("gemini");
-  const [modelName, setModelName] = useState("gemini-3.5-flash");
+  const [modelName, setModelName] = useState("gemini-3.1-pro-preview");
 
   // Flow
   const [flowState, setFlowState] = useState<FlowState>("input");
