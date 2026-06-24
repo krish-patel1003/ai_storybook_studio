@@ -220,7 +220,7 @@ Generate a subtitle, Amazon HTML description, 7 keywords, and 2 category paths.
         # Book Details
         title=brief.get("title") or book.title,
         subtitle=llm_fields.subtitle,
-        author=user.pen_name,
+        author=book.author_name or user.username or "",
         description_html=llm_fields.description_html,
 
         # Categories & Keywords

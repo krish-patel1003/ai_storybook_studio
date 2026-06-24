@@ -562,7 +562,7 @@ function ReaderInner() {
   const fontStack  = activeFont.stack;
   const fontWeight = activeFont.weight;
   const fontSize   = FONT_SIZES.find((s) => s.id === fontSizeId)?.rem ?? 1.8;
-  const penName = user?.pen_name ?? "";
+  const penName = book?.author_name || user?.username || "";
 
   // Opened directly (not via editor Preview or library) → show empty state
   if (!validFrom || !book) {

@@ -17,6 +17,7 @@ class ChildProfile(Base):
     )
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    author_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     age: Mapped[int] = mapped_column(Integer, nullable=False)
     # "boy" | "girl" | "nonbinary" | "unspecified"
     gender: Mapped[str] = mapped_column(String(20), nullable=False, default="unspecified")

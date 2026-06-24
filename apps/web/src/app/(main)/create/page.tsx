@@ -954,7 +954,7 @@ function StepBar({ current }: { current: FlowState }) {
 
 export default function CreatePage() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { setBook } = useBook();
 
   // Prompt + settings
@@ -1135,10 +1135,14 @@ export default function CreatePage() {
       if (draft) {
         book = await api.books.generate(token, draft.id, style);
       } else {
+        const resolvedAuthor = selectedProfile
+          ? (selectedProfile.author_name || selectedProfile.name)
+          : (user?.author_name || user?.username || "");
         book = await api.books.create(token, {
           raw_prompt: prompt, age_range: age, tone, art_style: style,
           safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName,
           ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}),
+          author_name: resolvedAuthor || undefined,
         });
       }
       setCurrentBook(book);
@@ -1163,7 +1167,10 @@ export default function CreatePage() {
     if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
     setOneClickRunning(true); setOneClickStage("writing"); setOneClickProgress({ done: 0, total: 0 });
     try {
-      const savedDraft = await api.books.createDraft(token, { raw_prompt: prompt, age_range: age, tone: tone.length > 0 ? tone : ["Whimsical"], safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName, ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}) });
+      const resolvedAuthorOneClick = selectedProfile
+        ? (selectedProfile.author_name || selectedProfile.name)
+        : (user?.author_name || user?.username || "");
+      const savedDraft = await api.books.createDraft(token, { raw_prompt: prompt, age_range: age, tone: tone.length > 0 ? tone : ["Whimsical"], safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName, ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}), author_name: resolvedAuthorOneClick || undefined });
       setBook(savedDraft);
       const generated = await api.books.generate(token, savedDraft.id, style);
       setBook(generated);
@@ -1254,29 +1261,28 @@ export default function CreatePage() {
                     <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
                     <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
 
-                    {/* Child profile selector */}
-                    {profiles.length > 0 && (
-                      <div className="mt-5 flex items-center gap-3">
-                        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground shrink-0">For</p>
-                        <div className="flex flex-wrap gap-2">
+                    {/* Author picker — parent or child profile */}
+                    <div className="mt-5 flex items-start gap-3">
+                      <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground shrink-0 pt-1.5">Author</p>
+                      <div className="flex flex-wrap gap-2">
+                        {/* Parent option */}
+                        <button
+                          onClick={() => setSelectedProfileId(null)}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${!selectedProfileId ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                        >
+                          👤 {user?.author_name || user?.username || "Me"}
+                        </button>
+                        {profiles.map((p) => (
                           <button
-                            onClick={() => setSelectedProfileId(null)}
-                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${!selectedProfileId ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                            key={p.id}
+                            onClick={() => setSelectedProfileId(p.id === selectedProfileId ? null : p.id)}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${selectedProfileId === p.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
                           >
-                            Anyone
+                            {p.avatar_emoji} {p.author_name || p.name}
                           </button>
-                          {profiles.map((p) => (
-                            <button
-                              key={p.id}
-                              onClick={() => setSelectedProfileId(p.id === selectedProfileId ? null : p.id)}
-                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold chunky-border transition-colors ${selectedProfileId === p.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
-                            >
-                              {p.avatar_emoji} {p.name}
-                            </button>
-                          ))}
-                        </div>
+                        ))}
                       </div>
-                    )}
+                    </div>
 
                     <div className="relative mt-6">
                       <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}

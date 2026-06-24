@@ -29,6 +29,7 @@ class CreateBookIn(BaseModel):
     model_provider: str = "gemini"
     model_name: str = "gemini-3.5-flash"
     child_profile_id: uuid.UUID | None = None
+    author_name: str | None = None
 
 
 class UpdatePageIn(BaseModel):
@@ -156,6 +157,7 @@ class BookOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     child_profile_id: uuid.UUID | None = None
+    author_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -276,6 +278,7 @@ class CreateDraftIn(BaseModel):
     model_provider: str = "gemini"
     model_name: str = "gemini-3.5-flash"
     child_profile_id: uuid.UUID | None = None
+    author_name: str | None = None
 
 
 class GenerateIn(BaseModel):

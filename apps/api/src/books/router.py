@@ -311,7 +311,7 @@ async def export_pdf(
     font_id = font if font in EXPORT_FONTS else DEFAULT_EXPORT_FONT
     export_pages = await service.build_export_pages(db, book)
     title = book.brief.get("title", book.title) if book.brief else book.title
-    author = getattr(user, "pen_name", "") or ""
+    author = book.author_name or getattr(user, "username", "") or ""
     pdf_bytes = await build_pdf(title, export_pages, author=author, font_id=font_id)
     safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
     return FastAPIResponse(
@@ -340,7 +340,7 @@ async def export_cover_pdf(
         raise HTTPException(status_code=404, detail="No cover page found")
 
     title  = book.brief.get("title", book.title) if book.brief else book.title
-    author = getattr(user, "pen_name", "") or ""
+    author = book.author_name or getattr(user, "username", "") or ""
     pdf_bytes  = await build_cover_pdf(title, cover, author=author)
     safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
     return FastAPIResponse(
@@ -365,7 +365,7 @@ async def export_epub(
     font_id = font if font in EXPORT_FONTS else DEFAULT_EXPORT_FONT
     export_pages = await service.build_export_pages(db, book)
     title = book.brief.get("title", book.title) if book.brief else book.title
-    author = getattr(user, "pen_name", "") or ""
+    author = book.author_name or getattr(user, "username", "") or ""
     epub_bytes = await build_epub(title, author or "AI Storybook Studio", export_pages, font_id=font_id)
     safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
     return FastAPIResponse(

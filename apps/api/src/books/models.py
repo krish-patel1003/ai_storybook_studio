@@ -62,6 +62,9 @@ class Book(Base):
     # Visibility
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")
 
+    # Author attribution — resolved at creation from parent user or chosen child profile
+    author_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     # Optional child profile — personalises prompts and loading UX
     child_profile_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("child_profile.id", ondelete="SET NULL"), nullable=True, index=True

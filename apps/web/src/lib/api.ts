@@ -5,7 +5,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 export interface User {
   id: string;
   email: string;
-  pen_name: string;
+  username: string;
+  author_name?: string | null;
   avatar_url?: string;
 }
 
@@ -134,6 +135,7 @@ export interface BookOut {
   created_at: string;
   updated_at: string;
   child_profile_id: string | null;
+  author_name: string | null;
 }
 
 // ── Child Profile types ───────────────────────────────────────────────────────
@@ -141,6 +143,7 @@ export interface BookOut {
 export interface ChildProfile {
   id: string;
   name: string;
+  author_name?: string | null;
   age: number;
   gender: "boy" | "girl" | "nonbinary" | "unspecified";
   grade_level: string;
@@ -153,6 +156,7 @@ export interface ChildProfile {
 
 export interface CreateProfileIn {
   name: string;
+  author_name?: string | null;
   age: number;
   gender: "boy" | "girl" | "nonbinary" | "unspecified";
   grade_level: string;
@@ -260,6 +264,7 @@ export interface CreateBookIn {
   model_provider: string;
   model_name: string;
   child_profile_id?: string | null;
+  author_name?: string | null;
 }
 
 export interface UpdatePageIn {
@@ -310,6 +315,7 @@ export interface CreateDraftIn {
   model_provider: string;
   model_name: string;
   child_profile_id?: string | null;
+  author_name?: string | null;
 }
 
 export interface VoiceProfile {
@@ -383,10 +389,17 @@ export const api = {
         body: JSON.stringify({ email, password }),
       }),
 
-    register: (pen_name: string, email: string, password: string) =>
+    register: (username: string, email: string, password: string) =>
       request<{ message: string }>("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ pen_name, email, password }),
+        body: JSON.stringify({ username, email, password }),
+      }),
+
+    updateMe: (token: string, data: { username?: string; author_name?: string }) =>
+      request<User>("/auth/me", {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify(data),
       }),
 
     verifyEmail: (token: string) =>

@@ -25,16 +25,16 @@ async function mockLogin(email: string, _password: string) {
   return {
     access_token: `mock.${btoa(email)}.token`,
     refresh_token: "mock-refresh",
-    user: { id: "mock-" + Math.random().toString(36).slice(2), email, pen_name: email.split("@")[0] } satisfies User,
+    user: { id: "mock-" + Math.random().toString(36).slice(2), email, username: email.split("@")[0] } satisfies User,
   };
 }
 
-async function mockRegister(pen_name: string, email: string, _password: string) {
+async function mockRegister(username: string, email: string, _password: string) {
   await delay(MOCK_DELAY);
   return {
     access_token: `mock.${btoa(email)}.token`,
     refresh_token: "mock-refresh",
-    user: { id: "mock-" + Math.random().toString(36).slice(2), email, pen_name } satisfies User,
+    user: { id: "mock-" + Math.random().toString(36).slice(2), email, username } satisfies User,
   };
 }
 
@@ -60,9 +60,10 @@ interface AuthContextValue {
   isLoading: boolean;
   isMock: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (penName: string, email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
   googleLogin: (accessToken: string) => Promise<void>;
   logout: () => void;
+  updateUser: (data: { username?: string; author_name?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -160,20 +161,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     persist(result.access_token, result.refresh_token, result.user);
   }, [isMock, persist]);
 
-  const register = useCallback(async (penName: string, email: string, password: string) => {
+  const register = useCallback(async (username: string, email: string, password: string) => {
     if (isMock) {
-      const result = await mockRegister(penName, email, password);
+      const result = await mockRegister(username, email, password);
       persist(result.access_token, result.refresh_token, result.user);
       return;
     }
     // Real registration: backend sends verification email, no tokens yet
-    await api.auth.register(penName, email, password);
+    await api.auth.register(username, email, password);
   }, [isMock, persist]);
 
   const googleLogin = useCallback(async (accessToken: string) => {
     const result = await api.auth.google(accessToken);
     persist(result.access_token, result.refresh_token, result.user);
   }, [persist]);
+
+  const updateUser = useCallback(async (data: { username?: string; author_name?: string }) => {
+    if (!token) return;
+    const updated = await api.auth.updateMe(token, data);
+    setUser(updated);
+    localStorage.setItem(USER_KEY, JSON.stringify(updated));
+  }, [token]);
 
   const logout = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
@@ -190,7 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isMock]);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, isMock, login, register, googleLogin, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, isMock, login, register, googleLogin, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

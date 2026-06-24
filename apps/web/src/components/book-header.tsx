@@ -94,10 +94,10 @@ export function BookHeader() {
                   className="flex items-center gap-2 rounded-full bg-card py-1.5 pl-1.5 pr-3 chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"
                 >
                   <span className="grid h-7 w-7 place-items-center rounded-full bg-primary text-xs font-black text-primary-foreground">
-                    {user.pen_name.charAt(0).toUpperCase()}
+                    {user.username.charAt(0).toUpperCase()}
                   </span>
                   <span className="hidden max-w-[100px] truncate text-sm font-extrabold md:block">
-                    {user.pen_name}
+                    {user.username}
                   </span>
                   <ChevronDown
                     className={`h-3.5 w-3.5 transition-transform ${menuOpen ? "rotate-180" : ""}`}

@@ -4,16 +4,48 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { User, Mail, BookOpen, LogOut, Shield, Pencil, Check, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 
 export default function AccountPage() {
-  const { user, logout, isLoading } = useAuth();
+  const { user, token, logout, isLoading, updateUser } = useAuth();
   const router = useRouter();
-  const [editingPenName, setEditingPenName] = useState(false);
-  const [penName, setPenName] = useState(user?.pen_name ?? "");
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [editingAuthorName, setEditingAuthorName] = useState(false);
+  const [usernameValue, setUsernameValue] = useState(user?.username ?? "");
+  const [authorNameValue, setAuthorNameValue] = useState(user?.author_name ?? "");
+  const [saving, setSaving] = useState(false);
 
   function handleLogout() {
     logout();
     router.push("/");
+  }
+
+  async function saveUsername() {
+    if (!token || !usernameValue.trim()) return;
+    setSaving(true);
+    try {
+      await updateUser({ username: usernameValue.trim() });
+      toast.success("Username updated");
+    } catch {
+      toast.error("Failed to update username");
+    } finally {
+      setSaving(false);
+      setEditingUsername(false);
+    }
+  }
+
+  async function saveAuthorName() {
+    if (!token) return;
+    setSaving(true);
+    try {
+      await updateUser({ author_name: authorNameValue.trim() || undefined });
+      toast.success("Author name updated");
+    } catch {
+      toast.error("Failed to update author name");
+    } finally {
+      setSaving(false);
+      setEditingAuthorName(false);
+    }
   }
 
   if (isLoading) {
@@ -38,28 +70,29 @@ export default function AccountPage() {
       <h1 className="font-display text-4xl font-black md:text-5xl">Your Account</h1>
       <p className="mt-2 text-muted-foreground">Manage your profile and preferences.</p>
 
-      {/* Avatar + name */}
+      {/* Avatar + username */}
       <div className="mt-8 flex items-center gap-4 rounded-3xl bg-card p-6 chunky-border chunky-shadow-sm">
         <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-primary text-2xl font-black text-primary-foreground chunky-border">
-          {user.pen_name.charAt(0).toUpperCase()}
+          {user.username.charAt(0).toUpperCase()}
         </span>
         <div className="flex-1 min-w-0">
-          {editingPenName ? (
+          {editingUsername ? (
             <div className="flex items-center gap-2">
               <input
-                value={penName}
-                onChange={(e) => setPenName(e.target.value)}
+                value={usernameValue}
+                onChange={(e) => setUsernameValue(e.target.value)}
                 className="flex-1 rounded-xl border-[2px] border-foreground bg-background px-3 py-1.5 text-lg font-black focus:outline-none"
                 autoFocus
               />
               <button
-                onClick={() => setEditingPenName(false)}
-                className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground chunky-border"
+                onClick={saveUsername}
+                disabled={saving}
+                className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-50"
               >
                 <Check className="h-4 w-4" strokeWidth={3} />
               </button>
               <button
-                onClick={() => { setEditingPenName(false); setPenName(user.pen_name); }}
+                onClick={() => { setEditingUsername(false); setUsernameValue(user.username); }}
                 className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border"
               >
                 <X className="h-4 w-4" strokeWidth={3} />
@@ -67,11 +100,11 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="font-display text-xl font-black">{user.pen_name}</span>
+              <span className="font-display text-xl font-black">{user.username}</span>
               <button
-                onClick={() => setEditingPenName(true)}
+                onClick={() => { setEditingUsername(true); setUsernameValue(user.username); }}
                 className="rounded-full p-1 hover:bg-highlight transition-colors"
-                title="Edit pen name"
+                title="Edit username"
               >
                 <Pencil className="h-3.5 w-3.5" strokeWidth={2.5} />
               </button>
@@ -93,13 +126,49 @@ export default function AccountPage() {
           </div>
         </div>
 
+        {/* Author name — editable, used on book covers */}
         <div className="flex items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent chunky-border">
             <User className="h-5 w-5" strokeWidth={2.5} />
           </span>
-          <div>
-            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Pen Name</p>
-            <p className="font-bold">{user.pen_name}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Author Name</p>
+            <p className="text-xs text-muted-foreground mb-1">Shown on book covers and exports</p>
+            {editingAuthorName ? (
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  value={authorNameValue}
+                  onChange={(e) => setAuthorNameValue(e.target.value)}
+                  placeholder="e.g. Jane Smith"
+                  className="flex-1 rounded-xl border-[2px] border-foreground bg-background px-3 py-1.5 text-sm font-bold focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  onClick={saveAuthorName}
+                  disabled={saving}
+                  className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-50"
+                >
+                  <Check className="h-4 w-4" strokeWidth={3} />
+                </button>
+                <button
+                  onClick={() => { setEditingAuthorName(false); setAuthorNameValue(user.author_name ?? ""); }}
+                  className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border"
+                >
+                  <X className="h-4 w-4" strokeWidth={3} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="font-bold">{user.author_name || <span className="text-muted-foreground italic font-normal text-sm">Not set — using username</span>}</p>
+                <button
+                  onClick={() => { setEditingAuthorName(true); setAuthorNameValue(user.author_name ?? ""); }}
+                  className="rounded-full p-1 hover:bg-highlight transition-colors"
+                  title="Edit author name"
+                >
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

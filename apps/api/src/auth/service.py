@@ -30,14 +30,14 @@ def _generate_verification_token() -> str:
     return hashlib.sha256(os.urandom(32)).hexdigest()
 
 
-async def register(pen_name: str, email: str, password: str, db: AsyncSession) -> dict:
+async def register(username: str, email: str, password: str, db: AsyncSession) -> dict:
     existing = await db.scalar(select(User).where(User.email == email))
     if existing:
         raise EmailAlreadyTaken()
 
     token = _generate_verification_token()
     user = User(
-        pen_name=pen_name,
+        username=username,
         email=email,
         password_hash=hash_password(password),
         is_email_verified=False,
@@ -50,7 +50,7 @@ async def register(pen_name: str, email: str, password: str, db: AsyncSession) -
     # Send verification email (non-blocking — failure doesn't break registration)
     try:
         from src.auth.email_service import send_verification_email
-        await send_verification_email(email, pen_name, token)
+        await send_verification_email(email, username, token)
     except Exception:
         import logging
         logging.getLogger(__name__).exception("Failed to send verification email to %s", email)
@@ -82,7 +82,7 @@ async def verify_email(token: str, db: AsyncSession) -> AuthTokens:
     # Send welcome email
     try:
         from src.auth.email_service import send_welcome_email
-        await send_welcome_email(user.email, user.pen_name)
+        await send_welcome_email(user.email, user.username)
     except Exception:
         pass
 
@@ -104,7 +104,7 @@ async def resend_verification(email: str, db: AsyncSession) -> dict:
 
     try:
         from src.auth.email_service import send_verification_email
-        await send_verification_email(email, user.pen_name, token)
+        await send_verification_email(email, user.username, token)
     except Exception:
         import logging
         logging.getLogger(__name__).exception("Failed to resend verification email to %s", email)
@@ -154,7 +154,7 @@ async def google_auth(id_token_str: str, db: AsyncSession) -> AuthTokens:
             user.email_verification_expires_at = None
     else:
         user = User(
-            pen_name=name,
+            username=name,
             email=email,
             google_id=google_id,
             avatar_url=avatar_url,
@@ -219,7 +219,7 @@ async def _issue_tokens(user: User, db: AsyncSession) -> AuthTokens:
         user=UserResponse(
             id=user.id,
             email=user.email,
-            pen_name=user.pen_name,
+            username=user.username,
             avatar_url=user.avatar_url,
         ),
     )

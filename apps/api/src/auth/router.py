@@ -12,6 +12,7 @@ from src.auth.schemas import (
     LoginIn,
     RegisterIn,
     TokenRefreshIn,
+    UpdateUserIn,
     UserResponse,
     VerifyEmailIn,
     ResendVerificationIn,
@@ -24,13 +25,13 @@ router = APIRouter()
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
-    summary="Register a new author account",
+    summary="Register a new account",
 )
 async def register(
     data: RegisterIn,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    return await service.register(data.pen_name, data.email, data.password, db)
+    return await service.register(data.username, data.email, data.password, db)
 
 
 @router.post(
@@ -102,7 +103,6 @@ async def logout(
     db: Annotated[AsyncSession, Depends(get_db)],
     bg: BackgroundTasks,
 ) -> None:
-    # Fire-and-forget: safe to drop (token just lives until natural expiry)
     bg.add_task(service.revoke_refresh_token, data.refresh_token, db)
 
 
@@ -115,6 +115,31 @@ async def me(user: Annotated[User, Depends(current_user)]) -> UserResponse:
     return UserResponse(
         id=user.id,
         email=user.email,
-        pen_name=user.pen_name,
+        username=user.username,
+        author_name=user.author_name,
+        avatar_url=user.avatar_url,
+    )
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update username or author name",
+)
+async def update_me(
+    data: UpdateUserIn,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserResponse:
+    if data.username is not None:
+        user.username = data.username
+    if data.author_name is not None:
+        user.author_name = data.author_name
+    await db.commit()
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        author_name=user.author_name,
         avatar_url=user.avatar_url,
     )

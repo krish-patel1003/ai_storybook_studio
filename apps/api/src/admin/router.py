@@ -138,7 +138,7 @@ async def get_stats(
 
     # ── Recent signups ────────────────────────────────────────────────────────
     recent_user_rows = (await db.execute(
-        select(User.id, User.email, User.pen_name, User.created_at,
+        select(User.id, User.email, User.username, User.created_at,
                User.is_email_verified, User.google_id, User.last_seen_at)
         .order_by(User.created_at.desc()).limit(10)
     )).all()
@@ -146,7 +146,7 @@ async def get_stats(
         {
             "id":         str(r.id),
             "email":      r.email,
-            "pen_name":   r.pen_name,
+            "username":   r.username,
             "joined":     r.created_at.isoformat(),
             "last_seen":  r.last_seen_at.isoformat() if r.last_seen_at else None,
             "verified":   r.is_email_verified,
@@ -281,7 +281,7 @@ async def list_users(
     """All users with book counts and estimated spend."""
     user_rows = (await db.execute(
         select(
-            User.id, User.email, User.pen_name, User.created_at,
+            User.id, User.email, User.username, User.created_at,
             User.is_email_verified, User.google_id, User.last_seen_at,
             func.count(distinct(Book.id)).label("book_count"),
             func.count(Page.id).filter(Page.image_key.isnot(None)).label("illustrated"),
@@ -313,7 +313,7 @@ async def list_users(
         users.append({
             "id":                uid,
             "email":             r.email,
-            "pen_name":          r.pen_name,
+            "username":          r.username,
             "joined":            r.created_at.isoformat(),
             "last_seen":         r.last_seen_at.isoformat() if r.last_seen_at else None,
             "verified":          r.is_email_verified,
@@ -388,7 +388,7 @@ async def get_user(
         "user": {
             "id":        str(user.id),
             "email":     user.email,
-            "pen_name":  user.pen_name,
+            "username":  user.username,
             "joined":    user.created_at.isoformat(),
             "last_seen": user.last_seen_at.isoformat() if user.last_seen_at else None,
             "verified":  user.is_email_verified,

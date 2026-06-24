@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class CreateProfileIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+    author_name: str | None = Field(default=None, min_length=1, max_length=100)
     age: int = Field(ge=0, le=18)
     gender: str = Field(default="unspecified", pattern=r"^(boy|girl|nonbinary|unspecified)$")
     grade_level: str = Field(default="K", pattern=r"^(preschool|K|1|2|3|4|5|6\+)$")
@@ -16,6 +17,7 @@ class CreateProfileIn(BaseModel):
 
 class UpdateProfileIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
+    author_name: str | None = Field(default=None, min_length=1, max_length=100)
     age: int | None = Field(default=None, ge=0, le=18)
     gender: str | None = Field(default=None, pattern=r"^(boy|girl|nonbinary|unspecified)$")
     grade_level: str | None = Field(default=None, pattern=r"^(preschool|K|1|2|3|4|5|6\+)$")
@@ -27,6 +29,7 @@ class UpdateProfileIn(BaseModel):
 class ProfileOut(BaseModel):
     id: uuid.UUID
     name: str
+    author_name: str | None = None
     age: int
     gender: str
     grade_level: str

@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 
 const schema = z
   .object({
-    penName: z.string().min(2, "At least 2 characters").max(50, "Under 50 characters"),
+    username: z.string().min(2, "At least 2 characters").max(50, "Under 50 characters"),
     email: z.string().email("Enter a valid email address"),
     password: z
       .string()
@@ -58,7 +58,7 @@ export default function SignUpPage() {
   async function onSubmit(data: FormData) {
     setIsLoading(true);
     try {
-      await registerUser(data.penName, data.email, data.password);
+      await registerUser(data.username, data.email, data.password);
       if (isMock) {
         toast.success("Account created! Welcome to Storybook Studio.");
         router.push("/");
@@ -108,17 +108,17 @@ export default function SignUpPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Field
-              label="Pen name"
-              hint="Your public author name on all books."
-              error={errors.penName?.message}
+              label="Username"
+              hint="Your account username. You can set an author name separately."
+              error={errors.username?.message}
             >
               <div className="relative">
                 <input
-                  {...register("penName")}
+                  {...register("username")}
                   type="text"
-                  placeholder="e.g. J.K. Rowling"
+                  placeholder="e.g. jane_parent"
                   autoComplete="nickname"
-                  className={inputClass(!!errors.penName) + " pl-11"}
+                  className={inputClass(!!errors.username) + " pl-11"}
                 />
                 <Pencil className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               </div>

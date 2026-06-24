@@ -19,7 +19,7 @@ class CustomModel(BaseModel):
 
 
 class RegisterIn(CustomModel):
-    pen_name: str = Field(min_length=2, max_length=50)
+    username: str = Field(min_length=2, max_length=50)
     email: EmailStr
     password: str = Field(min_length=8, max_length=100)
 
@@ -40,8 +40,14 @@ class TokenRefreshIn(CustomModel):
 class UserResponse(CustomModel):
     id: uuid.UUID
     email: str
-    pen_name: str
+    username: str
+    author_name: str | None = None
     avatar_url: str | None = None
+
+
+class UpdateUserIn(CustomModel):
+    username: str | None = Field(default=None, min_length=2, max_length=50)
+    author_name: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class AuthTokens(CustomModel):

@@ -25,7 +25,7 @@ interface Stats {
   age_ranges: { range: string; count: number }[];
   models_used: { model: string; count: number }[];
   books_per_day: { day: string; count: number }[];
-  recent_users: { id: string; email: string; pen_name: string; joined: string; last_seen: string | null; verified: boolean; google: boolean }[];
+  recent_users: { id: string; email: string; username: string; joined: string; last_seen: string | null; verified: boolean; google: boolean }[];
   recent_books: { title: string; prompt: string; stage: string; style: string; pages: number; created: string }[];
 }
 
@@ -44,7 +44,7 @@ interface Costs {
 }
 
 interface UserSummary {
-  id: string; email: string; pen_name: string; joined: string; last_seen: string | null;
+  id: string; email: string; username: string; joined: string; last_seen: string | null;
   verified: boolean; google: boolean; books: number;
   illustrated_pages: number; narrated_pages: number;
   cost: CostBreakdown;
@@ -57,7 +57,7 @@ interface UserDetailBook {
 }
 
 interface UserDetailData {
-  user: { id: string; email: string; pen_name: string; joined: string; last_seen: string | null; verified: boolean; google: boolean; active: boolean };
+  user: { id: string; email: string; username: string; joined: string; last_seen: string | null; verified: boolean; google: boolean; active: boolean };
   books: UserDetailBook[];
   totals: {
     books: number; illustrated_pages: number; narrated_pages: number;
@@ -194,10 +194,10 @@ function UserDetailPanel({
             {/* User identity */}
             <div className="flex items-center gap-4 rounded-2xl bg-card p-5 chunky-border">
               <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary text-2xl font-black text-primary-foreground chunky-border">
-                {detail.user.pen_name.charAt(0).toUpperCase()}
+                {detail.user.username.charAt(0).toUpperCase()}
               </span>
               <div className="min-w-0">
-                <h3 className="font-display text-xl font-black truncate">{detail.user.pen_name}</h3>
+                <h3 className="font-display text-xl font-black truncate">{detail.user.username}</h3>
                 <p className="text-sm text-muted-foreground truncate">{detail.user.email}</p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {detail.user.google && (
@@ -668,10 +668,10 @@ export default function AdminDashboard() {
                 {stats.recent_users.length > 0 ? stats.recent_users.map((u) => (
                   <div key={u.id} className="flex items-center gap-3 rounded-xl bg-background px-3 py-2.5 chunky-border">
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-black text-primary-foreground">
-                      {u.pen_name.charAt(0).toUpperCase()}
+                      {u.username.charAt(0).toUpperCase()}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold truncate">{u.pen_name}</p>
+                      <p className="text-sm font-bold truncate">{u.username}</p>
                       <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -757,10 +757,10 @@ export default function AdminDashboard() {
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
                               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-black text-primary-foreground">
-                                {u.pen_name.charAt(0).toUpperCase()}
+                                {u.username.charAt(0).toUpperCase()}
                               </span>
                               <div className="min-w-0">
-                                <p className="font-bold truncate">{u.pen_name}</p>
+                                <p className="font-bold truncate">{u.username}</p>
                                 <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                               </div>
                               {u.google && <span className="text-[10px] font-bold rounded-full bg-orange-100 text-orange-700 px-1.5 py-0.5 shrink-0">G</span>}

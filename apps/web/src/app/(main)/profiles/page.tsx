@@ -27,7 +27,7 @@ const INTEREST_TAGS = [
 ];
 
 const BLANK: CreateProfileIn = {
-  name: "", age: 5, gender: "unspecified", grade_level: "K",
+  name: "", author_name: null, age: 5, gender: "unspecified", grade_level: "K",
   interests: [], reading_level: "beginner", avatar_emoji: "⭐",
 };
 
@@ -93,6 +93,17 @@ function ProfileForm({
             className="mt-1 w-full rounded-xl bg-background px-3 py-2 text-sm font-bold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
         </div>
+      </div>
+
+      {/* Author name */}
+      <div>
+        <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wide">Author Name <span className="font-normal normal-case text-muted-foreground">(optional)</span></label>
+        <input
+          value={form.author_name ?? ""}
+          onChange={(e) => setForm((f) => ({ ...f, author_name: e.target.value || null }))}
+          placeholder="e.g. Mia Smith — shown on book covers"
+          className="mt-1 w-full rounded-xl bg-background px-3 py-2 text-sm font-bold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
       </div>
 
       {/* Gender */}
