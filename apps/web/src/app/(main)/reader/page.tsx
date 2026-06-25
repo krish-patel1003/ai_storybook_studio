@@ -538,9 +538,9 @@ function ReaderInner() {
 
   // Resolve where the back button should go
   const fromParam = searchParams.get("from");
-  const validFrom = fromParam === "editor" || fromParam === "library";
-  const backHref = fromParam === "editor" ? "/editor" : "/library";
-  const backLabel = fromParam === "editor" ? "Editor" : "Library";
+  const validFrom = fromParam === "editor" || fromParam === "library" || fromParam === "studio";
+  const backHref = fromParam === "editor" ? "/editor" : fromParam === "studio" ? "/studio" : "/library";
+  const backLabel = fromParam === "editor" ? "Editor" : fromParam === "studio" ? "Studio" : "Library";
   const bookRef = useRef<HTMLFlipBookRef>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [font, setFont] = useReaderFont();

@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Mic, Sparkles, RefreshCw, Play, Pause,
   Square as StopIcon, Volume2, Check, Minus, Plus, AlignLeft,
   AlignCenter, AlignRight, ChevronLeft, ChevronRight, ImageIcon,
-  Layers, Grid3X3, Pipette, Trash2, Eye, Save,
+  Layers, Grid3X3, Pipette, Trash2, Eye, Save, Undo2, Redo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -790,7 +790,9 @@ function StudioInner() {
   const [pageAlign,    setPageAlign]    = useState<TextAlign>("center");
   const [saving,        setSaving]       = useState(false);
   const [dirty,         setDirty]        = useState(false);
-  const [saveVersion,   setSaveVersion]  = useState(0);
+  // Undo/redo history (text snapshots only; settings/position changes are lightweight)
+  const [undoStack,     setUndoStack]    = useState<string[]>([]);
+  const [redoStack,     setRedoStack]    = useState<string[]>([]);
   const [textOverflows, setTextOverflows] = useState(false);
   const [splitting,     setSplitting]    = useState(false);
   const [backCoverLoading, setBackCoverLoading] = useState(false);
@@ -803,7 +805,8 @@ function StudioInner() {
   const canvasRef  = useRef<HTMLDivElement>(null);
   const dragRef    = useRef<{ handle: DragHandle; sx: number; sy: number; snap: {x:number;y:number;w:number;h:number}; boxIdx: number } | null>(null);
   const latestRef  = useRef({ text, boxes, settings, pagePosition, pageAlign });
-  const saveTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSnapshotRef = useRef<string>("");
 
   const pages = book?.pages ?? [];
   const page  = pages[pageIdx] ?? null;
@@ -837,6 +840,9 @@ function StudioInner() {
     setActiveBoxIdx(0);
     setTextOverflows(false);
     setDirty(false);
+    setUndoStack([]);
+    setRedoStack([]);
+    lastSnapshotRef.current = page.text ?? "";
   }, [pageIdx, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep latestRef in sync
@@ -853,12 +859,27 @@ function StudioInner() {
       .catch(() => setIllustrating(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Autosave — keyed on saveVersion so each change resets the debounce timer
+  // Keyboard shortcuts: Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo, Ctrl+S save
   useEffect(() => {
-    if (saveVersion === 0) return;
-    const t = setTimeout(save, 1400);
-    return () => clearTimeout(t);
-  }, [saveVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+    function onKey(e: KeyboardEvent) {
+      const active = document.activeElement as HTMLElement;
+      // Don't intercept when user is typing in textarea
+      if (active?.tagName === "TEXTAREA" || active?.tagName === "INPUT") {
+        if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+          e.preventDefault();
+          save();
+        }
+        return;
+      }
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+        if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); redo(); }
+        if (e.key === "s") { e.preventDefault(); save(); }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useCallback(async () => {
     if (!token || !book || !page) return;
@@ -916,8 +937,42 @@ function StudioInner() {
   }, [token, book?.id, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function markDirty() {
-    markDirty();
-    setSaveVersion(v => v + 1);
+    setDirty(true);
+  }
+
+  // Push a text snapshot to undo stack (debounced — groups rapid keystrokes)
+  function pushUndoSnapshot(prev: string) {
+    if (undoDebounceRef.current) clearTimeout(undoDebounceRef.current);
+    undoDebounceRef.current = setTimeout(() => {
+      if (prev === lastSnapshotRef.current) return;
+      lastSnapshotRef.current = prev;
+      setUndoStack(s => [...s.slice(-49), prev]);
+      setRedoStack([]);
+    }, 500);
+  }
+
+  function undo() {
+    setUndoStack(prev => {
+      if (prev.length === 0) return prev;
+      const snapshot = prev[prev.length - 1];
+      setRedoStack(r => [latestRef.current.text, ...r.slice(0, 49)]);
+      setText(snapshot);
+      lastSnapshotRef.current = snapshot;
+      markDirty();
+      return prev.slice(0, -1);
+    });
+  }
+
+  function redo() {
+    setRedoStack(prev => {
+      if (prev.length === 0) return prev;
+      const snapshot = prev[0];
+      setUndoStack(u => [...u.slice(-49), latestRef.current.text]);
+      setText(snapshot);
+      lastSnapshotRef.current = snapshot;
+      markDirty();
+      return prev.slice(1);
+    });
   }
 
   function patchSettings(patch: Partial<BookTextSettings>) {
@@ -930,8 +985,6 @@ function StudioInner() {
   }
 
   function switchPage(idx: number) {
-    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-    if (dirty) save();
     setPageIdx(idx);
   }
 
@@ -1134,6 +1187,25 @@ function StudioInner() {
         )}
 
         <div className="flex items-center gap-2">
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={undo}
+              disabled={undoStack.length === 0}
+              title="Undo (Ctrl+Z)"
+              className="grid h-8 w-8 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors disabled:opacity-30"
+            >
+              <Undo2 className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={redo}
+              disabled={redoStack.length === 0}
+              title="Redo (Ctrl+Shift+Z)"
+              className="grid h-8 w-8 place-items-center rounded-lg bg-background chunky-border hover:bg-muted transition-colors disabled:opacity-30"
+            >
+              <Redo2 className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          </div>
           <button
             onClick={save}
             disabled={saving || !dirty}
@@ -1143,7 +1215,7 @@ function StudioInner() {
             {saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </button>
           <button
-            onClick={() => router.push(`/reader?id=${book.id}`)}
+            onClick={() => router.push(`/reader?from=studio`)}
             className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-sm font-extrabold text-accent-foreground chunky-border hover:-translate-y-0.5 transition-transform"
           >
             <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview
@@ -1200,7 +1272,7 @@ function StudioInner() {
                 <SL>Page text</SL>
                 <textarea
                   value={text}
-                  onChange={e => { setText(e.target.value); markDirty(); }}
+                  onChange={e => { pushUndoSnapshot(text); setText(e.target.value); markDirty(); }}
                   rows={6}
                   placeholder="Story text for this page…"
                   className="w-full rounded-xl bg-background px-3 py-2.5 text-sm leading-relaxed chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none select-text"
