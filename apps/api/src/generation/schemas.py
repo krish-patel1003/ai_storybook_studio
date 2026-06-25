@@ -115,22 +115,21 @@ class StoryOutline(BaseModel):
 # ── Stage 4: Page Text + Illustration Metadata ────────────────────────────────
 
 class IllustrationMetadata(BaseModel):
-    mood: str = Field(description="Emotional atmosphere — e.g. 'warm and golden', 'tense and fog-shrouded'")
-    characters_present: list[str]
-    key_visual_elements: list[str] = Field(
-        description="Specific things that must appear in the illustration — props, environmental details, actions"
-    )
-    composition_note: str = Field(
-        description="Camera framing and character placement — e.g. 'Bramble fills the foreground pouring tea, the fog presses against the window behind her'"
-    )
     assembled_prompt: str = Field(
+        default="",
         description="Complete, ready-to-use image generation prompt. Must include: art style, "
                     "all character visual anchors for present characters, scene description, mood, "
                     "composition, lighting. Self-contained — no external references needed."
     )
     negative_prompt: str = Field(
+        default="",
         description="Visual elements to avoid that might appear by default given the scene content"
     )
+    # Optional fields — present on LLM-generated pages, absent on hand-crafted pages (e.g. back cover)
+    mood: str = Field(default="", description="Emotional atmosphere — e.g. 'warm and golden', 'tense and fog-shrouded'")
+    characters_present: list[str] = Field(default_factory=list)
+    key_visual_elements: list[str] = Field(default_factory=list)
+    composition_note: str = Field(default="")
 
 
 class GeneratedPage(BaseModel):
