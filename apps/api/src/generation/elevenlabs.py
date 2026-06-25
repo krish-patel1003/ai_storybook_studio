@@ -117,7 +117,7 @@ async def _annotate_for_tts(text: str, age_range: str) -> str:
             prompt=f"Age group: {age_range}. Hint: {age_hint}\n\nTEXT TO ANNOTATE:\n{text}",
             schema=_AnnotatedText,
             system=_ANNOTATE_SYSTEM,
-            model="gemini-2.0-flash",
+            model="gemini-3.5-flash",
             temperature=0.3,
         )
         annotated = result.text.strip()

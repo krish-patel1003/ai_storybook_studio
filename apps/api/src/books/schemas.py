@@ -191,7 +191,7 @@ class BrainstormIn(BaseModel):
     tone: list[str] = Field(default_factory=list)
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = "gemini-3.5-flash"
 
 
 class StorySeedOut(BaseModel):
@@ -210,7 +210,7 @@ class ExpandPromptIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-2.0-flash"
+    model_name: str = "gemini-3.5-flash"
 
 
 class ExpandedPromptOut(BaseModel):

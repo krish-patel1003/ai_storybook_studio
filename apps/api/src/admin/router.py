@@ -26,9 +26,9 @@ security = HTTPBasic()
 _LLM_PER_BOOK: dict[str, float] = {
     "gemini-3.5-flash":       0.008,
     "gemini-3.1-pro-preview": 0.180,
-    "gemini-2.0-flash":       0.008,
-    "gemini-1.5-flash":       0.006,
-    "gemini-1.5-pro":         0.140,
+    "gemini-3.5-flash":       0.008,
+    "gemini-3.5-flash":       0.006,
+    "gemini-3.1-pro-preview":         0.140,
 }
 _DEFAULT_LLM_COST:      float = 0.010
 _ILLUSTRATION_PER_PAGE: float = 0.040   # Imagen 3 per image

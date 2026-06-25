@@ -51,7 +51,7 @@ class Book(Base):
     safety_mode: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False)
     model_provider: Mapped[str] = mapped_column(String(20), nullable=False, default="gemini")
-    model_name: Mapped[str] = mapped_column(String(100), nullable=False, default="gemini-2.0-flash")
+    model_name: Mapped[str] = mapped_column(String(100), nullable=False, default="gemini-3.5-flash")
 
     # Generated content (stored as JSONB so no migration needed when schemas evolve)
     brief: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
