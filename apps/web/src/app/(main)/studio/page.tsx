@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Mic, Sparkles, RefreshCw, Play, Pause,
   Square as StopIcon, Volume2, Check, Minus, Plus, AlignLeft,
   AlignCenter, AlignRight, ChevronLeft, ChevronRight, ImageIcon,
-  Layers, Paintbrush, Grid3X3, Pipette, Trash2,
+  Layers, Grid3X3, Pipette, Trash2, Eye, Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -117,7 +117,11 @@ const DEFAULT_SETTINGS: BookTextSettings = {
 function loadSettings(bookId: string): BookTextSettings {
   try {
     const raw = localStorage.getItem(`studio-settings-${bookId}`);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+      if (parsed.mode === 3) parsed.mode = 1; // canvas mode disabled
+      return parsed;
+    }
   } catch {}
   return { ...DEFAULT_SETTINGS };
 }
@@ -370,7 +374,7 @@ function Mode2Preview({
         margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
         fontFamily: font.stack, fontWeight: font.weight,
         fontSize: settings.fontSize, color: settings.textColor,
-        textAlign: "center", lineHeight: 1.35,
+        textAlign: "center", lineHeight: 1.85,
       }}>
         {text || <span style={{ opacity: 0.3, fontStyle: "italic" }}>No text yet</span>}
       </p>
@@ -382,6 +386,29 @@ function Mode2Preview({
       style={{ ...PREVIEW_STYLE, display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
       {imgBlock}
       {textBlock}
+    </div>
+  );
+}
+
+// ── Center: Cover / Back-cover preview (full-bleed, no text overlay) ─────────
+
+function CoverPreview({ blobUrl, isBack }: { blobUrl: string | null; isBack: boolean }) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
+      style={{ ...PREVIEW_STYLE, background: READER_BG }}>
+      {blobUrl ? (
+        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+      ) : (
+        <div className="absolute inset-0 bg-muted flex flex-col items-center justify-center gap-2">
+          <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
+          <span className="text-xs font-bold text-muted-foreground">{isBack ? "Back cover" : "Cover"} — not yet illustrated</span>
+        </div>
+      )}
+      <div className="absolute bottom-3 inset-x-3 text-center pointer-events-none">
+        <span className="rounded-full bg-black/40 px-3 py-1 text-xs font-extrabold text-white">
+          {isBack ? "Back Cover" : "Cover"}
+        </span>
+      </div>
     </div>
   );
 }
@@ -763,6 +790,7 @@ function StudioInner() {
   const [pageAlign,    setPageAlign]    = useState<TextAlign>("center");
   const [saving,        setSaving]       = useState(false);
   const [dirty,         setDirty]        = useState(false);
+  const [saveVersion,   setSaveVersion]  = useState(0);
   const [textOverflows, setTextOverflows] = useState(false);
   const [splitting,     setSplitting]    = useState(false);
   const [backCoverLoading, setBackCoverLoading] = useState(false);
@@ -825,13 +853,12 @@ function StudioInner() {
       .catch(() => setIllustrating(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Autosave
+  // Autosave — keyed on saveVersion so each change resets the debounce timer
   useEffect(() => {
-    if (!dirty) return;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(save, 1400);
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (saveVersion === 0) return;
+    const t = setTimeout(save, 1400);
+    return () => clearTimeout(t);
+  }, [saveVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useCallback(async () => {
     if (!token || !book || !page) return;
@@ -888,13 +915,18 @@ function StudioInner() {
     finally { setSaving(false); }
   }, [token, book?.id, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function markDirty() {
+    markDirty();
+    setSaveVersion(v => v + 1);
+  }
+
   function patchSettings(patch: Partial<BookTextSettings>) {
     setSettings(prev => {
       const next = { ...prev, ...patch };
       if (book) saveSettings(book.id, next);
       return next;
     });
-    setDirty(true);
+    markDirty();
   }
 
   function switchPage(idx: number) {
@@ -938,7 +970,7 @@ function StudioInner() {
 
     function onUp() {
       dragRef.current = null;
-      setDirty(true);
+      markDirty();
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     }
@@ -948,7 +980,7 @@ function StudioInner() {
 
   function patchActiveBox(patch: Partial<CanvasBox>) {
     setBoxes(prev => { const next = [...prev]; if (next[activeBoxIdx]) next[activeBoxIdx] = { ...next[activeBoxIdx], ...patch }; return next; });
-    setDirty(true);
+    markDirty();
   }
 
   function addBox() {
@@ -959,7 +991,7 @@ function StudioInner() {
     const idx = boxes.length;
     setBoxes(prev => [...prev, makeBox("", idx)]);
     setActiveBoxIdx(idx);
-    setDirty(true);
+    markDirty();
   }
 
   function duplicateBox(idx: number) {
@@ -977,14 +1009,14 @@ function StudioInner() {
     };
     setBoxes(prev => [...prev, copy]);
     setActiveBoxIdx(boxes.length);
-    setDirty(true);
+    markDirty();
   }
 
   function removeBox(idx: number) {
     if (boxes.length <= 1) return;
     setBoxes(prev => prev.filter((_, i) => i !== idx));
     setActiveBoxIdx(Math.max(0, idx - 1));
-    setDirty(true);
+    markDirty();
   }
 
   // ── Split page ────────────────────────────────────────────────────────────
@@ -1102,9 +1134,22 @@ function StudioInner() {
         )}
 
         <div className="flex items-center gap-2">
-          {saving && <span className="flex items-center gap-1 text-xs text-muted-foreground font-bold"><XsSpinner /> Saving</span>}
+          <button
+            onClick={save}
+            disabled={saving || !dirty}
+            className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-40"
+          >
+            {saving ? <XsSpinner /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
+            {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+          </button>
+          <button
+            onClick={() => router.push(`/reader?id=${book.id}`)}
+            className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-sm font-extrabold text-accent-foreground chunky-border hover:-translate-y-0.5 transition-transform"
+          >
+            <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview
+          </button>
           <button onClick={() => setNarrateModal(true)}
-            className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-sm font-extrabold text-accent-foreground chunky-border hover:-translate-y-0.5 transition-transform">
+            className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
             <Mic className="h-4 w-4" strokeWidth={2.5} /> Narrate
           </button>
           <button onClick={() => setExportModal(true)}
@@ -1155,31 +1200,33 @@ function StudioInner() {
                 <SL>Page text</SL>
                 <textarea
                   value={text}
-                  onChange={e => { setText(e.target.value); setDirty(true); }}
+                  onChange={e => { setText(e.target.value); markDirty(); }}
                   rows={6}
                   placeholder="Story text for this page…"
                   className="w-full rounded-xl bg-background px-3 py-2.5 text-sm leading-relaxed chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none select-text"
+                  style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}
                 />
               </div>
             )}
 
-            {!page?.is_back_cover && <div className="border-t-[1.5px] border-foreground/15" />}
+            {!page?.is_back_cover && !page?.is_cover && <div className="border-t-[1.5px] border-foreground/15" />}
 
-            {/* Text layout mode selector — not shown for back cover */}
-            {page?.is_back_cover && (
+            {/* Info hint for cover pages */}
+            {(page?.is_cover || page?.is_back_cover) && (
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                The back cover is a full-bleed illustration — no text overlay. Use "Re-illustrate back cover" to generate new artwork.
+                {page.is_cover
+                  ? "The cover is a full-bleed illustration generated with your story. Use Re-illustrate to regenerate it."
+                  : "The back cover is a full-bleed illustration — no text overlay."}
               </p>
             )}
-            {/* Text layout mode selector + mode-specific — hidden for back cover */}
-            {!page?.is_back_cover && (
+            {/* Text layout mode selector — hidden for cover and back cover */}
+            {!page?.is_cover && !page?.is_back_cover && (
             <div>
               <SL>Text layout</SL>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
                 {([
-                  { id: 1 as TextMode, icon: Layers,     label: "Overlay", desc: "Over image" },
-                  { id: 2 as TextMode, icon: Grid3X3,    label: "Stacked", desc: "Split view" },
-                  { id: 3 as TextMode, icon: Paintbrush, label: "Canvas",  desc: "Free place" },
+                  { id: 1 as TextMode, icon: Layers,  label: "Overlay", desc: "Over image" },
+                  { id: 2 as TextMode, icon: Grid3X3, label: "Stacked", desc: "Split view" },
                 ] as const).map(opt => (
                   <button key={opt.id} onClick={() => patchSettings({ mode: opt.id })}
                     className={cn("flex flex-col items-center gap-0.5 rounded-xl py-2 px-1 chunky-border transition-colors",
@@ -1196,14 +1243,14 @@ function StudioInner() {
             )}
 
             {/* Mode 1 — overlay controls */}
-            {!page?.is_back_cover && settings.mode === 1 && (
+            {!page?.is_cover && !page?.is_back_cover && settings.mode === 1 && (
               <>
                 <p className="text-[11px] text-muted-foreground">Matches the reader. Position and alignment are saved per page.</p>
                 <div>
                   <SL>Text position</SL>
                   <div className="grid grid-cols-3 gap-1.5">
                     {(["top", "center", "bottom"] as TextPosition[]).map(pos => (
-                      <button key={pos} onClick={() => { setPagePosition(pos); setDirty(true); }}
+                      <button key={pos} onClick={() => { setPagePosition(pos); markDirty(); }}
                         className={cn("rounded-xl py-1.5 text-xs font-extrabold capitalize chunky-border transition-colors",
                           pagePosition === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                         {pos}
@@ -1219,7 +1266,7 @@ function StudioInner() {
                       { id: "center" as TextAlign, icon: AlignCenter },
                       { id: "right"  as TextAlign, icon: AlignRight  },
                     ] as const).map(({ id, icon: Icon }) => (
-                      <button key={id} onClick={() => { setPageAlign(id); setDirty(true); }}
+                      <button key={id} onClick={() => { setPageAlign(id); markDirty(); }}
                         className={cn("flex flex-1 items-center justify-center rounded-xl py-2 chunky-border transition-colors",
                           pageAlign === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                         <Icon className="h-4 w-4" strokeWidth={2.5} />
@@ -1231,7 +1278,7 @@ function StudioInner() {
             )}
 
             {/* Mode 2 — stacked controls */}
-            {!page?.is_back_cover && settings.mode === 2 && (
+            {!page?.is_cover && !page?.is_back_cover && settings.mode === 2 && (
               <>
                 <div>
                   <SL>Text area position</SL>
@@ -1268,86 +1315,6 @@ function StudioInner() {
               </>
             )}
 
-            {/* Mode 3 — canvas box controls */}
-            {!page?.is_back_cover && settings.mode === 3 && boxes.length > 0 && (() => {
-              const activeBox = boxes[activeBoxIdx];
-              if (!activeBox) return null;
-              return (
-                <>
-                  <div>
-                    <SL>Text boxes</SL>
-                    <div className="flex items-center gap-1.5">
-                      {boxes.map((b, i) => (
-                        <button key={b.id} onClick={() => setActiveBoxIdx(i)}
-                          className={cn("flex-1 rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
-                            i === activeBoxIdx ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                          Box {i + 1}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="mt-1.5 text-[10px] text-muted-foreground font-semibold">Use the toolbar above each box on the canvas to add, copy, or delete</p>
-                  </div>
-                  {!page?.is_cover && (
-                    <div>
-                      <SL>Box {activeBoxIdx + 1} text</SL>
-                      <textarea
-                        value={activeBox.text}
-                        onChange={e => patchActiveBox({ text: e.target.value })}
-                        rows={4}
-                        placeholder={`Text for box ${activeBoxIdx + 1}…`}
-                        className="w-full rounded-xl bg-background px-3 py-2.5 text-sm leading-relaxed chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none select-text"
-                      />
-                    </div>
-                  )}
-                  <div>
-                    <SL>Shape</SL>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(["rect", "rounded", "pill"] as const).map(shape => (
-                        <button key={shape} onClick={() => patchActiveBox({ shape })}
-                          className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
-                            activeBox.shape === shape ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                          {shape === "rect" ? "Sharp" : shape === "rounded" ? "Rounded" : "Pill"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <SL>Background</SL>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(["none", "frosted", "darkened"] as const).map(style => (
-                        <button key={style} onClick={() => patchActiveBox({ bgStyle: style })}
-                          className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
-                            activeBox.bgStyle === style ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                          {style === "darkened" ? "Dark" : style === "frosted" ? "Frosted" : "None"}
-                        </button>
-                      ))}
-                    </div>
-                    {activeBox.bgStyle !== "none" && (
-                      <div className="mt-2">
-                        <p className="text-[10px] font-bold text-muted-foreground mb-1">Opacity — {Math.round(activeBox.bgOpacity * 100)}%</p>
-                        <input type="range" min={0.1} max={1} step={0.05} value={activeBox.bgOpacity}
-                          onChange={e => patchActiveBox({ bgOpacity: parseFloat(e.target.value) })}
-                          className="w-full h-2 accent-primary" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <SL>Snap to</SL>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(["top", "center", "bottom"] as const).map(pos => {
-                        const yMap = { top: 0.03, center: 0.33, bottom: 0.62 };
-                        return (
-                          <button key={pos} onClick={() => patchActiveBox({ x: 0.03, y: yMap[pos], w: 0.94 })}
-                            className="rounded-xl py-1.5 text-xs font-extrabold capitalize bg-background chunky-border hover:bg-muted transition-colors">
-                            {pos}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
 
           </div>
         </aside>
@@ -1369,36 +1336,16 @@ function StudioInner() {
             </button>
           </div>
 
-          {/* The preview — switches based on mode */}
-          {settings.mode === 1 && (
+          {/* The preview — cover/back-cover get a plain full-bleed view */}
+          {(page?.is_cover || page?.is_back_cover) ? (
+            <CoverPreview blobUrl={blobUrl} isBack={!!page?.is_back_cover} />
+          ) : settings.mode === 1 ? (
             <Mode1Preview blobUrl={blobUrl} text={text} settings={settings}
               position={pagePosition} align={pageAlign}
               onOverflow={setTextOverflows} />
-          )}
-          {settings.mode === 2 && (
+          ) : (
             <Mode2Preview blobUrl={blobUrl} text={text} settings={settings}
               onOverflow={setTextOverflows} />
-          )}
-          {settings.mode === 3 && (
-            <Mode3Preview
-              blobUrl={blobUrl}
-              boxes={boxes}
-              activeBoxIdx={activeBoxIdx}
-              settings={settings}
-              canvasRef={canvasRef as React.RefObject<HTMLDivElement>}
-              onBoxClick={idx => setActiveBoxIdx(idx)}
-              onMoveStart={(e, idx) => startInteraction(e, "move", idx)}
-              onHandleStart={(e, h, idx) => startInteraction(e, h, idx)}
-              onAdd={addBox}
-              onDuplicate={duplicateBox}
-              onRemove={removeBox}
-            />
-          )}
-
-          {settings.mode === 3 && (
-            <p className="text-[11px] font-semibold text-muted-foreground">
-              Drag boxes to reposition · Corner/edge handles to resize · Click to select
-            </p>
           )}
 
           {/* Overflow warning — shown in modes 1 & 2 when text exceeds the text zone */}

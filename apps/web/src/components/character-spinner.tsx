@@ -44,7 +44,7 @@ export function XsSpinner({ className }: { className?: string }) {
     <span
       aria-label="loading"
       className={cn("inline-block select-none leading-none", className)}
-      style={{ animation: "char-pulse 0.55s ease-in-out infinite", fontSize: "13px" }}
+      style={{ animation: "char-pulse 0.55s ease-in-out infinite", fontSize: "18px" }}
     >
       {char.emoji}
     </span>
@@ -58,7 +58,7 @@ export function SmSpinner({ className }: { className?: string }) {
     <span
       aria-label="loading"
       className={cn("inline-block select-none leading-none", className)}
-      style={{ animation: "char-wiggle 0.75s ease-in-out infinite", fontSize: "17px" }}
+      style={{ animation: "char-wiggle 0.75s ease-in-out infinite", fontSize: "24px" }}
     >
       {char.emoji}
     </span>
