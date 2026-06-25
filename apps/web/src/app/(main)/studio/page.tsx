@@ -1517,20 +1517,6 @@ function StudioInner() {
             {illustrated > 0 && (
               <span className="text-[10px] font-semibold text-muted-foreground">{illustrated}/{total} illustrated</span>
             )}
-            {(() => {
-              const hasBackCover = pages.some(p => p.is_back_cover);
-              if (hasBackCover) return null;
-              return (
-                <button
-                  onClick={e => { e.stopPropagation(); handleBackCoverIllustrate(); }}
-                  disabled={backCoverLoading}
-                  className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-                >
-                  {backCoverLoading ? <XsSpinner /> : <Plus className="h-2.5 w-2.5" strokeWidth={3} />}
-                  Back cover
-                </button>
-              );
-            })()}
           </div>
           <ChevronLeft
             className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", thumbsOpen ? "-rotate-90" : "rotate-90")}

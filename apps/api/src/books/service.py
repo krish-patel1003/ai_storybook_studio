@@ -941,7 +941,8 @@ async def _persist_result(db, book, brief, characters, beats, pages) -> None:
     beat_map = {b.order: b for b in beats}
     # Deduplicate by order — small models occasionally return duplicate orders
     page_by_order = {gpage.order: gpage for gpage in pages}
-    for gpage in sorted(page_by_order.values(), key=lambda p: p.order):
+    sorted_pages = sorted(page_by_order.values(), key=lambda p: p.order)
+    for gpage in sorted_pages:
         beat = beat_map.get(gpage.order)
         db.add(Page(
             book_id=book.id,
@@ -957,6 +958,37 @@ async def _persist_result(db, book, brief, characters, beats, pages) -> None:
             word_count=gpage.word_count,
             illustration_metadata=gpage.illustration_metadata.model_dump(),
         ))
+
+    # Auto-create back cover alongside front cover — illustrated like any regular page
+    max_order = max(gpage.order for gpage in sorted_pages)
+    cover_beat = next((beat_map[gpage.order] for gpage in sorted_pages if gpage.is_cover and gpage.order in beat_map), None)
+    back_cover_prompt = (
+        f"Children's picture book back cover illustration. "
+        f"Art style: {book.art_style}. "
+        f"Story: '{brief.title}'. "
+        f"A warm, peaceful closing vignette — the adventure has ended, "
+        f"characters are content and at rest. Soft colors, gentle composition, "
+        f"suitable for the back cover of a children's picture book. "
+        f"No text in the image."
+    )
+    db.add(Page(
+        book_id=book.id,
+        order=max_order + 1,
+        is_cover=False,
+        is_back_cover=True,
+        is_locked=False,
+        narrative_role="back_cover",
+        beat="Back cover — a warm closing scene",
+        emotional_note="warm, hopeful, complete",
+        setting_note="A peaceful final vignette",
+        characters_present=cover_beat.characters_present if cover_beat else [],
+        text=None,
+        word_count=None,
+        illustration_metadata={
+            "assembled_prompt": back_cover_prompt,
+            "negative_prompt": "text, words, letters, harsh colors",
+        },
+    ))
 
     await db.flush()
 
