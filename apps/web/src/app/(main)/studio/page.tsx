@@ -1164,7 +1164,7 @@ function StudioInner() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Left panel: page actions + text + layout ── */}
-        <aside className="flex w-[280px] shrink-0 flex-col border-r-[2.5px] border-foreground bg-card overflow-y-auto">
+        <aside className="flex w-[320px] shrink-0 flex-col border-r-[2.5px] border-foreground bg-card overflow-y-auto">
           <div className="p-4 space-y-4">
 
             {/* Page actions */}
@@ -1371,7 +1371,7 @@ function StudioInner() {
         </main>
 
         {/* ── Right panel: font + size + color ── */}
-        <aside className="flex w-[280px] shrink-0 flex-col border-l-[2.5px] border-foreground bg-card overflow-y-auto">
+        <aside className="flex w-[320px] shrink-0 flex-col border-l-[2.5px] border-foreground bg-card overflow-y-auto">
           <div className="p-4 space-y-5">
 
             {/* Font family */}
