@@ -327,11 +327,12 @@ function Mode1Preview({
 // ── Center: Mode 2 preview (stacked) ──────────────────────────────────────────
 
 function Mode2Preview({
-  blobUrl, text, settings, onOverflow,
+  blobUrl, text, settings, align, onOverflow,
 }: {
   blobUrl: string | null;
   text: string;
   settings: BookTextSettings;
+  align: TextAlign;
   onOverflow?: (overflows: boolean) => void;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -376,7 +377,7 @@ function Mode2Preview({
         margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
         fontFamily: font.stack, fontWeight: font.weight,
         fontSize: settings.fontSize, color: settings.textColor,
-        textAlign: "center", lineHeight: 1.6,
+        textAlign: align as React.CSSProperties["textAlign"], lineHeight: 1.6,
       }}>
         {text
           ? text.replace(/\n{2,}/g, "\n")
@@ -1376,6 +1377,22 @@ function StudioInner() {
                   </div>
                 </div>
                 <div>
+                  <SL>Text alignment</SL>
+                  <div className="flex gap-2">
+                    {([
+                      { id: "left"   as TextAlign, icon: AlignLeft   },
+                      { id: "center" as TextAlign, icon: AlignCenter },
+                      { id: "right"  as TextAlign, icon: AlignRight  },
+                    ] as const).map(({ id, icon: Icon }) => (
+                      <button key={id} onClick={() => { setPageAlign(id); markDirty(); }}
+                        className={cn("flex flex-1 items-center justify-center rounded-xl py-2 chunky-border transition-colors",
+                          pageAlign === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                        <Icon className="h-4 w-4" strokeWidth={2.5} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <SL>Text area color</SL>
                   <div className="flex flex-wrap gap-2">
                     {["#faf8f3", "#ffffff", "#1a1a2e", "#141228", "#fff7ed", "#f0f9ff"].map(c => (
@@ -1428,7 +1445,7 @@ function StudioInner() {
               onOverflow={setTextOverflows} />
           ) : (
             <Mode2Preview blobUrl={blobUrl} text={text} settings={settings}
-              onOverflow={setTextOverflows} />
+              align={pageAlign} onOverflow={setTextOverflows} />
           )}
 
           {/* Overflow warning — shown in modes 1 & 2 when text exceeds the text zone */}
