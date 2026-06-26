@@ -395,9 +395,68 @@ function Mode2Preview({
   );
 }
 
-// ── Center: Cover / Back-cover preview (full-bleed, no text overlay) ─────────
+// ── Center: Cover preview — matches reader exactly (gradient + title overlay) ──
 
-function CoverPreview({ blobUrl, isBack }: { blobUrl: string | null; isBack: boolean }) {
+function CoverPagePreview({
+  blobUrl, text, settings, align, position,
+}: {
+  blobUrl: string | null;
+  text: string;
+  settings: BookTextSettings;
+  align: TextAlign;
+  position: TextPosition;
+}) {
+  const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
+  const fontSize  = settings.fontSize  ?? 32;
+  const textColor = settings.textColor ?? "#ffffff";
+
+  const justifyClass =
+    position === "top"    ? "justify-start" :
+    position === "center" ? "justify-center" :
+    "justify-end";
+
+  const paddingStyle: React.CSSProperties =
+    position === "top"    ? { paddingTop: 28 } :
+    position === "center" ? {} :
+    { paddingBottom: 32 };
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
+      style={{ ...PREVIEW_STYLE, background: "#0a0a14" }}>
+      {blobUrl ? (
+        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+      ) : (
+        <div className="absolute inset-0 bg-muted flex flex-col items-center justify-center gap-2">
+          <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
+          <span className="text-xs font-bold text-muted-foreground">Cover — not yet illustrated</span>
+        </div>
+      )}
+      {/* Dark gradient — matches reader */}
+      <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{
+        height: "55%",
+        background: "linear-gradient(to bottom, transparent 0%, rgba(10,10,20,0.55) 40%, rgba(10,10,20,0.88) 100%)",
+      }} />
+      {/* Title text */}
+      <div className={`absolute inset-0 flex flex-col items-center px-6 overflow-hidden ${justifyClass}`}
+        style={paddingStyle}>
+        <p style={{
+          margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
+          fontFamily: font.stack, fontWeight: font.weight,
+          fontSize: `${fontSize}px`, color: textColor,
+          textAlign: align as React.CSSProperties["textAlign"],
+          textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+          lineHeight: 1.2,
+        }}>
+          {text || <span style={{ opacity: 0.4, fontStyle: "italic" }}>Book title…</span>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Center: Back-cover preview (full-bleed, no text) ─────────────────────────
+
+function BackCoverPreview({ blobUrl }: { blobUrl: string | null }) {
   return (
     <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
       style={{ ...PREVIEW_STYLE, background: READER_BG }}>
@@ -406,13 +465,11 @@ function CoverPreview({ blobUrl, isBack }: { blobUrl: string | null; isBack: boo
       ) : (
         <div className="absolute inset-0 bg-muted flex flex-col items-center justify-center gap-2">
           <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
-          <span className="text-xs font-bold text-muted-foreground">{isBack ? "Back cover" : "Cover"} — not yet illustrated</span>
+          <span className="text-xs font-bold text-muted-foreground">Back cover — not yet illustrated</span>
         </div>
       )}
       <div className="absolute bottom-3 inset-x-3 text-center pointer-events-none">
-        <span className="rounded-full bg-black/40 px-3 py-1 text-xs font-extrabold text-white">
-          {isBack ? "Back Cover" : "Cover"}
-        </span>
+        <span className="rounded-full bg-black/40 px-3 py-1 text-xs font-extrabold text-white">Back Cover</span>
       </div>
     </div>
   );
@@ -827,10 +884,13 @@ function StudioInner() {
   useEffect(() => {
     if (!page || !book) return;
     setText(page.text ?? "");
-    setPagePosition((page.text_position as TextPosition) ?? "bottom");
+    setPagePosition((page.text_position as TextPosition) ?? (page.is_cover ? "bottom" : "bottom"));
     setPageAlign((page.text_align as TextAlign) ?? "center");
-    // Load per-page style settings saved by a previous studio session
-    if (page.font_size || page.font_family || page.text_color || page.text_mode) {
+    // Cover default style: Kranky font, white text, 32px — matches the reader's cover rendering
+    if (page.is_cover && !page.font_family && !page.font_size && !page.text_color) {
+      setSettings(prev => ({ ...prev, fontFamily: "kranky" as FontId, fontSize: 32, textColor: "#ffffff" }));
+    } else if (page.font_size || page.font_family || page.text_color || page.text_mode) {
+      // Load per-page style settings saved by a previous studio session
       setSettings(prev => ({
         ...prev,
         ...(page.font_size   ? { fontSize:   page.font_size }              : {}),
@@ -1271,31 +1331,112 @@ function StudioInner() {
               </div>
             )}
 
-            {/* Page text (hidden in mode 3 or for cover/back-cover pages) */}
-            {!page?.is_cover && !page?.is_back_cover && settings.mode !== 3 && (
+            {/* Page text — shown for all pages except back cover */}
+            {!page?.is_back_cover && settings.mode !== 3 && (
               <div>
-                <SL>Page text</SL>
+                <SL>{page?.is_cover ? "Cover title" : "Page text"}</SL>
                 <textarea
                   value={text}
                   onChange={e => { pushUndoSnapshot(text); setText(e.target.value); markDirty(); }}
-                  rows={6}
-                  placeholder="Story text for this page…"
+                  rows={page?.is_cover ? 3 : 6}
+                  placeholder={page?.is_cover ? "Book title…" : "Story text for this page…"}
                   className="w-full rounded-xl bg-background px-3 py-2.5 text-sm leading-relaxed chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none select-text"
                   style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}
                 />
               </div>
             )}
 
-            {!page?.is_back_cover && !page?.is_cover && <div className="border-t-[1.5px] border-foreground/15" />}
+            {/* Cover page styling controls */}
+            {page?.is_cover && (
+              <>
+                <div className="border-t-[1.5px] border-foreground/15" />
+                <div>
+                  <SL>Text position</SL>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(["top", "center", "bottom"] as TextPosition[]).map(pos => (
+                      <button key={pos} onClick={() => { setPagePosition(pos); markDirty(); }}
+                        className={cn("rounded-xl py-1.5 text-xs font-extrabold capitalize chunky-border transition-colors",
+                          pagePosition === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                        {pos}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <SL>Text alignment</SL>
+                  <div className="flex gap-2">
+                    {([
+                      { id: "left"   as TextAlign, icon: AlignLeft   },
+                      { id: "center" as TextAlign, icon: AlignCenter },
+                      { id: "right"  as TextAlign, icon: AlignRight  },
+                    ] as const).map(({ id, icon: Icon }) => (
+                      <button key={id} onClick={() => { setPageAlign(id); markDirty(); }}
+                        className={cn("flex flex-1 items-center justify-center rounded-xl py-2 chunky-border transition-colors",
+                          pageAlign === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                        <Icon className="h-4 w-4" strokeWidth={2.5} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <SL>Font</SL>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {READER_FONTS.map(f => (
+                      <button key={f.id} onClick={() => { patchSettings({ fontFamily: f.id as FontId }); markDirty(); }}
+                        className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors truncate px-2",
+                          settings.fontFamily === f.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}
+                        style={{ fontFamily: f.stack }}>
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <SL>Font size</SL>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { patchSettings({ fontSize: Math.max(12, (settings.fontSize ?? 32) - 2) }); markDirty(); }}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl chunky-border bg-background hover:bg-muted">
+                      <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    </button>
+                    <span className="flex-1 text-center text-sm font-extrabold">{settings.fontSize ?? 32}px</span>
+                    <button onClick={() => { patchSettings({ fontSize: Math.min(80, (settings.fontSize ?? 32) + 2) }); markDirty(); }}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl chunky-border bg-background hover:bg-muted">
+                      <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <SL>Text color</SL>
+                  <div className="flex flex-wrap gap-2">
+                    {["#ffffff", "#faf8f3", "#f5e642", "#f97316", "#1a1a2e", "#000000"].map(c => (
+                      <button key={c} onClick={() => { patchSettings({ textColor: c }); markDirty(); }}
+                        className={cn("h-7 w-7 rounded-lg chunky-border transition-all hover:scale-110",
+                          settings.textColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
+                        style={{ background: c }} />
+                    ))}
+                    <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer hover:scale-110 transition-all flex items-center justify-center",
+                      !["#ffffff","#faf8f3","#f5e642","#f97316","#1a1a2e","#000000"].includes(settings.textColor ?? "") ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
+                      style={{ background: ["#ffffff","#faf8f3","#f5e642","#f97316","#1a1a2e","#000000"].includes(settings.textColor ?? "") ? "#e5e7eb" : (settings.textColor ?? "#e5e7eb") }}
+                      title="Custom color">
+                      <Pipette className="h-3.5 w-3.5 pointer-events-none text-gray-600" strokeWidth={2} />
+                      <input type="color" value={settings.textColor ?? "#ffffff"}
+                        onChange={e => { patchSettings({ textColor: e.target.value }); markDirty(); }}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
 
-            {/* Info hint for cover pages */}
-            {(page?.is_cover || page?.is_back_cover) && (
+            {/* Back cover info */}
+            {page?.is_back_cover && (
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {page.is_cover
-                  ? "The cover is a full-bleed illustration generated with your story. Use Re-illustrate to regenerate it."
-                  : "The back cover is a full-bleed illustration — no text overlay."}
+                The back cover is a full-bleed illustration — no text overlay.
               </p>
             )}
+
+            {!page?.is_back_cover && !page?.is_cover && <div className="border-t-[1.5px] border-foreground/15" />}
+
             {/* Text layout mode selector — hidden for cover and back cover */}
             {!page?.is_cover && !page?.is_back_cover && (
             <div>
@@ -1436,9 +1577,12 @@ function StudioInner() {
             </button>
           </div>
 
-          {/* The preview — cover/back-cover get a plain full-bleed view */}
-          {(page?.is_cover || page?.is_back_cover) ? (
-            <CoverPreview blobUrl={blobUrl} isBack={!!page?.is_back_cover} />
+          {/* The preview */}
+          {page?.is_back_cover ? (
+            <BackCoverPreview blobUrl={blobUrl} />
+          ) : page?.is_cover ? (
+            <CoverPagePreview blobUrl={blobUrl} text={text} settings={settings}
+              align={pageAlign} position={pagePosition} />
           ) : settings.mode === 1 ? (
             <Mode1Preview blobUrl={blobUrl} text={text} settings={settings}
               position={pagePosition} align={pageAlign}
