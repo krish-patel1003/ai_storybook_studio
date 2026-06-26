@@ -259,7 +259,12 @@ async def list_voices(user: User = Depends(current_user)) -> dict:
 
 @router.get("/{book_id}", response_model=BookOut)
 async def get_book(book: Book = Depends(owned_book)) -> BookOut:
-    return BookOut.model_validate(book)
+    try:
+        return BookOut.model_validate(book)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("BookOut.model_validate failed for book %s: %s", book.id, exc)
+        raise
 
 
 @router.patch("/{book_id}", response_model=BookOut)

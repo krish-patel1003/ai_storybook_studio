@@ -108,11 +108,11 @@ class PageOut(BaseModel):
     is_cover: bool
     is_back_cover: bool = False
     is_locked: bool
-    narrative_role: str
-    beat: str
-    emotional_note: str
-    characters_present: list[str]
-    setting_note: str
+    narrative_role: str = ""
+    beat: str = ""
+    emotional_note: str = ""
+    characters_present: list[str] = Field(default_factory=list)
+    setting_note: str = ""
     text: str | None
     word_count: int | None
     illustration_metadata: IllustrationMetadata | None
