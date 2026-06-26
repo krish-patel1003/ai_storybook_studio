@@ -697,10 +697,13 @@ async def split_page(
     page.text = part1
     page.word_count = len(part1.split())
 
-    # Shift all later non-back-cover pages up by 1
-    for p in book.pages:
-        if p.order > page.order and not getattr(p, "is_back_cover", False):
-            p.order += 1
+    # Shift ALL later pages (including back cover) up by 1 in a single atomic UPDATE
+    # to avoid unique constraint violations from row-by-row ORM updates.
+    from sqlalchemy import text as _sa_text
+    await db.execute(
+        _sa_text('UPDATE page SET "order" = "order" + 1 WHERE book_id = :book_id AND "order" > :cur'),
+        {"book_id": book_id, "cur": page.order},
+    )
 
     # Create new page with part2
     new_page = Page(
