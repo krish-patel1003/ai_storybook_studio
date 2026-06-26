@@ -315,7 +315,9 @@ function Mode1Preview({
           fontSize: `${settings.fontSize}px`, color: settings.textColor,
           textAlign: tAlign, lineHeight: 1.85,
         }}>
-          {text || <span style={{ opacity: 0.3, fontStyle: "italic" }}>No text yet</span>}
+          {text
+            ? text.replace(/\n{2,}/g, "\n")
+            : <span style={{ opacity: 0.3, fontStyle: "italic" }}>No text yet</span>}
         </p>
       </div>
     </div>
@@ -374,9 +376,11 @@ function Mode2Preview({
         margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
         fontFamily: font.stack, fontWeight: font.weight,
         fontSize: settings.fontSize, color: settings.textColor,
-        textAlign: "center", lineHeight: 1.85,
+        textAlign: "center", lineHeight: 1.6,
       }}>
-        {text || <span style={{ opacity: 0.3, fontStyle: "italic" }}>No text yet</span>}
+        {text
+          ? text.replace(/\n{2,}/g, "\n")
+          : <span style={{ opacity: 0.3, fontStyle: "italic" }}>No text yet</span>}
       </p>
     </div>
   );
