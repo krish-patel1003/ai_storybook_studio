@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Mic, Sparkles, RefreshCw, Play, Pause,
   Square as StopIcon, Volume2, Check, Minus, Plus, AlignLeft,
   AlignCenter, AlignRight, ChevronLeft, ChevronRight, ImageIcon,
-  Layers, Grid3X3, Pipette, Trash2, Eye, Save, Undo2, Redo2,
+  Layers, Grid3X3, Paintbrush, Pipette, Trash2, Eye, Save, Undo2, Redo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -1295,17 +1295,24 @@ function StudioInner() {
             {!page?.is_cover && !page?.is_back_cover && (
             <div>
               <SL>Text layout</SL>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {([
-                  { id: 1 as TextMode, icon: Layers,  label: "Overlay", desc: "Over image" },
-                  { id: 2 as TextMode, icon: Grid3X3, label: "Stacked", desc: "Split view" },
+                  { id: 1 as TextMode, icon: Layers,      label: "Overlay", desc: "Over image", disabled: false },
+                  { id: 2 as TextMode, icon: Grid3X3,     label: "Stacked", desc: "Split view", disabled: false },
+                  { id: 3 as TextMode, icon: Paintbrush,  label: "Canvas",  desc: "Coming soon", disabled: true },
                 ] as const).map(opt => (
-                  <button key={opt.id} onClick={() => patchSettings({ mode: opt.id })}
+                  <button key={opt.id}
+                    onClick={() => !opt.disabled && patchSettings({ mode: opt.id })}
+                    disabled={opt.disabled}
                     className={cn("flex flex-col items-center gap-0.5 rounded-xl py-2 px-1 chunky-border transition-colors",
-                      settings.mode === opt.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                      opt.disabled
+                        ? "bg-background opacity-40 cursor-not-allowed"
+                        : settings.mode === opt.id
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background hover:bg-muted")}>
                     <opt.icon className="h-4 w-4" strokeWidth={2} />
                     <span className="text-[10px] font-extrabold">{opt.label}</span>
-                    <span className={cn("text-[8px]", settings.mode === opt.id ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                    <span className={cn("text-[8px]", settings.mode === opt.id && !opt.disabled ? "text-primary-foreground/70" : "text-muted-foreground")}>
                       {opt.desc}
                     </span>
                   </button>
