@@ -350,6 +350,31 @@ async def update_page(
     return await get_book(db, book_id, user_id)
 
 
+async def bulk_apply_page_style(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: "BulkPageStyleIn",
+) -> "Book":
+    from src.books.schemas import BulkPageStyleIn
+    book = await get_book(db, book_id, user_id)
+    for page in book.pages:
+        if page.is_cover or getattr(page, "is_back_cover", False):
+            continue
+        if data.font_family is not None:
+            page.font_family = data.font_family
+        if data.font_size is not None:
+            page.font_size = data.font_size
+        if data.text_color is not None:
+            page.text_color = data.text_color
+        if data.text_mode is not None:
+            page.text_mode = data.text_mode
+        if "canvas_overlay" in data.model_fields_set:
+            page.canvas_overlay = data.canvas_overlay
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
 async def bulk_text_style(
     db: AsyncSession,
     book_id: uuid.UUID,

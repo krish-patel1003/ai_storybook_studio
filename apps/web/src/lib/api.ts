@@ -485,6 +485,16 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
+    bulkPageStyle: (token: string, bookId: string, data: {
+      font_family?: string; font_size?: number; text_color?: string;
+      text_mode?: number; canvas_overlay?: object | null;
+    }) =>
+      request<BookOut>(`/books/${bookId}/pages/style`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
     regeneratePage: (token: string, bookId: string, pageId: string) =>
       request<BookOut>(`/books/${bookId}/pages/${pageId}/regenerate`, {
         method: "POST",

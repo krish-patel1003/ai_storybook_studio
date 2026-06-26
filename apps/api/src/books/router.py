@@ -33,6 +33,7 @@ from src.books.schemas import (
     RecalibrateIn,
     StorySeedOut,
     UpdateBookIn,
+    BulkPageStyleIn,
     UpdatePageIn,
 )
 from src.books.kdp import KDPOut, KDPUpdateIn, generate_kdp_fields
@@ -423,6 +424,17 @@ async def update_kdp_fields(
     book.kdp_fields = current
     await db.commit()
     return _KDPOut(**current, is_cached=True)
+
+
+@router.patch("/{book_id}/pages/style", response_model=BookOut)
+async def bulk_page_style(
+    data: BulkPageStyleIn,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    """Apply book-level style (font, size, color, mode) to every content page."""
+    updated = await service.bulk_apply_page_style(db, book.id, book.user_id, data)
+    return BookOut.model_validate(updated)
 
 
 @router.patch("/{book_id}/pages/{page_id}", response_model=BookOut)

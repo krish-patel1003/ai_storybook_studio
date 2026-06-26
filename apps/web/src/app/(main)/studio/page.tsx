@@ -327,12 +327,13 @@ function Mode1Preview({
 // ── Center: Mode 2 preview (stacked) ──────────────────────────────────────────
 
 function Mode2Preview({
-  blobUrl, text, settings, align, onOverflow,
+  blobUrl, text, settings, align, position, onOverflow,
 }: {
   blobUrl: string | null;
   text: string;
   settings: BookTextSettings;
   align: TextAlign;
+  position: TextPosition;
   onOverflow?: (overflows: boolean) => void;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -343,7 +344,7 @@ function Mode2Preview({
   });
 
   const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
-  const isTextBottom = settings.m2Position === "bottom";
+  const isTextBottom = position !== "top";
 
   const imgBlock = (
     <div className="relative" style={{ flex: "0 0 63%" }}>
@@ -886,17 +887,16 @@ function StudioInner() {
     setText(page.text ?? "");
     setPagePosition((page.text_position as TextPosition) ?? (page.is_cover ? "bottom" : "bottom"));
     setPageAlign((page.text_align as TextAlign) ?? "center");
-    // Cover default style: Kranky font, white text, 32px — matches the reader's cover rendering
+    // Cover default style: Kranky font, white text, 32px — matches the reader's cover rendering.
+    // For content pages, font/size/color/mode are book-level (stay in settings), not per-page.
     if (page.is_cover && !page.font_family && !page.font_size && !page.text_color) {
       setSettings(prev => ({ ...prev, fontFamily: "kranky" as FontId, fontSize: 32, textColor: "#ffffff" }));
-    } else if (page.font_size || page.font_family || page.text_color || page.text_mode) {
-      // Load per-page style settings saved by a previous studio session
+    } else if (page.is_cover && (page.font_size || page.font_family || page.text_color)) {
       setSettings(prev => ({
         ...prev,
-        ...(page.font_size   ? { fontSize:   page.font_size }              : {}),
-        ...(page.font_family ? { fontFamily: page.font_family as FontId }  : {}),
-        ...(page.text_color  ? { textColor:  page.text_color }             : {}),
-        ...(page.text_mode   ? { mode: page.text_mode as TextMode }        : {}),
+        ...(page.font_size   ? { fontSize:   page.font_size }             : {}),
+        ...(page.font_family ? { fontFamily: page.font_family as FontId } : {}),
+        ...(page.text_color  ? { textColor:  page.text_color }            : {}),
       }));
     }
     // Load canvas boxes from localStorage, or init from page text
@@ -985,16 +985,33 @@ function StudioInner() {
 
     setSaving(true);
     try {
-      const updated = await api.books.updatePage(token, book.id, page.id, {
+      // Save current page: text content + per-page position/align + cover style
+      const pagePayload: Record<string, unknown> = {
         text: tx,
         text_align: align,
         text_position: pos,
         canvas_overlay: overlayToSave,
-        font_size: st.fontSize,
-        font_family: st.fontFamily,
-        text_color: st.textColor,
-        text_mode: st.mode,
-      });
+      };
+      // Cover page saves its own font/size/color; content pages use book-level bulk save below
+      if (page.is_cover) {
+        pagePayload.font_size   = st.fontSize;
+        pagePayload.font_family = st.fontFamily;
+        pagePayload.text_color  = st.textColor;
+      }
+
+      // Apply book-level style (mode, font, size, color, overlay) to ALL content pages
+      const [updated] = await Promise.all([
+        api.books.updatePage(token, book.id, page.id, pagePayload as Parameters<typeof api.books.updatePage>[3]),
+        !page.is_cover && !page.is_back_cover
+          ? api.books.bulkPageStyle(token, book.id, {
+              font_family:    st.fontFamily,
+              font_size:      st.fontSize,
+              text_color:     st.textColor,
+              text_mode:      st.mode,
+              canvas_overlay: overlayToSave,
+            })
+          : Promise.resolve(null),
+      ]);
       setBook(updated as unknown as BookOut);
       setDirty(false);
     } catch { toast.error("Failed to save"); }
@@ -1509,9 +1526,9 @@ function StudioInner() {
                   <SL>Text area position</SL>
                   <div className="grid grid-cols-2 gap-1.5">
                     {(["bottom", "top"] as const).map(pos => (
-                      <button key={pos} onClick={() => patchSettings({ m2Position: pos })}
+                      <button key={pos} onClick={() => { setPagePosition(pos); markDirty(); }}
                         className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
-                          settings.m2Position === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                          pagePosition === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                         {pos === "bottom" ? "Image top, text bottom" : "Text top, image bottom"}
                       </button>
                     ))}
@@ -1589,7 +1606,7 @@ function StudioInner() {
               onOverflow={setTextOverflows} />
           ) : (
             <Mode2Preview blobUrl={blobUrl} text={text} settings={settings}
-              align={pageAlign} onOverflow={setTextOverflows} />
+              align={pageAlign} position={pagePosition} onOverflow={setTextOverflows} />
           )}
 
           {/* Overflow warning — shown in modes 1 & 2 when text exceeds the text zone */}

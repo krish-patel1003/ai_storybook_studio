@@ -58,6 +58,15 @@ class BulkTextStyleIn(BaseModel):
     position_pool: list[str] = Field(default_factory=list)
 
 
+class BulkPageStyleIn(BaseModel):
+    """Apply book-level style settings to every content page at once."""
+    font_family: str | None = None
+    font_size: float | None = None
+    text_color: str | None = None
+    text_mode: int | None = None
+    canvas_overlay: dict | None = None
+
+
 class RecalibrateIn(BaseModel):
     new_page_count: int = Field(ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
 
