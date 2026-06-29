@@ -71,9 +71,7 @@ async function startIllJob(
   const bookId = book.id;
   if (_job?.bookId === bookId && _job.done < _job.total) return;
 
-  const pages = [...book.pages]
-    .filter(p => !p.is_back_cover)
-    .sort((a, b) => a.order - b.order);
+  const pages = [...book.pages].sort((a, b) => a.order - b.order);
 
   _job = {
     bookId,
