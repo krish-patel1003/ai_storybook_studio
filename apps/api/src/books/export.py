@@ -62,6 +62,17 @@ class ExportPage:
     text_align: str = "center"    # left | center | right
     text_position: str = "bottom" # top | center | bottom
     is_back_cover: bool = False
+    font_family: str | None = None
+    font_size: float | None = None
+    text_color: str | None = None
+    text_mode: int | None = None  # 1=overlay (default), 2=stacked
+
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
 # ── Image helpers ─────────────────────────────────────────────────────────────
@@ -280,8 +291,6 @@ def _build_pdf_sync(
 ) -> bytes:
     from fpdf import FPDF
 
-    font_cfg = EXPORT_FONTS.get(font_id, EXPORT_FONTS[DEFAULT_EXPORT_FONT])
-
     PAGE_W, PAGE_H = 148, 210   # A5 portrait, mm
     MARGIN = 12
 
@@ -289,9 +298,15 @@ def _build_pdf_sync(
     pdf.set_auto_page_break(False)
     pdf.set_margins(0, 0, 0)
 
-    pdf.add_font("Kranky",    style="",  fname=_FONT_TITLE)
-    pdf.add_font("StoryBody", style="",  fname=font_cfg["file_regular"])
-    pdf.add_font("StoryBold", style="",  fname=font_cfg["file_bold"])
+    pdf.add_font("Kranky", style="", fname=_FONT_TITLE)
+    # Register every export font so per-page switching works
+    for _fid, _fcfg in EXPORT_FONTS.items():
+        pdf.add_font(f"Body_{_fid}", style="", fname=_fcfg["file_regular"])
+        pdf.add_font(f"Bold_{_fid}", style="", fname=_fcfg["file_bold"])
+    # Keep legacy aliases pointing at the book-level fallback font
+    font_cfg = EXPORT_FONTS.get(font_id, EXPORT_FONTS[DEFAULT_EXPORT_FONT])
+    pdf.add_font("StoryBody", style="", fname=font_cfg["file_regular"])
+    pdf.add_font("StoryBold", style="", fname=font_cfg["file_bold"])
 
     TEXT_ZONE_FRAC = 0.36   # must match reader + _story_page_composite
 
@@ -327,77 +342,127 @@ def _build_pdf_sync(
             pdf.cell(PAGE_W, 6, f"by {author_display}", align="C")
 
         else:
-            t_pos   = getattr(page, "text_position", "bottom")
-            t_align = getattr(page, "text_align",    "center")
+            import re as _re
+            t_pos    = getattr(page, "text_position", "bottom")
+            t_align  = getattr(page, "text_align",    "center")
+            t_mode   = getattr(page, "text_mode",  None) or 1
 
-            # Full-bleed image with gradient composited behind text zone
-            if page.image_bytes:
-                img_bytes = _story_page_composite(
-                    page.image_bytes, PAGE_W, PAGE_H,
-                    text_zone_frac=TEXT_ZONE_FRAC,
-                    text_position=t_pos,
-                )
-                pdf.set_fill_color(250, 248, 243)
-                pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
-                pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=PAGE_H)
+            # Per-page font/size/color (fall back to book-level font_id)
+            pg_font_id = (page.font_family or "").strip() or font_id
+            if pg_font_id not in EXPORT_FONTS:
+                pg_font_id = font_id if font_id in EXPORT_FONTS else DEFAULT_EXPORT_FONT
+            bold_alias = f"Bold_{pg_font_id}"
+            body_alias = f"Body_{pg_font_id}"
+
+            DEFAULT_FONT_SIZE = 13.0
+            pg_font_size = float(page.font_size) if getattr(page, "font_size", None) else DEFAULT_FONT_SIZE
+
+            if getattr(page, "text_color", None):
+                pg_r, pg_g, pg_b = _hex_to_rgb(page.text_color)
             else:
-                pdf.set_fill_color(250, 248, 243)
-                pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
+                pg_r, pg_g, pg_b = 30, 28, 45  # default dark navy
 
-            FONT_SIZE = 13
-            LINE_H    = 7.2
-            text_zone_h = PAGE_H * TEXT_ZONE_FRAC
-
-            # Text zone top-left Y depends on position
-            if t_pos == "top":
-                text_zone_top = 0.0
-            elif t_pos == "center":
-                text_zone_top = (PAGE_H - text_zone_h) / 2
-            else:  # bottom
-                text_zone_top = PAGE_H - text_zone_h
-
-            # fpdf2 align code
             _ALIGN = {"left": "L", "center": "C", "right": "R"}
             pdf_align = _ALIGN.get(t_align, "C")
 
-            if page.text:
-                import re as _re
-                pdf.set_text_color(30, 28, 45)
+            pdf.set_fill_color(250, 248, 243)
+            pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
 
-                cell_w       = PAGE_W - MARGIN * 2
-                display_text = _re.sub(r'\n{2,}', '\n', page.text.strip())
-                available    = text_zone_h - MARGIN
+            if t_mode == 2:
+                # ── Stacked: image top 63%, text bottom 37% ───────────────
+                IMG_FRAC  = 0.63
+                TEXT_FRAC = 1.0 - IMG_FRAC
+                img_h_mm  = PAGE_H * IMG_FRAC
 
-                _LINE_RATIO = LINE_H / FONT_SIZE
-                font_size   = float(FONT_SIZE)
-                line_h      = LINE_H
-                lines: list[str] = []
+                if page.image_bytes:
+                    img_bytes = _cover_crop(page.image_bytes, PAGE_W, img_h_mm)
+                    pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=img_h_mm)
 
-                for _attempt in range(200):
-                    pdf.set_font("StoryBold", "", font_size)
-                    lines   = pdf.multi_cell(cell_w, line_h, display_text,
-                                             align=pdf_align, dry_run=True, output="LINES")
-                    block_h = len(lines) * line_h
-                    if block_h <= available or font_size <= 8.5:
-                        break
-                    font_size -= 0.5
-                    line_h    = _LINE_RATIO * font_size
+                text_zone_top = img_h_mm
+                text_zone_h   = PAGE_H * TEXT_FRAC
+                cell_w        = PAGE_W - MARGIN * 2
 
-                max_lines = max(1, int(available / line_h))
-                if len(lines) > max_lines:
-                    lines = lines[:max_lines]
-                block_h = len(lines) * line_h
+                if page.text:
+                    display_text = _re.sub(r'\n{2,}', '\n', page.text.strip())
+                    available    = text_zone_h - MARGIN * 1.5
 
-                top_offset = max(0.0, (available - block_h) / 2)
-                text_y = text_zone_top + top_offset + MARGIN * 0.5
+                    INIT_LINE_H = pg_font_size * 0.55
+                    _LINE_RATIO = INIT_LINE_H / pg_font_size
+                    font_size   = pg_font_size
+                    line_h      = INIT_LINE_H
+                    lines: list[str] = []
 
-                x_offset = MARGIN if t_align != "right" else MARGIN
-                pdf.set_xy(x_offset, text_y)
-                pdf.multi_cell(cell_w, line_h, "\n".join(lines), align=pdf_align)
+                    for _attempt in range(200):
+                        pdf.set_font(bold_alias, "", font_size)
+                        lines   = pdf.multi_cell(cell_w, line_h, display_text,
+                                                 align=pdf_align, dry_run=True, output="LINES")
+                        block_h = len(lines) * line_h
+                        if block_h <= available or font_size <= 8.5:
+                            break
+                        font_size -= 0.5
+                        line_h    = _LINE_RATIO * font_size
+
+                    block_h    = len(lines) * line_h
+                    top_offset = max(0.0, (available - block_h) / 2)
+                    text_y     = text_zone_top + top_offset + MARGIN * 0.75
+
+                    pdf.set_text_color(pg_r, pg_g, pg_b)
+                    pdf.set_xy(MARGIN, text_y)
+                    pdf.multi_cell(cell_w, line_h, "\n".join(lines), align=pdf_align)
+
+            else:
+                # ── Overlay: full-bleed image with gradient behind text ────
+                if page.image_bytes:
+                    img_bytes = _story_page_composite(
+                        page.image_bytes, PAGE_W, PAGE_H,
+                        text_zone_frac=TEXT_ZONE_FRAC,
+                        text_position=t_pos,
+                    )
+                    pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=PAGE_H)
+
+                text_zone_h = PAGE_H * TEXT_ZONE_FRAC
+                if t_pos == "top":
+                    text_zone_top = 0.0
+                elif t_pos == "center":
+                    text_zone_top = (PAGE_H - text_zone_h) / 2
+                else:
+                    text_zone_top = PAGE_H - text_zone_h
+
+                if page.text:
+                    display_text = _re.sub(r'\n{2,}', '\n', page.text.strip())
+                    cell_w       = PAGE_W - MARGIN * 2
+                    available    = text_zone_h - MARGIN
+
+                    INIT_LINE_H = pg_font_size * 0.55
+                    _LINE_RATIO = INIT_LINE_H / pg_font_size
+                    font_size   = pg_font_size
+                    line_h      = INIT_LINE_H
+                    lines: list[str] = []
+
+                    for _attempt in range(200):
+                        pdf.set_font(bold_alias, "", font_size)
+                        lines   = pdf.multi_cell(cell_w, line_h, display_text,
+                                                 align=pdf_align, dry_run=True, output="LINES")
+                        block_h = len(lines) * line_h
+                        if block_h <= available or font_size <= 8.5:
+                            break
+                        font_size -= 0.5
+                        line_h    = _LINE_RATIO * font_size
+
+                    max_lines = max(1, int(available / line_h))
+                    if len(lines) > max_lines:
+                        lines = lines[:max_lines]
+                    block_h    = len(lines) * line_h
+                    top_offset = max(0.0, (available - block_h) / 2)
+                    text_y     = text_zone_top + top_offset + MARGIN * 0.5
+
+                    pdf.set_text_color(pg_r, pg_g, pg_b)
+                    pdf.set_xy(MARGIN, text_y)
+                    pdf.multi_cell(cell_w, line_h, "\n".join(lines), align=pdf_align)
 
             # Page number
             pdf.set_xy(0, PAGE_H - MARGIN + 2)
-            pdf.set_font("StoryBody", "", 7)
+            pdf.set_font(body_alias, "", 7)
             pdf.set_text_color(160, 155, 170)
             pdf.cell(PAGE_W, 5, str(page.order), align="C")
 

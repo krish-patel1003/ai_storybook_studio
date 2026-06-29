@@ -933,6 +933,10 @@ async def build_export_pages(db: AsyncSession, book: Book) -> list:
             image_bytes=image_bytes,
             text_align=getattr(page, "text_align", "center"),
             text_position=getattr(page, "text_position", "bottom"),
+            font_family=getattr(page, "font_family", None),
+            font_size=getattr(page, "font_size", None),
+            text_color=getattr(page, "text_color", None),
+            text_mode=getattr(page, "text_mode", None),
         ))
     return result
 
