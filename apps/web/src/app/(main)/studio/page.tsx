@@ -347,7 +347,7 @@ function Mode2Preview({
   const isTextBottom = position !== "top";
 
   const imgBlock = (
-    <div className="relative" style={{ flex: "0 0 63%" }}>
+    <div className="relative" style={{ flex: "0 0 55%" }}>
       {blobUrl ? (
         <img src={blobUrl} alt="" className="h-full w-full object-cover"
           style={{ objectPosition: "center top" }} draggable={false} />

@@ -413,8 +413,8 @@ def _build_pdf_sync(
             pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
 
             if t_mode == 2:
-                # ── Stacked: image top 63%, text bottom 37% ───────────────
-                IMG_FRAC  = 0.63
+                # ── Stacked: image top 55%, text bottom 45% ───────────────
+                IMG_FRAC  = 0.55
                 TEXT_FRAC = 1.0 - IMG_FRAC
                 img_h_mm  = PAGE_H * IMG_FRAC
 

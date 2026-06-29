@@ -180,9 +180,9 @@ const StoryPage = forwardRef<
     return (
       <div ref={ref} className="relative overflow-hidden select-none"
         style={{ height: "100%", background: "#faf8f3", display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
-        {/* Image block — 63% (only when an image is available) */}
+        {/* Image block — 55% (only when an image is available) */}
         {imgUrl && (
-          <div className="relative" style={{ flex: "0 0 63%" }}>
+          <div className="relative" style={{ flex: "0 0 55%" }}>
             <img src={imgUrl} alt={`Page ${page.order}`}
               className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
               style={{ objectPosition: "center top" }} draggable={false} />

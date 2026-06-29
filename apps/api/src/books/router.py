@@ -545,7 +545,11 @@ async def split_page(
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
 ) -> BookOut:
-    updated = await service.split_page(db, book.id, page_id, book.user_id)
+    from fastapi import HTTPException
+    try:
+        updated = await service.split_page(db, book.id, page_id, book.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return BookOut.model_validate(updated)
 
 
