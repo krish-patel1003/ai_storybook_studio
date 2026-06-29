@@ -197,7 +197,7 @@ const StoryPage = forwardRef<
         )}
         {/* Text block */}
         <div ref={containerRef}
-          style={{ flex: imgUrl ? 1 : undefined, flexGrow: imgUrl ? undefined : 1, background: "#faf8f3", display: "flex", alignItems: isTextBottom ? "flex-end" : "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden" }}>
+          style={{ flex: imgUrl ? 1 : undefined, flexGrow: imgUrl ? undefined : 1, background: "#faf8f3", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden" }}>
           {page.text ? (
             <p ref={textRef} className="w-full"
               style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : { color: "#1a1a2e" }) }}>
