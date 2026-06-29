@@ -643,8 +643,6 @@ function ReaderInner() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <FontSizePicker size={fontSizeId} setSize={setFontSizeId} />
-          <FontPicker font={font} setFont={setFont} />
           {bookHasAnyAudio && (
             <button
               onClick={toggleMute}
