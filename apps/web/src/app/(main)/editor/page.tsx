@@ -17,18 +17,13 @@ import {
   Mic,
   Expand,
   Play,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  MoveVertical,
-  Shuffle,
   PenLine,
   Link2,
 } from "lucide-react";
 import { XsSpinner, SmSpinner, MdSpinner, LgSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile, type TextAlign, type TextPosition } from "@/lib/api";
+import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { useAuthImage } from "@/lib/use-auth-image";
@@ -455,31 +450,6 @@ export default function EditorPage() {
     api.voices.list(token).then(setVoiceProfiles).catch(() => {});
   }, [token]);
 
-  // Text layout
-  const [textAlign, setTextAlign] = useState<TextAlign>("center");
-  const [textPosition, setTextPosition] = useState<TextPosition>("bottom");
-  const [textMode, setTextMode] = useState<"static" | "randomize">("static");
-  const [textSaving, setTextSaving] = useState(false);
-
-  async function handleApplyTextStyle() {
-    if (!token || !book) return;
-    setTextSaving(true);
-    const ALIGNS: TextAlign[] = ["left", "center", "right"];
-    const POSITIONS: TextPosition[] = ["top", "center", "bottom"];
-    const pages = book.pages.filter((p) => !p.is_cover && !p.is_back_cover);
-    try {
-      await Promise.all(pages.map((page) => {
-        const text_align: TextAlign = textMode === "randomize" ? ALIGNS[Math.floor(Math.random() * ALIGNS.length)] : textAlign;
-        const text_position: TextPosition = textMode === "randomize" ? POSITIONS[Math.floor(Math.random() * POSITIONS.length)] : textPosition;
-        return api.books.updatePage(token!, book!.id, page.id, { text_align, text_position });
-      }));
-      const refreshed = await api.books.get(token, book.id);
-      updateBook(refreshed);
-      toast.success(textMode === "randomize" ? "Text style randomized!" : "Text style applied!");
-    } catch { toast.error("Failed to apply text style."); }
-    finally { setTextSaving(false); }
-  }
-
   // Per-page timers
   const pageTimerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   function startPageTimer(pageId: string) {
@@ -615,56 +585,6 @@ export default function EditorPage() {
             <p className="text-sm italic text-foreground/70 leading-relaxed">"{book.raw_prompt}"</p>
           </div>
         </details>
-      )}
-
-      {/* Text layout */}
-      {allPages.some((p) => !p.is_cover && !p.is_back_cover) && (
-        <div className="mb-6 rounded-2xl bg-card p-5 chunky-border">
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <MoveVertical className="h-4 w-4 text-muted-foreground shrink-0" />
-            <h2 className="text-sm font-extrabold">Text Layout</h2>
-            <span className="text-xs text-muted-foreground">Alignment and position for story text on all pages</span>
-          </div>
-          <div className="flex items-center gap-2 mb-5">
-            <button onClick={() => setTextMode("static")} className={`rounded-full px-3 py-1.5 text-xs font-extrabold chunky-border transition-colors ${textMode === "static" ? "bg-primary text-primary-foreground" : "bg-background"}`}>Same for all</button>
-            <button onClick={() => setTextMode("randomize")} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold chunky-border transition-colors ${textMode === "randomize" ? "bg-primary text-primary-foreground" : "bg-background"}`}><Shuffle className="h-3 w-3" /> Randomize</button>
-          </div>
-          {textMode === "static" && (
-            <div className="flex flex-wrap gap-6 mb-5">
-              <div>
-                <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Alignment</p>
-                <div className="flex items-center gap-1.5">
-                  {([{ val: "left" as TextAlign, Icon: AlignLeft, label: "Left" }, { val: "center" as TextAlign, Icon: AlignCenter, label: "Center" }, { val: "right" as TextAlign, Icon: AlignRight, label: "Right" }] as const).map(({ val, Icon, label }) => (
-                    <button key={val} onClick={() => setTextAlign(val)} className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold chunky-border transition-colors ${textAlign === val ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>
-                      <Icon className="h-3.5 w-3.5" strokeWidth={2.5} /> {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Position</p>
-                <div className="flex items-center gap-1.5">
-                  {([{ val: "top" as TextPosition, label: "Top" }, { val: "center" as TextPosition, label: "Middle" }, { val: "bottom" as TextPosition, label: "Bottom" }] as const).map(({ val, label }) => (
-                    <button key={val} onClick={() => setTextPosition(val)} className={`rounded-xl px-3 py-2 text-xs font-bold chunky-border transition-colors ${textPosition === val ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>{label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Preview</p>
-                <div className="relative w-20 h-28 rounded-xl bg-muted chunky-border overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-muted-foreground/10 to-muted-foreground/20" />
-                  <div className={`absolute inset-x-0 px-1.5 py-1 flex flex-col gap-0.5 ${textPosition === "top" ? "top-0" : textPosition === "center" ? "top-1/2 -translate-y-1/2" : "bottom-0"} ${textAlign === "left" ? "items-start" : textAlign === "right" ? "items-end" : "items-center"}`}>
-                    {[85, 65, 75].map((w, i) => <div key={i} className="h-1 rounded-full bg-foreground/50" style={{ width: `${w}%` }} />)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {textMode === "randomize" && <p className="text-xs text-muted-foreground mb-5">Each story page gets a random alignment and position.</p>}
-          <button onClick={handleApplyTextStyle} disabled={textSaving} className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-extrabold text-background chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0">
-            {textSaving ? <><XsSpinner /> Applying…</> : textMode === "randomize" ? <><Shuffle className="h-3.5 w-3.5" /> Randomize & apply</> : <><Check className="h-3.5 w-3.5" /> Apply to all pages</>}
-          </button>
-        </div>
       )}
 
       {/* Illustrate CTA */}
