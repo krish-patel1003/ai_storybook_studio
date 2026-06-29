@@ -15,23 +15,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("""
-        ALTER TABLE page
-        DROP CONSTRAINT IF EXISTS uq_page_book_order;
-
-        ALTER TABLE page
-        ADD CONSTRAINT uq_page_book_order
-            UNIQUE (book_id, "order")
-            DEFERRABLE INITIALLY DEFERRED;
-    """)
+    op.execute('ALTER TABLE page DROP CONSTRAINT IF EXISTS uq_page_book_order')
+    op.execute(
+        'ALTER TABLE page ADD CONSTRAINT uq_page_book_order '
+        'UNIQUE (book_id, "order") DEFERRABLE INITIALLY DEFERRED'
+    )
 
 
 def downgrade() -> None:
-    op.execute("""
-        ALTER TABLE page
-        DROP CONSTRAINT IF EXISTS uq_page_book_order;
-
-        ALTER TABLE page
-        ADD CONSTRAINT uq_page_book_order
-            UNIQUE (book_id, "order");
-    """)
+    op.execute('ALTER TABLE page DROP CONSTRAINT IF EXISTS uq_page_book_order')
+    op.execute(
+        'ALTER TABLE page ADD CONSTRAINT uq_page_book_order '
+        'UNIQUE (book_id, "order")'
+    )
