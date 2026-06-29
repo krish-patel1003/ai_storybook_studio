@@ -266,17 +266,33 @@ StoryPage.displayName = "StoryPage";
 
 // ── Back cover ────────────────────────────────────────────────────────────────
 
-const BackCover = forwardRef<HTMLDivElement, { title: string }>(({ title }, ref) => (
-  <div ref={ref} className="flex flex-col items-center justify-between overflow-hidden bg-primary select-none p-8">
-    <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center">
-      <div className="font-display text-6xl font-black text-primary-foreground/20 leading-none">✦</div>
-      <p className="font-display text-2xl font-black text-primary-foreground tracking-wide">The End</p>
-      <p className="text-sm font-bold text-primary-foreground/60 max-w-[180px] leading-relaxed">{title}</p>
+const BackCoverPage = forwardRef<
+  HTMLDivElement,
+  { page: PageOut; bookId: string; token: string | null; title: string }
+>(({ page, bookId, token, title }, ref) => {
+  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  return (
+    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#1a1a2e" }}>
+      {imgUrl && (
+        <img
+          src={imgUrl}
+          alt="Back cover"
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
+      )}
+      {/* Dark overlay so text is legible over any illustration */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(10,10,20,0.88) 0%, rgba(10,10,20,0.45) 50%, transparent 100%)" }} />
+      {/* "The End" text */}
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 pb-10 text-center">
+        <p className="font-display text-2xl font-black text-white tracking-wide" style={{ textShadow: "0 2px 12px rgba(0,0,0,0.7)" }}>The End</p>
+        <p className="text-xs font-bold text-white/60 max-w-[160px] leading-relaxed" style={{ textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>{title}</p>
+      </div>
+      <p className="absolute bottom-2 right-3 text-[10px] font-bold text-white/20 tracking-widest uppercase select-none">AI Storybook Studio</p>
     </div>
-    <p className="text-xs font-bold text-primary-foreground/30 tracking-widest uppercase">AI Storybook Studio</p>
-  </div>
-));
-BackCover.displayName = "BackCover";
+  );
+});
+BackCoverPage.displayName = "BackCoverPage";
 
 // ── Font picker popover ───────────────────────────────────────────────────────
 
@@ -552,7 +568,7 @@ function ReaderInner() {
   }, [book, router]);
 
   const pages = book ? [...book.pages].sort((a, b) => a.order - b.order) : [];
-  const totalPages = pages.length + 1; // +1 for back cover
+  const totalPages = pages.length;
 
   const { audioRef, playing, muted, hasAudio, togglePlay, toggleMute } =
     usePageAudio(pages, currentPage, book?.id ?? "", token, bookRef);
@@ -653,6 +669,7 @@ function ReaderInner() {
             {currentPage === 0 ? "Cover"
               : currentPage === totalPages - 1 ? "The End"
               : `Page ${currentPage} of ${totalPages - 2}`}
+
           </span>
         </div>
       </div>
@@ -680,11 +697,12 @@ function ReaderInner() {
           {pages.map((page) =>
             page.is_cover ? (
               <CoverPage key={page.id} page={page} bookId={book.id} token={token} author={penName} fontStack={fontStack} />
+            ) : page.is_back_cover ? (
+              <BackCoverPage key={page.id} page={page} bookId={book.id} token={token} title={book.brief?.title ?? book.title} />
             ) : (
               <StoryPage key={page.id} page={page} bookId={book.id} token={token} fontStack={fontStack} fontSize={fontSize} fontWeight={fontWeight} />
             )
           )}
-          <BackCover title={book.brief?.title ?? book.title} />
         </HTMLFlipBook>
       </div>
 

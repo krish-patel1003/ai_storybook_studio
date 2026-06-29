@@ -10,8 +10,6 @@ import {
   Check,
   BookOpen,
   RefreshCw,
-  Cpu,
-  Cloud,
   Wand2,
   ImageIcon,
   Mic,
@@ -30,7 +28,7 @@ import {
 import { XsSpinner, SmSpinner, LgSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type ProviderInfo, type StorySeedOut } from "@/lib/api";
+import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type StorySeedOut } from "@/lib/api";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { toast } from "sonner";
 
@@ -352,8 +350,7 @@ function OptionsPanel({
   customToneInput, setCustomToneInput, style, setStyle,
   pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
   customPageCountInput, setCustomPageCountInput, safety, setSafety,
-  modelProvider, setModelProvider, modelName, setModelName,
-  providers, modelsLoading, prompt, onOneClick, locked,
+  prompt, onOneClick, locked,
 }: {
   age: string; setAge: (v: string) => void;
   tone: string[]; setTone: (v: string[]) => void;
@@ -364,9 +361,6 @@ function OptionsPanel({
   isCustomPageCount: boolean; setIsCustomPageCount: (v: boolean) => void;
   customPageCountInput: string; setCustomPageCountInput: (v: string) => void;
   safety: boolean; setSafety: (v: boolean) => void;
-  modelProvider: string; setModelProvider: (v: string) => void;
-  modelName: string; setModelName: (v: string) => void;
-  providers: ProviderInfo[]; modelsLoading: boolean;
   prompt: string; onOneClick: () => void; locked?: boolean;
 }) {
   return (
@@ -470,41 +464,6 @@ function OptionsPanel({
         </span>
       </button>
 
-      {/* AI model */}
-      <div>
-        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">AI model</p>
-        {modelsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground"><SmSpinner /> Detecting models…</div>
-        ) : (
-          <div className="space-y-2">
-            {(providers.length > 0 ? providers : [{ id: "gemini", name: "Google Gemini", description: "Cloud-hosted", available: true, models: [{ id: "gemini-3.5-flash", name: "Gemini Flash", description: "Fast & efficient", size: "cloud" }, { id: "gemini-3.1-pro-preview", name: "Gemini Pro", description: "Highest quality", size: "cloud" }] }]).map((provider) => (
-              <div key={provider.id}>
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="text-xs font-bold text-muted-foreground">{provider.name}</span>
-                  {!provider.available && <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">not running</span>}
-                </div>
-                <div className="grid gap-1.5 sm:grid-cols-2">
-                  {provider.models.map((m) => {
-                    const active = modelProvider === provider.id && modelName === m.id;
-                    return (
-                      <button key={m.id} disabled={!provider.available} onClick={() => { setModelProvider(provider.id); setModelName(m.id); }} className={`flex items-start gap-2.5 rounded-xl p-2.5 text-left chunky-border transition-all disabled:opacity-40 ${active ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background hover:bg-highlight"}`}>
-                        <div className={`mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border-2 ${active ? "border-primary-foreground bg-primary-foreground" : "border-foreground/40"}`}>
-                          {active && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
-                        </div>
-                        <div>
-                          <div className="text-xs font-extrabold leading-tight">{m.name}</div>
-                          <div className={`text-[11px] mt-0.5 ${active ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{m.description}</div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* One-click */}
       {!locked && (
         <div className="rounded-2xl bg-primary/5 p-4 chunky-border">
@@ -529,9 +488,8 @@ function OptionsPanel({
 
 // ── Locked settings summary (brief + writing states) ─────────────────────────
 
-function LockedSettingsSummary({ age, tone, style, pageCount, safety, modelName, modelProvider, onEdit }: {
-  age: string; tone: string[]; style: string; pageCount: number; safety: boolean;
-  modelName: string; modelProvider: string; onEdit: () => void;
+function LockedSettingsSummary({ age, tone, style, pageCount, safety, onEdit }: {
+  age: string; tone: string[]; style: string; pageCount: number; safety: boolean; onEdit: () => void;
 }) {
   const styleLabel = { watercolor: "Watercolor", crayon: "Crayon", flat: "Flat", papercut: "Papercut" }[style] ?? style;
   return (
@@ -544,7 +502,6 @@ function LockedSettingsSummary({ age, tone, style, pageCount, safety, modelName,
           { label: "Pages", value: `${pageCount} pages` },
           { label: "Art style", value: styleLabel },
           { label: "Safety", value: safety ? "On" : "Off" },
-          { label: "Model", value: modelName },
         ].map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground font-semibold">{label}</span>
@@ -577,8 +534,8 @@ function LockedSettingsSummary({ age, tone, style, pageCount, safety, modelName,
 
 // ── Brief summary sidebar (for pages review state) ────────────────────────────
 
-function BriefSummaryPanel({ brief, age, pageCount, style, modelName, modelProvider }: {
-  brief: BriefOut; age: string; pageCount: number; style: string; modelName: string; modelProvider: string;
+function BriefSummaryPanel({ brief, age, pageCount, style }: {
+  brief: BriefOut; age: string; pageCount: number; style: string;
 }) {
   return (
     <div className="space-y-4">
@@ -613,7 +570,6 @@ function BriefSummaryPanel({ brief, age, pageCount, style, modelName, modelProvi
           <div className="flex justify-between"><span>Reading level</span><span className="font-bold text-foreground">Ages {age}</span></div>
           <div className="flex justify-between"><span>Pages</span><span className="font-bold text-foreground">{pageCount}</span></div>
           <div className="flex justify-between"><span>Art style</span><span className="font-bold text-foreground capitalize">{style}</span></div>
-          <div className="flex justify-between"><span>Model</span><span className="font-bold text-foreground flex items-center gap-1">{modelProvider === "ollama" ? <Cpu className="h-3 w-3" /> : <Cloud className="h-3 w-3" />}{modelName}</span></div>
         </div>
       </div>
     </div>
@@ -968,8 +924,8 @@ export default function CreatePage() {
   const [isCustomPageCount, setIsCustomPageCount] = useState(false);
   const [customPageCountInput, setCustomPageCountInput] = useState("");
   const [style, setStyle] = useState("watercolor");
-  const [modelProvider, setModelProvider] = useState("gemini");
-  const [modelName, setModelName] = useState("gemini-3.1-pro-preview");
+  const modelProvider = "gemini";
+  const modelName = "gemini-3.1-pro-preview";
 
   // Flow
   const [flowState, setFlowState] = useState<FlowState>("profile");
@@ -983,10 +939,6 @@ export default function CreatePage() {
   // Expanded prompt (concept step)
   const [expandedPrompt, setExpandedPrompt] = useState<ExpandedPromptOut | null>(null);
   const [expandLoading, setExpandLoading] = useState(false);
-
-  // Models
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
 
   // Brief
   const [activeBrief, setActiveBrief] = useState<BriefOut | null>(null);
@@ -1015,19 +967,6 @@ export default function CreatePage() {
       .then(setProfiles)
       .catch(() => {})
       .finally(() => setProfilesLoading(false));
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) return;
-    setModelsLoading(true);
-    api.books.models(token)
-      .then((d) => {
-        setProviders(d.providers);
-        const first = d.providers.find((p) => p.available);
-        if (first) { setModelProvider(first.id); if (first.models[0]) setModelName(first.models[0].id); }
-      })
-      .catch(() => {})
-      .finally(() => setModelsLoading(false));
   }, [token]);
 
   const briefParams = {
@@ -1208,8 +1147,7 @@ export default function CreatePage() {
     customToneInput, setCustomToneInput, style, setStyle,
     pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
     customPageCountInput, setCustomPageCountInput, safety, setSafety,
-    modelProvider, setModelProvider, modelName, setModelName,
-    providers, modelsLoading, prompt, onOneClick: handleOneClick,
+    prompt, onOneClick: handleOneClick,
   };
 
   const writingMessage = useWritingMessages(activeBrief);
@@ -1427,7 +1365,7 @@ export default function CreatePage() {
                         {settingsOpen && (
                           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
                             <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
-                              <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} modelName={modelName} modelProvider={modelProvider} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
+                              <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
                             </div>
                           </motion.div>
                         )}
@@ -1579,7 +1517,7 @@ export default function CreatePage() {
                             {settingsOpen && (
                               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
                                 <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
-                                  <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} modelName={modelName} modelProvider={modelProvider} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
+                                  <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
                                 </div>
                               </motion.div>
                             )}
@@ -1686,15 +1624,14 @@ export default function CreatePage() {
               {flowState === "pages" && activeBrief ? (
                 <BriefSummaryPanel
                   brief={activeBrief} age={age} pageCount={pageCount}
-                  style={style} modelName={modelName} modelProvider={modelProvider}
+                  style={style}
                 />
               ) : flowState === "input" ? (
                 <OptionsPanel {...optionsProps} />
               ) : (
                 <LockedSettingsSummary
                   age={age} tone={tone} style={style} pageCount={pageCount}
-                  safety={safety} modelName={modelName} modelProvider={modelProvider}
-                  onEdit={() => setFlowState("input")}
+                  safety={safety} onEdit={() => setFlowState("input")}
                 />
               )}
             </div>

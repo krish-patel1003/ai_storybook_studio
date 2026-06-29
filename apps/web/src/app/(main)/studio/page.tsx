@@ -42,7 +42,7 @@ async function startIllJob(
   book: BookOut,
   onUpdate: (b: BookOut) => void,
 ) {
-  const pages = book.pages.filter(p => !p.is_cover);
+  const pages = book.pages.filter(p => !p.is_back_cover);
   _job = {
     bookId: book.id,
     statuses: Object.fromEntries(pages.map(p => [p.id, "pending" as IllStatus])),
@@ -105,9 +105,9 @@ interface BookTextSettings {
 
 const DEFAULT_SETTINGS: BookTextSettings = {
   mode: 1,
-  fontSize: 14,
-  fontFamily: "unkempt",
-  textColor: "#1a1a2e",
+  fontSize: 15,
+  fontFamily: "nunito",
+  textColor: "#000000",
   m1BgStyle: "frosted",
   m1BgOpacity: 0.82,
   m2Position: "bottom",

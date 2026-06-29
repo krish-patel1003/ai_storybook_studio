@@ -27,7 +27,7 @@ class CreateBookIn(BaseModel):
         le=MAX_PAGE_COUNT,
     )
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
     child_profile_id: uuid.UUID | None = None
     author_name: str | None = None
 
@@ -200,7 +200,7 @@ class BrainstormIn(BaseModel):
     tone: list[str] = Field(default_factory=list)
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
 
 
 class StorySeedOut(BaseModel):
@@ -219,7 +219,7 @@ class ExpandPromptIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
 
 
 class ExpandedPromptOut(BaseModel):
@@ -238,7 +238,7 @@ class BriefGenerateIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
     expanded_concept: ExpandedPromptOut | None = None
 
 
@@ -253,7 +253,7 @@ class BriefFieldRegenerateIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
     current_brief: BriefOut
     field: str = Field(description="One of: title, description, characters_intro, themes, lesson")
 
@@ -285,7 +285,7 @@ class CreateDraftIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
     child_profile_id: uuid.UUID | None = None
     author_name: str | None = None
 
