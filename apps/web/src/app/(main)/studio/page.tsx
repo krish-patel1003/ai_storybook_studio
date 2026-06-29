@@ -308,7 +308,7 @@ function Mode1Preview({
       <div className="absolute inset-x-0 pointer-events-none" style={{ height: gradH, ...gradStyle }} />
       {/* Text zone */}
       <div className={`absolute inset-x-0 flex flex-col items-center ${justifyClass} overflow-hidden`}
-        style={{ height: textZone, padding: "8px 28px 24px 28px", ...posStyle }}>
+        style={{ height: textZone, padding: "8px 40px 24px 40px", ...posStyle }}>
         <p ref={textRef} style={{
           margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
           fontFamily: font.stack, fontWeight: font.weight,
@@ -372,7 +372,7 @@ function Mode2Preview({
     <div style={{
       flex: 1, background: settings.m2BgColor,
       display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "10px 28px", overflow: "hidden",
+      padding: "10px 40px", overflow: "hidden",
     }}>
       <p ref={textRef} style={{
         margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",

@@ -722,7 +722,7 @@ async def split_page(
         ),
         schema=_SplitResult,
         system="You are a children's book editor. Split story text cleanly at sentence boundaries.",
-        model="gemini-3.5-flash",
+        model="gemini-3.1-pro-preview",
         temperature=0.3,
     )
 
