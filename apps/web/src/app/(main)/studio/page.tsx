@@ -1315,7 +1315,7 @@ function StudioInner() {
             className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
             <Mic className="h-4 w-4" strokeWidth={2.5} /> Narrate
           </button>
-          <button onClick={() => setExportModal(true)}
+          <button onClick={async () => { await save(); setExportModal(true); }}
             className="flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-sm font-extrabold text-background chunky-border hover:-translate-y-0.5 transition-transform">
             <Download className="h-4 w-4" strokeWidth={2.5} /> Export
           </button>

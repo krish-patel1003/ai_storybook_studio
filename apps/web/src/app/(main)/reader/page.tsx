@@ -180,27 +180,24 @@ const StoryPage = forwardRef<
     return (
       <div ref={ref} className="relative overflow-hidden select-none"
         style={{ height: "100%", background: "#faf8f3", display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
-        {/* Image block — 63% */}
-        <div className="relative" style={{ flex: "0 0 63%" }}>
-          <div className="absolute inset-0 flex items-center justify-center bg-muted">
-            <ImageIcon className="h-10 w-10 opacity-20" strokeWidth={1.5} />
-          </div>
-          {imgUrl && (
+        {/* Image block — 63% (only when an image is available) */}
+        {imgUrl && (
+          <div className="relative" style={{ flex: "0 0 63%" }}>
             <img src={imgUrl} alt={`Page ${page.order}`}
               className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
               style={{ objectPosition: "center top" }} draggable={false} />
-          )}
-          {/* Gradient blend into text block */}
-          <div style={{
-            position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "40%",
-            background: isTextBottom
-              ? "linear-gradient(to bottom, transparent, #faf8f3)"
-              : "linear-gradient(to top, transparent, #faf8f3)",
-          }} />
-        </div>
-        {/* Text block — 37% */}
+            {/* Gradient blend into text block */}
+            <div style={{
+              position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "40%",
+              background: isTextBottom
+                ? "linear-gradient(to bottom, transparent, #faf8f3)"
+                : "linear-gradient(to top, transparent, #faf8f3)",
+            }} />
+          </div>
+        )}
+        {/* Text block */}
         <div ref={containerRef}
-          style={{ flex: 1, background: "#faf8f3", display: "flex", alignItems: isTextBottom ? "flex-end" : "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden" }}>
+          style={{ flex: imgUrl ? 1 : undefined, flexGrow: imgUrl ? undefined : 1, background: "#faf8f3", display: "flex", alignItems: isTextBottom ? "flex-end" : "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden" }}>
           {page.text ? (
             <p ref={textRef} className="w-full"
               style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : { color: "#1a1a2e" }) }}>

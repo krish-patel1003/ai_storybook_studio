@@ -75,6 +75,50 @@ def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
+def _stacked_image_crop(
+    image_bytes: bytes,
+    w_mm: float,
+    h_mm: float,
+    bg_rgb: tuple[int, int, int] = (250, 248, 243),
+    fade_frac: float = 0.40,
+    dpi: int = 150,
+) -> bytes:
+    """Crop/scale image to w_mm × h_mm and composite a gradient fade at the bottom
+    so the image blends into the text-block background colour (matching Mode2Preview)."""
+    from PIL import Image as PILImage
+    import numpy as np
+
+    mm_per_inch = 25.4
+    tw = int(w_mm * dpi / mm_per_inch)
+    th = int(h_mm * dpi / mm_per_inch)
+
+    img = PILImage.open(io.BytesIO(image_bytes))
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGB")
+    iw, ih = img.size
+    scale = max(tw / iw, th / ih)
+    nw, nh = int(iw * scale), int(ih * scale)
+    img = img.resize((nw, nh), PILImage.LANCZOS)
+    left = (nw - tw) // 2
+    top  = (nh - th) // 2
+    img  = img.crop((left, top, left + tw, top + th)).convert("RGBA")
+
+    # Build bottom-fade gradient: transparent at top, solid bg at bottom
+    fade_h = int(th * fade_frac)
+    arr = np.zeros((fade_h, tw, 4), dtype=np.uint8)
+    for row in range(fade_h):
+        alpha = int(255 * (row / fade_h))
+        arr[row, :] = [bg_rgb[0], bg_rgb[1], bg_rgb[2], alpha]
+    overlay = PILImage.fromarray(arr, "RGBA")
+    img.paste(overlay, (0, th - fade_h), overlay)
+
+    bg = PILImage.new("RGB", img.size, bg_rgb)
+    bg.paste(img, mask=img.split()[3])
+    buf = io.BytesIO()
+    bg.save(buf, format="JPEG", quality=90)
+    return buf.getvalue()
+
+
 # ── Image helpers ─────────────────────────────────────────────────────────────
 
 def _cover_crop(image_bytes: bytes, w_mm: float, h_mm: float, dpi: int = 150) -> bytes:
@@ -375,7 +419,7 @@ def _build_pdf_sync(
                 img_h_mm  = PAGE_H * IMG_FRAC
 
                 if page.image_bytes:
-                    img_bytes = _cover_crop(page.image_bytes, PAGE_W, img_h_mm)
+                    img_bytes = _stacked_image_crop(page.image_bytes, PAGE_W, img_h_mm)
                     pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=img_h_mm)
 
                 text_zone_top = img_h_mm
