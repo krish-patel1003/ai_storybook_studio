@@ -200,7 +200,7 @@ const StoryPage = forwardRef<
         </div>
         {/* Text block — 37% */}
         <div ref={containerRef}
-          style={{ flex: 1, background: "#faf8f3", display: "flex", alignItems: "center", justifyContent: "center", padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden" }}>
+          style={{ flex: 1, background: "#faf8f3", display: "flex", alignItems: isTextBottom ? "flex-end" : "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden" }}>
           {page.text ? (
             <p ref={textRef} className="w-full"
               style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : { color: "#1a1a2e" }) }}>
