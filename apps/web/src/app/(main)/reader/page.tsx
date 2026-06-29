@@ -172,7 +172,50 @@ const StoryPage = forwardRef<
   const gradientZone = "47%";
   const tPos   = page.text_position ?? "bottom";
   const tAlign = (page.text_align ?? "center") as React.CSSProperties["textAlign"];
+  const isStacked = page.text_mode === 2;
+  const isTextBottom = tPos !== "top";
 
+  // ── Stacked layout (Mode 2): image block + text block ──────────────────────
+  if (isStacked) {
+    return (
+      <div ref={ref} className="relative overflow-hidden select-none"
+        style={{ height: "100%", background: "#faf8f3", display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
+        {/* Image block — 63% */}
+        <div className="relative" style={{ flex: "0 0 63%" }}>
+          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+            <ImageIcon className="h-10 w-10 opacity-20" strokeWidth={1.5} />
+          </div>
+          {imgUrl && (
+            <img src={imgUrl} alt={`Page ${page.order}`}
+              className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
+              style={{ objectPosition: "center top" }} draggable={false} />
+          )}
+          {/* Gradient blend into text block */}
+          <div style={{
+            position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "40%",
+            background: isTextBottom
+              ? "linear-gradient(to bottom, transparent, #faf8f3)"
+              : "linear-gradient(to top, transparent, #faf8f3)",
+          }} />
+        </div>
+        {/* Text block — 37% */}
+        <div ref={containerRef}
+          style={{ flex: 1, background: "#faf8f3", display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 56px", overflow: "hidden" }}>
+          {page.text ? (
+            <p ref={textRef} className="w-full"
+              style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : { color: "#1a1a2e" }) }}>
+              {page.text}
+            </p>
+          ) : (
+            <p className="italic text-muted-foreground text-sm" style={{ fontFamily: effectiveFontStack }}>No text yet</p>
+          )}
+        </div>
+        <div className="absolute bottom-1.5 right-3 text-[10px] font-bold text-foreground/30 select-none">{page.order}</div>
+      </div>
+    );
+  }
+
+  // ── Overlay layout (Mode 1, default) ────────────────────────────────────────
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
       {/* Full-bleed illustration — placeholder always rendered, image fades in over it */}
