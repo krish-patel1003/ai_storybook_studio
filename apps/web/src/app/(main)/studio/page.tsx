@@ -847,6 +847,7 @@ function StudioInner() {
   const [pageIdx,  setPageIdx]  = useState(0);
   const [text,          setText]         = useState("");
   const [settings,     setSettings]     = useState<BookTextSettings>(DEFAULT_SETTINGS);
+  const bookSettingsRef = useRef<BookTextSettings>(DEFAULT_SETTINGS);
   const [boxes,        setBoxes]        = useState<CanvasBox[]>([]);
   const [activeBoxIdx, setActiveBoxIdx] = useState(0);
   const [pagePosition, setPagePosition] = useState<TextPosition>("bottom");
@@ -878,7 +879,9 @@ function StudioInner() {
   // Load settings from localStorage when book loads
   useEffect(() => {
     if (!book) return;
-    setSettings(loadSettings(book.id));
+    const loaded = loadSettings(book.id);
+    bookSettingsRef.current = loaded;
+    setSettings(loaded);
   }, [book?.id]);
 
   // Sync page data when switching
@@ -887,8 +890,9 @@ function StudioInner() {
     setText((page.text ?? "").replace(/\n{2,}/g, "\n"));
     setPagePosition((page.text_position as TextPosition) ?? (page.is_cover ? "bottom" : "bottom"));
     setPageAlign((page.text_align as TextAlign) ?? "center");
-    // Cover default style: Kranky font, white text, 32px — matches the reader's cover rendering.
-    // For content pages, font/size/color/mode are book-level (stay in settings), not per-page.
+    // Cover page: show its own style (Kranky/32/white by default, or saved per-page values).
+    // Content pages: always restore the true book-level settings from the ref, so that visiting
+    // the cover and coming back never corrupts the content-page font/size/color.
     if (page.is_cover && !page.font_family && !page.font_size && !page.text_color) {
       setSettings(prev => ({ ...prev, fontFamily: "kranky" as FontId, fontSize: 32, textColor: "#ffffff" }));
     } else if (page.is_cover && (page.font_size || page.font_family || page.text_color)) {
@@ -898,6 +902,8 @@ function StudioInner() {
         ...(page.font_family ? { fontFamily: page.font_family as FontId } : {}),
         ...(page.text_color  ? { textColor:  page.text_color }            : {}),
       }));
+    } else if (!page.is_cover) {
+      setSettings(bookSettingsRef.current);
     }
     // Load canvas boxes from localStorage, or init from page text
     const saved = loadBoxes(book.id, page.id);
@@ -1060,7 +1066,10 @@ function StudioInner() {
   function patchSettings(patch: Partial<BookTextSettings>) {
     setSettings(prev => {
       const next = { ...prev, ...patch };
-      if (book) saveSettings(book.id, next);
+      if (book && !page?.is_cover) {
+        bookSettingsRef.current = next;
+        saveSettings(book.id, next);
+      }
       return next;
     });
     markDirty();
