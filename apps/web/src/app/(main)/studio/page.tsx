@@ -372,7 +372,7 @@ function Mode2Preview({
     <div style={{
       flex: 1, background: settings.m2BgColor,
       display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "10px 56px", overflow: "hidden",
+      padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden",
     }}>
       <p ref={textRef} style={{
         margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
