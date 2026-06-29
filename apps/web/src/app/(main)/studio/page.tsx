@@ -1372,87 +1372,6 @@ function StudioInner() {
               </div>
             )}
 
-            {/* Cover page styling controls */}
-            {page?.is_cover && (
-              <>
-                <div className="border-t-[1.5px] border-foreground/15" />
-                <div>
-                  <SL>Text position</SL>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(["top", "center", "bottom"] as TextPosition[]).map(pos => (
-                      <button key={pos} onClick={() => { setPagePosition(pos); markDirty(); }}
-                        className={cn("rounded-xl py-1.5 text-xs font-extrabold capitalize chunky-border transition-colors",
-                          pagePosition === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                        {pos}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <SL>Text alignment</SL>
-                  <div className="flex gap-2">
-                    {([
-                      { id: "left"   as TextAlign, icon: AlignLeft   },
-                      { id: "center" as TextAlign, icon: AlignCenter },
-                      { id: "right"  as TextAlign, icon: AlignRight  },
-                    ] as const).map(({ id, icon: Icon }) => (
-                      <button key={id} onClick={() => { setPageAlign(id); markDirty(); }}
-                        className={cn("flex flex-1 items-center justify-center rounded-xl py-2 chunky-border transition-colors",
-                          pageAlign === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                        <Icon className="h-4 w-4" strokeWidth={2.5} />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <SL>Font</SL>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {READER_FONTS.map(f => (
-                      <button key={f.id} onClick={() => { patchSettings({ fontFamily: f.id as FontId }); markDirty(); }}
-                        className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors truncate px-2",
-                          settings.fontFamily === f.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}
-                        style={{ fontFamily: f.stack }}>
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <SL>Font size</SL>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => { patchSettings({ fontSize: Math.max(12, (settings.fontSize ?? 32) - 2) }); markDirty(); }}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl chunky-border bg-background hover:bg-muted">
-                      <Minus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    </button>
-                    <span className="flex-1 text-center text-sm font-extrabold">{settings.fontSize ?? 32}px</span>
-                    <button onClick={() => { patchSettings({ fontSize: Math.min(80, (settings.fontSize ?? 32) + 2) }); markDirty(); }}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl chunky-border bg-background hover:bg-muted">
-                      <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <SL>Text color</SL>
-                  <div className="flex flex-wrap gap-2">
-                    {["#ffffff", "#faf8f3", "#f5e642", "#f97316", "#1a1a2e", "#000000"].map(c => (
-                      <button key={c} onClick={() => { patchSettings({ textColor: c }); markDirty(); }}
-                        className={cn("h-7 w-7 rounded-lg chunky-border transition-all hover:scale-110",
-                          settings.textColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
-                        style={{ background: c }} />
-                    ))}
-                    <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer hover:scale-110 transition-all flex items-center justify-center",
-                      !["#ffffff","#faf8f3","#f5e642","#f97316","#1a1a2e","#000000"].includes(settings.textColor ?? "") ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
-                      style={{ background: ["#ffffff","#faf8f3","#f5e642","#f97316","#1a1a2e","#000000"].includes(settings.textColor ?? "") ? "#e5e7eb" : (settings.textColor ?? "#e5e7eb") }}
-                      title="Custom color">
-                      <Pipette className="h-3.5 w-3.5 pointer-events-none text-gray-600" strokeWidth={2} />
-                      <input type="color" value={settings.textColor ?? "#ffffff"}
-                        onChange={e => { patchSettings({ textColor: e.target.value }); markDirty(); }}
-                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
-                    </label>
-                  </div>
-                </div>
-              </>
-            )}
 
             {/* Back cover info */}
             {page?.is_back_cover && (
@@ -1643,6 +1562,41 @@ function StudioInner() {
         {/* ── Right panel: font + size + color ── */}
         <aside className="flex w-[320px] shrink-0 flex-col border-l-[2.5px] border-foreground bg-card overflow-y-auto">
           <div className="p-4 space-y-5">
+
+            {/* Cover-only: position + alignment */}
+            {page?.is_cover && (
+              <>
+                <div>
+                  <SL>Text position</SL>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(["top", "center", "bottom"] as TextPosition[]).map(pos => (
+                      <button key={pos} onClick={() => { setPagePosition(pos); markDirty(); }}
+                        className={cn("rounded-xl py-1.5 text-xs font-extrabold capitalize chunky-border transition-colors",
+                          pagePosition === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                        {pos}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <SL>Text alignment</SL>
+                  <div className="flex gap-2">
+                    {([
+                      { id: "left"   as TextAlign, icon: AlignLeft   },
+                      { id: "center" as TextAlign, icon: AlignCenter },
+                      { id: "right"  as TextAlign, icon: AlignRight  },
+                    ] as const).map(({ id, icon: Icon }) => (
+                      <button key={id} onClick={() => { setPageAlign(id); markDirty(); }}
+                        className={cn("flex flex-1 items-center justify-center rounded-xl py-2 chunky-border transition-colors",
+                          pageAlign === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                        <Icon className="h-4 w-4" strokeWidth={2.5} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t-[1.5px] border-foreground/15" />
+              </>
+            )}
 
             {/* Font family */}
             <div>
