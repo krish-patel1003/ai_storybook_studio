@@ -44,7 +44,7 @@ export function XsSpinner({ className }: { className?: string }) {
     <span
       aria-label="loading"
       className={cn("inline-block select-none leading-none", className)}
-      style={{ animation: "char-pulse 0.55s ease-in-out infinite", fontSize: "18px" }}
+      style={{ animation: "char-pulse 0.55s ease-in-out infinite", fontSize: "22px" }}
     >
       {char.emoji}
     </span>
@@ -58,7 +58,7 @@ export function SmSpinner({ className }: { className?: string }) {
     <span
       aria-label="loading"
       className={cn("inline-block select-none leading-none", className)}
-      style={{ animation: "char-wiggle 0.75s ease-in-out infinite", fontSize: "24px" }}
+      style={{ animation: "char-wiggle 0.75s ease-in-out infinite", fontSize: "29px" }}
     >
       {char.emoji}
     </span>
@@ -72,7 +72,7 @@ export function CornerSpinner({ className }: { className?: string }) {
     <span
       aria-label="loading"
       className={cn("select-none leading-none", className)}
-      style={{ animation: "corner-spin 1.1s ease-in-out infinite", display: "inline-block", fontSize: "14px" }}
+      style={{ animation: "corner-spin 1.1s ease-in-out infinite", display: "inline-block", fontSize: "17px" }}
     >
       {char.trail}
     </span>
@@ -91,7 +91,7 @@ export function MdSpinner({ className }: { className?: string }) {
         className="inline-block leading-none"
         style={{
           animation: `${char.anim} ${char.speed}s ease-in-out infinite`,
-          fontSize: "36px",
+          fontSize: "43px",
           willChange: "transform",
         }}
       >
@@ -138,7 +138,7 @@ export function LgSpinner({ className }: { className?: string }) {
           style={{
             animation: `${char.anim} ${char.speed}s ${char.anim === "char-flip" ? "linear" : "ease-in-out"} infinite`,
             display: "inline-block",
-            fontSize: "64px",
+            fontSize: "77px",
             willChange: "transform",
           }}
         >

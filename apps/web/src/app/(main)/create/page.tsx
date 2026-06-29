@@ -1100,7 +1100,7 @@ export default function CreatePage() {
   // ── Step 4 → editor ───────────────────────────────────────────────────────
 
   function handleApprovePages() {
-    router.push("/outline");
+    router.push("/editor");
   }
 
   // ── One-click ──────────────────────────────────────────────────────────────
