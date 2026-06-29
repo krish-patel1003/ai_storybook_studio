@@ -7,6 +7,7 @@ to a background worker, but the interface here is designed so that swap is trivi
 """
 
 import asyncio
+import re
 import uuid
 import logging
 from typing import Sequence
@@ -29,6 +30,16 @@ from src.generation.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_text(text: str) -> str:
+    """Collapse multiple consecutive blank lines into a single newline.
+
+    LLMs format prose with blank lines between paragraphs/dialogue, which
+    renders as large visual gaps in the studio and reader. Children's book
+    pages never need blank separators — a single newline is sufficient.
+    """
+    return re.sub(r"\n{2,}", "\n", text).strip()
 
 
 def _pipeline(model_config: ModelConfig | None = None) -> StoryPipeline:
@@ -330,7 +341,7 @@ async def update_page(
     if data.is_locked is not None:
         page.is_locked = data.is_locked
     if data.text is not None:
-        page.text = data.text
+        page.text = _clean_text(data.text)
     if data.text_align is not None:
         page.text_align = data.text_align
     if data.text_position is not None:
@@ -444,8 +455,8 @@ async def regenerate_page(
         orders={page.order},
     )
 
-    page.text = generated.text
-    page.word_count = generated.word_count
+    page.text = _clean_text(generated.text)
+    page.word_count = len(page.text.split())
     page.illustration_metadata = generated.illustration_metadata.model_dump()
     await db.commit()
 
@@ -715,8 +726,8 @@ async def split_page(
         temperature=0.3,
     )
 
-    part1 = split_result.part1.strip()
-    part2 = split_result.part2.strip()
+    part1 = _clean_text(split_result.part1)
+    part2 = _clean_text(split_result.part2)
 
     # Update current page with part1
     page.text = part1
@@ -981,8 +992,8 @@ async def _persist_result(db, book, brief, characters, beats, pages) -> None:
             emotional_note=beat.emotional_note if beat else "",
             characters_present=beat.characters_present if beat else [],
             setting_note=beat.setting_note if beat else "",
-            text=gpage.text,
-            word_count=gpage.word_count,
+            text=_clean_text(gpage.text),
+            word_count=len(_clean_text(gpage.text).split()),
             illustration_metadata=gpage.illustration_metadata.model_dump(),
         ))
 

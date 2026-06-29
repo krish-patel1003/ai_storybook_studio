@@ -884,7 +884,7 @@ function StudioInner() {
   // Sync page data when switching
   useEffect(() => {
     if (!page || !book) return;
-    setText(page.text ?? "");
+    setText((page.text ?? "").replace(/\n{2,}/g, "\n"));
     setPagePosition((page.text_position as TextPosition) ?? (page.is_cover ? "bottom" : "bottom"));
     setPageAlign((page.text_align as TextAlign) ?? "center");
     // Cover default style: Kranky font, white text, 32px — matches the reader's cover rendering.
