@@ -1253,9 +1253,9 @@ function StudioInner() {
 
       {/* ── Top bar ── */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b-[2.5px] border-foreground bg-card px-4">
-        <button onClick={() => router.push("/outline")}
+        <button onClick={() => router.push("/editor")}
           className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
-          <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Outline
+          <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Editor
         </button>
 
         <div className="flex-1 min-w-0">
