@@ -100,7 +100,7 @@ interface BookTextSettings {
   m1BgOpacity: number;
   // Mode 2 – stacked
   m2Position: "bottom" | "top";
-  m2BgColor: string;
+  bgColor: string;
 }
 
 const DEFAULT_SETTINGS: BookTextSettings = {
@@ -111,7 +111,7 @@ const DEFAULT_SETTINGS: BookTextSettings = {
   m1BgStyle: "frosted",
   m1BgOpacity: 0.82,
   m2Position: "bottom",
-  m2BgColor: "#faf8f3",
+  bgColor: "#faf8f3",
 };
 
 function loadSettings(bookId: string): BookTextSettings {
@@ -248,6 +248,13 @@ const PREVIEW_STYLE: React.CSSProperties = {
 // Reader bg color — used for the gradient blend
 const READER_BG = "#faf8f3";
 
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const num = parseInt(full, 16) || 0;
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
 // ── Center: Mode 1 preview (reader-exact gradient blend) ──────────────────────
 
 type DragHandle = "move" | "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l";
@@ -276,12 +283,13 @@ function Mode1Preview({
   const gradH    = "47%";
 
   // Exact gradient from reader/page.tsx
+  const [bgR, bgG, bgB] = hexToRgb(settings.bgColor);
   const gradStyle: React.CSSProperties =
     tPos === "top"
-      ? { top: 0, bottom: "auto", background: `linear-gradient(to top, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, ${READER_BG} 90%)` }
+      ? { top: 0, bottom: "auto", background: `linear-gradient(to top, transparent 0%, transparent 22%, rgba(${bgR},${bgG},${bgB},0.30) 42%, rgba(${bgR},${bgG},${bgB},0.78) 62%, rgba(${bgR},${bgG},${bgB},0.96) 78%, ${settings.bgColor} 90%)` }
     : tPos === "center"
-      ? { top: "26%", bottom: "26%", background: `radial-gradient(ellipse at center, rgba(250,248,243,0.90) 30%, transparent 90%)` }
-    : { bottom: 0, top: "auto", background: `linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, ${READER_BG} 90%)` };
+      ? { top: "26%", bottom: "26%", background: `radial-gradient(ellipse at center, rgba(${bgR},${bgG},${bgB},0.90) 30%, transparent 90%)` }
+    : { bottom: 0, top: "auto", background: `linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(${bgR},${bgG},${bgB},0.30) 42%, rgba(${bgR},${bgG},${bgB},0.78) 62%, rgba(${bgR},${bgG},${bgB},0.96) 78%, ${settings.bgColor} 90%)` };
 
   const posStyle: React.CSSProperties =
     tPos === "top"    ? { top: 0, bottom: "auto" }
@@ -295,7 +303,7 @@ function Mode1Preview({
 
   return (
     <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
-      style={{ ...PREVIEW_STYLE, background: READER_BG }}>
+      style={{ ...PREVIEW_STYLE, background: settings.bgColor }}>
       {blobUrl ? (
         <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: "center top" }} draggable={false} />
@@ -362,15 +370,15 @@ function Mode2Preview({
         [isTextBottom ? "bottom" : "top"]: 0,
         left: 0, right: 0, height: "45%",
         background: isTextBottom
-          ? `linear-gradient(to bottom, transparent, ${settings.m2BgColor})`
-          : `linear-gradient(to top, transparent, ${settings.m2BgColor})`,
+          ? `linear-gradient(to bottom, transparent, ${settings.bgColor})`
+          : `linear-gradient(to top, transparent, ${settings.bgColor})`,
       }} />
     </div>
   );
 
   const textBlock = (
     <div style={{
-      flex: 1, minHeight: 0, background: settings.m2BgColor,
+      flex: 1, minHeight: 0, background: settings.bgColor,
       display: "flex", alignItems: "flex-start", justifyContent: "center",
       padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden",
     }}>
@@ -876,12 +884,28 @@ function StudioInner() {
   const page  = pages[pageIdx] ?? null;
   const illJob = useIllJob(book?.id ?? "");
 
-  // Load settings from localStorage when book loads
+  // Load settings when book loads. localStorage is only a fallback for brand-new
+  // books that haven't been saved yet — once a content page has persisted style
+  // fields, the backend is authoritative so studio always shows what's actually
+  // saved (and what the reader/PDF export will render), even on a fresh browser.
   useEffect(() => {
     if (!book) return;
     const loaded = loadSettings(book.id);
-    bookSettingsRef.current = loaded;
-    setSettings(loaded);
+    const styled = book.pages.find(p =>
+      !p.is_cover && !p.is_back_cover &&
+      (p.text_mode != null || p.font_size != null || p.font_family != null || p.text_color != null || p.bg_color != null)
+    );
+    const resolved: BookTextSettings = styled ? {
+      ...loaded,
+      mode:       (styled.text_mode as TextMode) ?? loaded.mode,
+      fontSize:   styled.font_size ?? loaded.fontSize,
+      fontFamily: (styled.font_family as FontId) ?? loaded.fontFamily,
+      textColor:  styled.text_color ?? loaded.textColor,
+      bgColor:    styled.bg_color ?? loaded.bgColor,
+    } : loaded;
+    bookSettingsRef.current = resolved;
+    setSettings(resolved);
+    saveSettings(book.id, resolved);
   }, [book?.id]);
 
   // Sync page data when switching
@@ -1014,6 +1038,7 @@ function StudioInner() {
               font_size:      st.fontSize,
               text_color:     st.textColor,
               text_mode:      st.mode,
+              bg_color:       st.bgColor,
               canvas_overlay: overlayToSave,
             })
           : Promise.resolve(null),
@@ -1510,18 +1535,18 @@ function StudioInner() {
                   <SL>Text area color</SL>
                   <div className="flex flex-wrap gap-2">
                     {["#faf8f3", "#ffffff", "#1a1a2e", "#141228", "#fff7ed", "#f0f9ff"].map(c => (
-                      <button key={c} onClick={() => patchSettings({ m2BgColor: c })}
+                      <button key={c} onClick={() => patchSettings({ bgColor: c })}
                         className={cn("h-7 w-7 rounded-lg chunky-border transition-all hover:scale-110",
-                          settings.m2BgColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
+                          settings.bgColor === c ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
                         style={{ background: c }} />
                     ))}
                     <label className={cn("relative h-7 w-7 rounded-lg chunky-border cursor-pointer hover:scale-110 transition-all flex items-center justify-center",
-                      !["#faf8f3","#ffffff","#1a1a2e","#141228","#fff7ed","#f0f9ff"].includes(settings.m2BgColor) ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
-                      style={{ background: ["#faf8f3","#ffffff","#1a1a2e","#141228","#fff7ed","#f0f9ff"].includes(settings.m2BgColor) ? "#e5e7eb" : settings.m2BgColor }}
+                      !["#faf8f3","#ffffff","#1a1a2e","#141228","#fff7ed","#f0f9ff"].includes(settings.bgColor) ? "ring-2 ring-primary ring-offset-1 scale-110" : "")}
+                      style={{ background: ["#faf8f3","#ffffff","#1a1a2e","#141228","#fff7ed","#f0f9ff"].includes(settings.bgColor) ? "#e5e7eb" : settings.bgColor }}
                       title="Custom color">
                       <Pipette className="h-3.5 w-3.5 pointer-events-none text-gray-600" strokeWidth={2} />
-                      <input type="color" value={settings.m2BgColor}
-                        onChange={e => patchSettings({ m2BgColor: e.target.value })}
+                      <input type="color" value={settings.bgColor}
+                        onChange={e => patchSettings({ bgColor: e.target.value })}
                         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
                     </label>
                   </div>

@@ -66,6 +66,7 @@ class ExportPage:
     font_size: float | None = None
     text_color: str | None = None
     text_mode: int | None = None  # 1=overlay (default), 2=stacked
+    bg_color: str | None = None   # page/paper background — matches studio + reader
 
 
 def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
@@ -256,11 +257,13 @@ def _story_page_composite(
     text_zone_frac: float = 0.36,
     text_position: str = "bottom",
     dpi: int = 150,
+    paper: tuple[int, int, int] = (250, 248, 243),
 ) -> bytes:
     """
-    Crop/scale the image to fill the page, then composite a paper-white
+    Crop/scale the image to fill the page, then composite a paper-colored
     gradient behind the text zone (direction depends on text_position).
-    Returns JPEG bytes.
+    `paper` matches the page's saved bg_color so the export is pixel-identical
+    to studio/reader. Returns JPEG bytes.
     """
     import numpy as np
     from PIL import Image as PILImage
@@ -282,11 +285,10 @@ def _story_page_composite(
     img = img.crop((left, top, left + tw, top + th))
 
     if img.mode == "RGBA":
-        bg = PILImage.new("RGB", img.size, (250, 248, 243))
+        bg = PILImage.new("RGB", img.size, paper)
         bg.paste(img, mask=img.split()[3])
         img = bg
 
-    paper = (250, 248, 243)
     arr   = np.zeros((th, tw, 4), dtype=np.uint8)
     bleed = 0.16   # gradient extends this far beyond the text zone edge
 
@@ -405,10 +407,12 @@ def _build_pdf_sync(
             else:
                 pg_r, pg_g, pg_b = 30, 28, 45  # default dark navy
 
+            bg_rgb = _hex_to_rgb(page.bg_color) if getattr(page, "bg_color", None) else (250, 248, 243)
+
             _ALIGN = {"left": "L", "center": "C", "right": "R"}
             pdf_align = _ALIGN.get(t_align, "C")
 
-            pdf.set_fill_color(250, 248, 243)
+            pdf.set_fill_color(*bg_rgb)
             pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
 
             if t_mode == 2:
@@ -460,6 +464,7 @@ def _build_pdf_sync(
                         page.image_bytes, PAGE_W, PAGE_H,
                         text_zone_frac=TEXT_ZONE_FRAC,
                         text_position=t_pos,
+                        paper=bg_rgb,
                     )
                     pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=PAGE_H)
 

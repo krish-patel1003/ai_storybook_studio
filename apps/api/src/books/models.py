@@ -174,5 +174,6 @@ class Page(Base):
     font_family: Mapped[str | None] = mapped_column(String(50), nullable=True)
     text_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     text_mode: Mapped[int | None] = mapped_column(nullable=True)
+    bg_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     book: Mapped["Book"] = relationship(back_populates="pages")

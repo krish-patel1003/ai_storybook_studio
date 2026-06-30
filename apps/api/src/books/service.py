@@ -356,6 +356,8 @@ async def update_page(
         page.text_color = data.text_color
     if data.text_mode is not None:
         page.text_mode = data.text_mode
+    if data.bg_color is not None:
+        page.bg_color = data.bg_color
 
     await db.commit()
     return await get_book(db, book_id, user_id)
@@ -380,6 +382,8 @@ async def bulk_apply_page_style(
             page.text_color = data.text_color
         if data.text_mode is not None:
             page.text_mode = data.text_mode
+        if data.bg_color is not None:
+            page.bg_color = data.bg_color
         if "canvas_overlay" in data.model_fields_set:
             page.canvas_overlay = data.canvas_overlay
     await db.commit()
@@ -937,6 +941,7 @@ async def build_export_pages(db: AsyncSession, book: Book) -> list:
             font_size=getattr(page, "font_size", None),
             text_color=getattr(page, "text_color", None),
             text_mode=getattr(page, "text_mode", None),
+            bg_color=getattr(page, "bg_color", None),
         ))
     return result
 

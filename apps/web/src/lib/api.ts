@@ -91,6 +91,7 @@ export interface PageOut {
   font_family: string | null;
   text_color: string | null;
   text_mode: number | null;
+  bg_color: string | null;
 }
 
 export function pageImageUrl(bookId: string, pageId: string): string {
@@ -280,6 +281,7 @@ export interface UpdatePageIn {
   font_family?: string;
   text_color?: string;
   text_mode?: number;
+  bg_color?: string;
 }
 
 export interface BulkTextStyleIn {
@@ -487,7 +489,7 @@ export const api = {
 
     bulkPageStyle: (token: string, bookId: string, data: {
       font_family?: string; font_size?: number; text_color?: string;
-      text_mode?: number; canvas_overlay?: object | null;
+      text_mode?: number; bg_color?: string; canvas_overlay?: object | null;
     }) =>
       request<BookOut>(`/books/${bookId}/pages/style`, {
         method: "PATCH",

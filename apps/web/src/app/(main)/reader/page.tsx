@@ -63,6 +63,13 @@ function useReaderFont(): [FontId, (f: FontId) => void] {
   return [font, setFont];
 }
 
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const num = parseInt(full, 16) || 0;
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
 // ── Cover page — full-bleed image with title + author overlay ─────────────────
 
 const CoverPage = forwardRef<
@@ -143,6 +150,9 @@ const StoryPage = forwardRef<
   // page.font_size is in px; convert to rem for the reader's sizing system
   const effectiveFontSize   = page.font_size ? page.font_size / 16 : fontSize;
   const effectiveTextColor  = page.text_color ?? undefined;
+  // Per-page background — matches whatever was saved in studio (Mode1Preview / Mode2Preview)
+  const effectiveBgColor    = page.bg_color ?? "#faf8f3";
+  const [bgR, bgG, bgB]     = hexToRgb(effectiveBgColor);
 
   // Auto-shrink font for overlay mode only (stacked clips like the studio does).
   useEffect(() => {
@@ -180,7 +190,7 @@ const StoryPage = forwardRef<
   if (isStacked) {
     return (
       <div ref={ref} className="relative overflow-hidden select-none"
-        style={{ height: "100%", background: "#faf8f3", display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
+        style={{ height: "100%", background: effectiveBgColor, display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
         {/* Image block — 80% */}
         {imgUrl && (
           <div className="relative" style={{ flex: "0 0 80%", minHeight: 0 }}>
@@ -191,14 +201,14 @@ const StoryPage = forwardRef<
             <div style={{
               position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "45%",
               background: isTextBottom
-                ? "linear-gradient(to bottom, transparent, #faf8f3)"
-                : "linear-gradient(to top, transparent, #faf8f3)",
+                ? `linear-gradient(to bottom, transparent, ${effectiveBgColor})`
+                : `linear-gradient(to top, transparent, ${effectiveBgColor})`,
             }} />
           </div>
         )}
         {/* Text block — identical styling to Mode2Preview in studio */}
         <div ref={containerRef}
-          style={{ flex: 1, minHeight: 0, background: "#faf8f3", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden" }}>
+          style={{ flex: 1, minHeight: 0, background: effectiveBgColor, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden" }}>
           {page.text ? (
             <p ref={textRef} style={{
               margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
@@ -220,7 +230,7 @@ const StoryPage = forwardRef<
 
   // ── Overlay layout (Mode 1, default) ────────────────────────────────────────
   return (
-    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#faf8f3" }}>
+    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: effectiveBgColor }}>
       {/* Full-bleed illustration — placeholder always rendered, image fades in over it */}
       <div className="absolute inset-0 flex items-center justify-center bg-muted">
         <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
@@ -238,9 +248,9 @@ const StoryPage = forwardRef<
       {/* Gradient blending layer — direction follows text position */}
       {(() => {
         const gradStyle: React.CSSProperties =
-          tPos === "top"    ? { top: 0, bottom: "auto", background: "linear-gradient(to top, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, #faf8f3 90%)" } :
-          tPos === "center" ? { top: "26%", bottom: "26%", background: "radial-gradient(ellipse at center, rgba(250,248,243,0.90) 30%, transparent 90%)" } :
-          { bottom: 0, top: "auto", background: "linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(250,248,243,0.30) 42%, rgba(250,248,243,0.78) 62%, rgba(250,248,243,0.96) 78%, #faf8f3 90%)" };
+          tPos === "top"    ? { top: 0, bottom: "auto", background: `linear-gradient(to top, transparent 0%, transparent 22%, rgba(${bgR},${bgG},${bgB},0.30) 42%, rgba(${bgR},${bgG},${bgB},0.78) 62%, rgba(${bgR},${bgG},${bgB},0.96) 78%, ${effectiveBgColor} 90%)` } :
+          tPos === "center" ? { top: "26%", bottom: "26%", background: `radial-gradient(ellipse at center, rgba(${bgR},${bgG},${bgB},0.90) 30%, transparent 90%)` } :
+          { bottom: 0, top: "auto", background: `linear-gradient(to bottom, transparent 0%, transparent 22%, rgba(${bgR},${bgG},${bgB},0.30) 42%, rgba(${bgR},${bgG},${bgB},0.78) 62%, rgba(${bgR},${bgG},${bgB},0.96) 78%, ${effectiveBgColor} 90%)` };
         return (
           <div
             className="absolute inset-x-0 pointer-events-none"

@@ -46,6 +46,7 @@ class UpdatePageIn(BaseModel):
     font_family: str | None = None
     text_color: str | None = None
     text_mode: int | None = None
+    bg_color: str | None = None
 
 
 class BulkTextStyleIn(BaseModel):
@@ -64,6 +65,7 @@ class BulkPageStyleIn(BaseModel):
     font_size: float | None = None
     text_color: str | None = None
     text_mode: int | None = None
+    bg_color: str | None = None
     canvas_overlay: dict | None = None
 
 
@@ -136,6 +138,7 @@ class PageOut(BaseModel):
     font_family: str | None = None
     text_color: str | None = None
     text_mode: int | None = None
+    bg_color: str | None = None
 
     model_config = {"from_attributes": True}
 
