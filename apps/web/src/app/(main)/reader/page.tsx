@@ -144,8 +144,9 @@ const StoryPage = forwardRef<
   const effectiveFontSize   = page.font_size ? page.font_size / 16 : fontSize;
   const effectiveTextColor  = page.text_color ?? undefined;
 
-  // Auto-shrink font if text overflows the container.
+  // Auto-shrink font for overlay mode only (stacked clips like the studio does).
   useEffect(() => {
+    if (page.text_mode === 2) return;
     const el = textRef.current;
     const container = containerRef.current;
     if (!el || !container) return;
@@ -166,7 +167,7 @@ const StoryPage = forwardRef<
     const ro = new ResizeObserver(fit);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [page.text, effectiveFontStack, effectiveFontSize]);
+  }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize]);
 
   const textZone     = "38%";
   const gradientZone = "47%";
@@ -180,27 +181,32 @@ const StoryPage = forwardRef<
     return (
       <div ref={ref} className="relative overflow-hidden select-none"
         style={{ height: "100%", background: "#faf8f3", display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
-        {/* Image block — 63% (only when an image is available) */}
+        {/* Image block — 80% */}
         {imgUrl && (
-          <div className="relative" style={{ flex: "0 0 63%" }}>
+          <div className="relative" style={{ flex: "0 0 80%", minHeight: 0 }}>
             <img src={imgUrl} alt={`Page ${page.order}`}
               className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
               style={{ objectPosition: "center top" }} draggable={false} />
             {/* Gradient blend into text block */}
             <div style={{
-              position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "40%",
+              position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "45%",
               background: isTextBottom
                 ? "linear-gradient(to bottom, transparent, #faf8f3)"
                 : "linear-gradient(to top, transparent, #faf8f3)",
             }} />
           </div>
         )}
-        {/* Text block */}
+        {/* Text block — identical styling to Mode2Preview in studio */}
         <div ref={containerRef}
-          style={{ flex: imgUrl ? 1 : undefined, flexGrow: imgUrl ? undefined : 1, minHeight: 0, background: "#faf8f3", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden" }}>
+          style={{ flex: 1, minHeight: 0, background: "#faf8f3", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden" }}>
           {page.text ? (
-            <p ref={textRef} className="w-full"
-              style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.6, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : { color: "#1a1a2e" }) }}>
+            <p ref={textRef} style={{
+              margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
+              fontFamily: effectiveFontStack, fontWeight: effectiveFontWeight,
+              fontSize: page.font_size ? `${page.font_size}px` : `${effectiveFontSize * 16}px`,
+              lineHeight: 1.6, textAlign: tAlign,
+              color: effectiveTextColor ?? "#1a1a2e",
+            }}>
               {page.text}
             </p>
           ) : (
