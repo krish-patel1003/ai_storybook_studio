@@ -212,7 +212,7 @@ const StoryPage = forwardRef<
         </div>
         {/* Text block — identical styling to Mode2Preview in studio */}
         <div ref={containerRef}
-          style={{ flex: 1, minHeight: 0, background: effectiveBgColor, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden" }}>
+          style={{ flex: 1, minHeight: 0, background: effectiveBgColor, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px", overflow: "hidden" }}>
           {page.text ? (
             <p ref={textRef} style={{
               margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",

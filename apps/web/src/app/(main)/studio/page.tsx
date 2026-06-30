@@ -380,7 +380,7 @@ function Mode2Preview({
     <div style={{
       flex: 1, minHeight: 0, background: settings.bgColor,
       display: "flex", alignItems: "flex-start", justifyContent: "center",
-      padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden",
+      padding: "24px", overflow: "hidden",
     }}>
       <p ref={textRef} style={{
         margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",
