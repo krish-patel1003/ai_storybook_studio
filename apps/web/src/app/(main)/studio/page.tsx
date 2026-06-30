@@ -372,7 +372,7 @@ function Mode2Preview({
     <div style={{
       flex: 1, minHeight: 0, background: settings.m2BgColor,
       display: "flex", alignItems: "flex-start", justifyContent: "center",
-      padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden",
+      padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden",
     }}>
       <p ref={textRef} style={{
         margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
@@ -1171,8 +1171,12 @@ function StudioInner() {
     try {
       const updated = await api.books.splitPage(token, book.id, page.id);
       setBook(updated as unknown as BookOut);
-      toast.success("Page split — a new page was added after this one");
       setTextOverflows(false);
+      // Navigate to the newly inserted page so the user can see it and so
+      // the sync useEffect re-runs (same page.id means it won't fire otherwise)
+      const newIdx = pageIdx + 1;
+      setPageIdx(newIdx);
+      toast.success(`Page split! ✓ Page ${page.order} shortened — new page ${page.order + 1} added below it`);
     } catch { toast.error("Split failed"); }
     finally { setSplitting(false); }
   }
