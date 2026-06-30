@@ -278,7 +278,7 @@ const StoryPage = forwardRef<
           <div
             ref={containerRef}
             className={`absolute inset-x-0 flex flex-col items-center ${justifyClass} overflow-hidden`}
-            style={{ height: textZone, padding: "8px 40px 8px 40px", ...posStyle }}
+            style={{ height: textZone, padding: "24px", ...posStyle }}
           >
             {page.text ? (
               <p

@@ -316,7 +316,7 @@ function Mode1Preview({
       <div className="absolute inset-x-0 pointer-events-none" style={{ height: gradH, ...gradStyle }} />
       {/* Text zone */}
       <div className={`absolute inset-x-0 flex flex-col items-center ${justifyClass} overflow-hidden`}
-        style={{ height: textZone, padding: "8px 40px 8px 40px", ...posStyle }}>
+        style={{ height: textZone, padding: "24px", ...posStyle }}>
         <p ref={textRef} style={{
           margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
           fontFamily: font.stack, fontWeight: font.weight,
