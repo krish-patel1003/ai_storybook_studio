@@ -33,13 +33,16 @@ logger = logging.getLogger(__name__)
 
 
 def _clean_text(text: str) -> str:
-    """Collapse multiple consecutive blank lines into a single newline.
+    """Strip all newlines from page text.
 
-    LLMs format prose with blank lines between paragraphs/dialogue, which
-    renders as large visual gaps in the studio and reader. Children's book
-    pages never need blank separators — a single newline is sufficient.
+    LLMs occasionally insert newlines between sentences and dialogue lines,
+    but picture-book page text is always a single flowing prose block —
+    the renderer does word-wrap; explicit line breaks just cause visible gaps.
+    Replace every newline (and any surrounding whitespace) with a single space,
+    then collapse any doubled spaces that result.
     """
-    return re.sub(r"\n{2,}", "\n", text).strip()
+    collapsed = re.sub(r"\s*\n\s*", " ", text)
+    return re.sub(r" {2,}", " ", collapsed).strip()
 
 
 def _pipeline(model_config: ModelConfig | None = None) -> StoryPipeline:
