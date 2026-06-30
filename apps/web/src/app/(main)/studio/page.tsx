@@ -1183,13 +1183,21 @@ function StudioInner() {
       if (newPageId) {
         toast.success(`Page ${page.order} split — illustrating new page ${page.order + 1}…`);
         setReIllLoading(true);
-        api.books.illustratePage(token, book.id, newPageId)
-          .then(withImage => {
-            setBook(withImage as unknown as BookOut);
-            toast.success(`Page ${page.order + 1} illustrated!`);
-          })
-          .catch(() => toast.error("Auto-illustration failed — click Illustrate to retry"))
-          .finally(() => setReIllLoading(false));
+        (async () => {
+          // Gemini image generation occasionally fails transiently even with
+          // backend retries; one extra client-side attempt avoids forcing the
+          // user to manually click Illustrate.
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const withImage = await api.books.illustratePage(token, book.id, newPageId);
+              setBook(withImage as unknown as BookOut);
+              toast.success(`Page ${page.order + 1} illustrated!`);
+              return;
+            } catch {
+              if (attempt === 1) toast.error("Auto-illustration failed — click Illustrate to retry");
+            }
+          }
+        })().finally(() => setReIllLoading(false));
       } else {
         toast.success(`Page ${page.order} split — new page ${page.order + 1} added`);
       }

@@ -62,9 +62,9 @@ async function startIllJob(
   token: string,
   book: BookOut,
   onPageDone: (updated: BookOut) => void,
-) {
+): Promise<number> {
   const bookId = book.id;
-  if (_job?.bookId === bookId && _job.done < _job.total) return;
+  if (_job?.bookId === bookId && _job.done < _job.total) return 0;
 
   const pages = [...book.pages].sort((a, b) => a.order - b.order);
 
@@ -90,34 +90,71 @@ async function startIllJob(
     if (_job?.bookId === bookId) { _job.sheetsGenerating = false; _notifyJob(); }
   }
 
+  // Gemini image generation has a real-world rate limit. Firing every page's
+  // illustrate request at once (unbounded Promise.all) stampedes the API and
+  // a chunk of pages come back as transient errors — which used to surface as
+  // a silent failure requiring the user to click "Illustrate all" again.
+  // A small concurrency pool keeps us under the limit so a single click
+  // actually finishes the whole book.
+  const CONCURRENCY = 3;
+
+  async function runPage(page: (typeof pages)[number]): Promise<boolean> {
+    try {
+      const updated = await api.books.illustratePage(token, bookId, page.id);
+      if (_job?.bookId === bookId) {
+        _job.pageStatuses[page.id] = "done";
+        _onPageDone?.(updated);
+        _notifyJob();
+      }
+      return true;
+    } catch {
+      if (_job?.bookId === bookId) {
+        _job.pageStatuses[page.id] = "error";
+        _notifyJob();
+      }
+      return false;
+    }
+  }
+
+  async function runPool(targets: typeof pages) {
+    let i = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, targets.length) }, async () => {
+        while (i < targets.length) {
+          const page = targets[i++];
+          const ok = await runPage(page);
+          if (_job?.bookId === bookId) { _job.done++; _notifyJob(); }
+          void ok;
+        }
+      }),
+    );
+  }
+
   for (const p of pages) {
     if (_job?.bookId === bookId) _job.pageStatuses[p.id] = "generating";
   }
   _notifyJob();
 
-  await Promise.all(
-    pages.map(async (page) => {
-      try {
-        const updated = await api.books.illustratePage(token, bookId, page.id);
-        if (_job?.bookId === bookId) {
-          _job.pageStatuses[page.id] = "done";
-          _job.done++;
-          _onPageDone?.(updated);
-          _notifyJob();
-        }
-      } catch {
-        if (_job?.bookId === bookId) {
-          _job.pageStatuses[page.id] = "error";
-          _job.done++;
-          _notifyJob();
-        }
-      }
-    }),
-  );
+  await runPool(pages);
+
+  // Auto-retry pages that failed (transient rate-limit/API errors) once more
+  // before giving up, instead of forcing the user to re-click the button.
+  for (let retry = 0; retry < 2; retry++) {
+    const failed = pages.filter((p) => _job?.pageStatuses[p.id] === "error");
+    if (failed.length === 0 || _job?.bookId !== bookId) break;
+    if (_job) { _job.done -= failed.length; }
+    for (const p of failed) { if (_job) _job.pageStatuses[p.id] = "generating"; }
+    _notifyJob();
+    await runPool(failed);
+  }
+
+  const failedCount = pages.filter((p) => _job?.pageStatuses[p.id] === "error").length;
 
   setTimeout(() => {
     if (_job?.bookId === bookId) { _job = null; _notifyJob(); }
   }, 5000);
+
+  return failedCount;
 }
 
 // ── Timer ─────────────────────────────────────────────────────────────────────
@@ -465,9 +502,13 @@ export default function EditorPage() {
   async function handleIllustrate() {
     if (!token || !book || isRunning) return;
     timer.start();
-    await startIllJob(token, book, (updated) => updateBook(updated));
+    const failedCount = await startIllJob(token, book, (updated) => updateBook(updated));
     timer.stop();
-    toast.success("All illustrations complete!");
+    if (failedCount > 0) {
+      toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to illustrate — click Illustrate all to retry`);
+    } else {
+      toast.success("All illustrations complete!");
+    }
   }
 
   async function handleGenerateSingle(page: PageOut) {
