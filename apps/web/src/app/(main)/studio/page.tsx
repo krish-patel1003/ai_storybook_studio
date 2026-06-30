@@ -104,7 +104,7 @@ interface BookTextSettings {
 }
 
 const DEFAULT_SETTINGS: BookTextSettings = {
-  mode: 1,
+  mode: 2,
   fontSize: 15,
   fontFamily: "nunito",
   textColor: "#000000",
@@ -119,7 +119,7 @@ function loadSettings(bookId: string): BookTextSettings {
     const raw = localStorage.getItem(`studio-settings-${bookId}`);
     if (raw) {
       const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-      if (parsed.mode === 3) parsed.mode = 1; // canvas mode disabled
+      if (parsed.mode === 3) parsed.mode = 2; // canvas mode disabled
       return parsed;
     }
   } catch {}
