@@ -370,7 +370,7 @@ function Mode2Preview({
 
   const textBlock = (
     <div style={{
-      flex: 1, background: settings.m2BgColor,
+      flex: 1, minHeight: 0, background: settings.m2BgColor,
       display: "flex", alignItems: "flex-start", justifyContent: "center",
       padding: isTextBottom ? "16px 56px 28px 56px" : "28px 56px 16px 56px", overflow: "hidden",
     }}>
