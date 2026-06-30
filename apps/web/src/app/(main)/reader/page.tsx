@@ -191,27 +191,32 @@ const StoryPage = forwardRef<
     return (
       <div ref={ref} className="relative overflow-hidden select-none"
         style={{ height: "100%", background: effectiveBgColor, display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
-        {/* Image block — 80% */}
-        {imgUrl && (
-          <div className="relative" style={{ flex: "0 0 80%", minHeight: 0 }}>
+        {/* Image block — always rendered so the 80/20 split holds even before image loads */}
+        <div className="relative" style={{ flex: "0 0 80%", minHeight: 0 }}>
+          {imgUrl ? (
             <img src={imgUrl} alt={`Page ${page.order}`}
               className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
               style={{ objectPosition: "center top" }} draggable={false} />
-            {/* Gradient blend into text block */}
-            <div style={{
-              position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "45%",
-              background: isTextBottom
-                ? `linear-gradient(to bottom, transparent, ${effectiveBgColor})`
-                : `linear-gradient(to top, transparent, ${effectiveBgColor})`,
-            }} />
-          </div>
-        )}
+          ) : (
+            <div className="absolute inset-0 bg-muted flex items-center justify-center">
+              <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
+            </div>
+          )}
+          {/* Gradient blend into text block */}
+          <div style={{
+            position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "45%",
+            background: isTextBottom
+              ? `linear-gradient(to bottom, transparent, ${effectiveBgColor})`
+              : `linear-gradient(to top, transparent, ${effectiveBgColor})`,
+          }} />
+        </div>
         {/* Text block — identical styling to Mode2Preview in studio */}
         <div ref={containerRef}
           style={{ flex: 1, minHeight: 0, background: effectiveBgColor, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden" }}>
           {page.text ? (
             <p ref={textRef} style={{
-              margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
+              margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",
+              whiteSpace: "pre-wrap", wordBreak: "break-word",
               fontFamily: effectiveFontStack, fontWeight: effectiveFontWeight,
               fontSize: page.font_size ? `${page.font_size}px` : `${effectiveFontSize * 16}px`,
               lineHeight: 1.6, textAlign: tAlign,

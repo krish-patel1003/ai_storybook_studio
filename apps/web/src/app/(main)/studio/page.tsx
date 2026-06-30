@@ -383,7 +383,8 @@ function Mode2Preview({
       padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden",
     }}>
       <p ref={textRef} style={{
-        margin: 0, width: "100%", whiteSpace: "pre-wrap", wordBreak: "break-word",
+        margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",
+        whiteSpace: "pre-wrap", wordBreak: "break-word",
         fontFamily: font.stack, fontWeight: font.weight,
         fontSize: settings.fontSize, color: settings.textColor,
         textAlign: align as React.CSSProperties["textAlign"], lineHeight: 1.6,
