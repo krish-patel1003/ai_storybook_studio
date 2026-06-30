@@ -180,9 +180,9 @@ const StoryPage = forwardRef<
     return (
       <div ref={ref} className="relative overflow-hidden select-none"
         style={{ height: "100%", background: "#faf8f3", display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
-        {/* Image block — 55% (only when an image is available) */}
+        {/* Image block — 63% (only when an image is available) */}
         {imgUrl && (
-          <div className="relative" style={{ flex: "0 0 55%" }}>
+          <div className="relative" style={{ flex: "0 0 63%" }}>
             <img src={imgUrl} alt={`Page ${page.order}`}
               className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
               style={{ objectPosition: "center top" }} draggable={false} />
@@ -200,7 +200,7 @@ const StoryPage = forwardRef<
           style={{ flex: imgUrl ? 1 : undefined, flexGrow: imgUrl ? undefined : 1, minHeight: 0, background: "#faf8f3", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isTextBottom ? "16px 56px 44px 56px" : "44px 56px 16px 56px", overflow: "hidden" }}>
           {page.text ? (
             <p ref={textRef} className="w-full"
-              style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : { color: "#1a1a2e" }) }}>
+              style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.6, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : { color: "#1a1a2e" }) }}>
               {page.text}
             </p>
           ) : (

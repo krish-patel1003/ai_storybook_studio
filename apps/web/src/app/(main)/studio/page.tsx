@@ -347,7 +347,7 @@ function Mode2Preview({
   const isTextBottom = position !== "top";
 
   const imgBlock = (
-    <div className="relative" style={{ flex: "0 0 55%", minHeight: 0 }}>
+    <div className="relative" style={{ flex: "0 0 63%", minHeight: 0 }}>
       {blobUrl ? (
         <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: "center top" }} draggable={false} />
@@ -1006,7 +1006,7 @@ function StudioInner() {
       }
 
       // Apply book-level style (mode, font, size, color, overlay) to ALL content pages
-      const [updated] = await Promise.all([
+      const [pageResult, bulkResult] = await Promise.all([
         api.books.updatePage(token, book.id, page.id, pagePayload as Parameters<typeof api.books.updatePage>[3]),
         !page.is_cover && !page.is_back_cover
           ? api.books.bulkPageStyle(token, book.id, {
@@ -1018,7 +1018,9 @@ function StudioInner() {
             })
           : Promise.resolve(null),
       ]);
-      setBook(updated as unknown as BookOut);
+      // Use bulkPageStyle result when available — it reflects the updated text_mode
+      // across all pages; fall back to updatePage result for cover edits
+      setBook((bulkResult ?? pageResult) as unknown as BookOut);
       setDirty(false);
     } catch { toast.error("Failed to save"); }
     finally { setSaving(false); }
