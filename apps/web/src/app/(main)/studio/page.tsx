@@ -1176,7 +1176,21 @@ function StudioInner() {
       // the sync useEffect re-runs (same page.id means it won't fire otherwise)
       const newIdx = pageIdx + 1;
       setPageIdx(newIdx);
-      toast.success(`Page split! ✓ Page ${page.order} shortened — new page ${page.order + 1} added below it`);
+      // Auto-illustrate the new page; fire-and-forget so split completes immediately
+      const newPageId = (updated as any).pages?.[newIdx]?.id as string | undefined;
+      if (newPageId) {
+        toast.success(`Page ${page.order} split — illustrating new page ${page.order + 1}…`);
+        setReIllLoading(true);
+        api.books.illustratePage(token, book.id, newPageId)
+          .then(withImage => {
+            setBook(withImage as unknown as BookOut);
+            toast.success(`Page ${page.order + 1} illustrated!`);
+          })
+          .catch(() => toast.error("Auto-illustration failed — click Illustrate to retry"))
+          .finally(() => setReIllLoading(false));
+      } else {
+        toast.success(`Page ${page.order} split — new page ${page.order + 1} added`);
+      }
     } catch { toast.error("Split failed"); }
     finally { setSplitting(false); }
   }
