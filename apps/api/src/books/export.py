@@ -79,12 +79,11 @@ def _stacked_image_crop(
     image_bytes: bytes,
     w_mm: float,
     h_mm: float,
-    bg_rgb: tuple[int, int, int] = (250, 248, 243),
-    fade_frac: float = 0.40,
+    fade_frac: float = 0.45,
     dpi: int = 150,
 ) -> bytes:
-    """Crop/scale image to w_mm × h_mm and composite a gradient fade at the bottom
-    so the image blends into the text-block background colour (matching Mode2Preview)."""
+    """Crop/scale image and apply a true alpha fade at the bottom edge so the image
+    blends into the PDF background without JPEG seam artifacts (returned as PNG)."""
     from PIL import Image as PILImage
     import numpy as np
 
@@ -103,19 +102,19 @@ def _stacked_image_crop(
     top  = (nh - th) // 2
     img  = img.crop((left, top, left + tw, top + th)).convert("RGBA")
 
-    # Build bottom-fade gradient: transparent at top, solid bg at bottom
+    # Fade the bottom fade_frac of the image to transparent using vectorised numpy ops
+    arr = np.array(img, dtype=np.float32)
     fade_h = int(th * fade_frac)
-    arr = np.zeros((fade_h, tw, 4), dtype=np.uint8)
-    for row in range(fade_h):
-        alpha = int(255 * (row / fade_h))
-        arr[row, :] = [bg_rgb[0], bg_rgb[1], bg_rgb[2], alpha]
-    overlay = PILImage.fromarray(arr, "RGBA")
-    img.paste(overlay, (0, th - fade_h), overlay)
+    fade_start = th - fade_h
+    # alpha multiplier goes from 1.0 at fade_start to 0.0 at the last row
+    alphas = np.linspace(1.0, 0.0, fade_h, dtype=np.float32).reshape(-1, 1)
+    arr[fade_start:, :, 3] *= alphas
+    np.clip(arr, 0, 255, out=arr)
 
-    bg = PILImage.new("RGB", img.size, bg_rgb)
-    bg.paste(img, mask=img.split()[3])
+    img = PILImage.fromarray(arr.astype(np.uint8), "RGBA")
     buf = io.BytesIO()
-    bg.save(buf, format="JPEG", quality=90)
+    img.save(buf, format="PNG")
+    buf.seek(0)
     return buf.getvalue()
 
 

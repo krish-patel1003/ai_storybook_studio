@@ -347,12 +347,12 @@ function Mode2Preview({
   const isTextBottom = position !== "top";
 
   const imgBlock = (
-    <div className="relative" style={{ flex: "0 0 55%" }}>
+    <div className="relative" style={{ flex: "0 0 55%", minHeight: 0 }}>
       {blobUrl ? (
-        <img src={blobUrl} alt="" className="h-full w-full object-cover"
+        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: "center top" }} draggable={false} />
       ) : (
-        <div className="h-full bg-muted flex items-center justify-center">
+        <div className="absolute inset-0 bg-muted flex items-center justify-center">
           <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
         </div>
       )}
@@ -360,7 +360,7 @@ function Mode2Preview({
       <div style={{
         position: "absolute",
         [isTextBottom ? "bottom" : "top"]: 0,
-        left: 0, right: 0, height: "40%",
+        left: 0, right: 0, height: "45%",
         background: isTextBottom
           ? `linear-gradient(to bottom, transparent, ${settings.m2BgColor})`
           : `linear-gradient(to top, transparent, ${settings.m2BgColor})`,
