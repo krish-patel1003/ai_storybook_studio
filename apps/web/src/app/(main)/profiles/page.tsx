@@ -192,12 +192,12 @@ function ProfileForm({
       {/* Avatar picker */}
       <div>
         <div className="flex flex-col items-center gap-2 mb-4">
-          <div className="w-24 h-24 rounded-2xl bg-accent chunky-border overflow-hidden flex items-center justify-center shrink-0">
+          <div className="w-32 h-32 rounded-2xl bg-accent chunky-border overflow-hidden flex items-center justify-center shrink-0">
             {isUrl(form.avatar_emoji ?? "") ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={form.avatar_emoji ?? ""} alt="selected avatar" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-5xl">{form.avatar_emoji}</span>
+              <span className="text-6xl">{form.avatar_emoji}</span>
             )}
           </div>
           <p className="text-xs font-extrabold text-muted-foreground uppercase tracking-wide">Avatar</p>
