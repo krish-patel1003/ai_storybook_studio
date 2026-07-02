@@ -12,7 +12,7 @@ class CreateProfileIn(BaseModel):
     grade_level: str = Field(default="K", pattern=r"^(preschool|K|1|2|3|4|5|6\+)$")
     interests: list[str] = Field(default_factory=list)
     reading_level: str = Field(default="beginner", pattern=r"^(beginner|early_reader|chapter_book)$")
-    avatar_emoji: str = Field(default="⭐", max_length=10)
+    avatar_emoji: str = Field(default="⭐", max_length=2000)
 
 
 class UpdateProfileIn(BaseModel):
@@ -23,7 +23,7 @@ class UpdateProfileIn(BaseModel):
     grade_level: str | None = Field(default=None, pattern=r"^(preschool|K|1|2|3|4|5|6\+)$")
     interests: list[str] | None = None
     reading_level: str | None = Field(default=None, pattern=r"^(beginner|early_reader|chapter_book)$")
-    avatar_emoji: str | None = Field(default=None, max_length=10)
+    avatar_emoji: str | None = Field(default=None, max_length=2000)
 
 
 class ProfileOut(BaseModel):

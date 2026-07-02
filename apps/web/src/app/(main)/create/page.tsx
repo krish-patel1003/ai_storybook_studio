@@ -26,6 +26,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { XsSpinner, SmSpinner, LgSpinner } from "@/components/character-spinner";
+import { AvatarDisplay } from "@/components/avatar-display";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type StorySeedOut } from "@/lib/api";
@@ -1033,9 +1034,14 @@ export default function CreatePage() {
     setFlowState("brief");
     try {
       if (!draft) {
+        const resolvedAuthor = selectedProfile
+          ? (selectedProfile.author_name || selectedProfile.name)
+          : (user?.author_name || user?.username || "");
         const saved = await api.books.createDraft(token, {
           raw_prompt: prompt, age_range: age, tone, safety_mode: safety,
           page_count: pageCount, model_provider: modelProvider, model_name: modelName,
+          ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}),
+          author_name: resolvedAuthor || undefined,
         });
         setDraft(saved);
         setBook(saved);
@@ -1230,8 +1236,11 @@ export default function CreatePage() {
                           onClick={() => { setSelectedProfileId(p.id); setFlowState("input"); }}
                           className="group flex flex-col items-center gap-3 rounded-3xl bg-card p-6 w-36 chunky-border chunky-shadow-sm hover:-translate-y-1.5 transition-transform focus:outline-none focus:ring-4 focus:ring-primary/30"
                         >
-                          <span className="grid h-20 w-20 place-items-center rounded-2xl bg-secondary text-5xl chunky-border group-hover:scale-105 transition-transform">
-                            {p.avatar_emoji}
+                          <span className="grid h-20 w-20 place-items-center rounded-2xl bg-secondary chunky-border group-hover:scale-105 transition-transform overflow-hidden">
+                            <AvatarDisplay
+                              value={p.avatar_emoji}
+                              className={p.avatar_emoji.startsWith("https://") ? "w-full h-full object-cover" : "text-5xl"}
+                            />
                           </span>
                           <div className="text-center">
                             <p className="font-extrabold text-sm leading-tight">{p.author_name || p.name}</p>

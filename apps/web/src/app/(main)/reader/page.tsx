@@ -22,6 +22,7 @@ const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
 // ── Font size options ─────────────────────────────────────────────────────────
 
 const FONT_SIZES = [
+  { id: "xs", label: "XS", rem: 0.875 },
   { id: "s",  label: "S",  rem: 1.35 },
   { id: "m",  label: "M",  rem: 1.55 },
   { id: "l",  label: "L",  rem: 1.8  },
@@ -31,8 +32,9 @@ const FONT_SIZES = [
 type FontSizeId = typeof FONT_SIZES[number]["id"];
 
 function useReaderFontSize(): [FontSizeId, (s: FontSizeId) => void] {
-  const STORAGE_KEY = "reader-fontsize-v1";
-  const [size, setSizeState] = useState<FontSizeId>("l");
+  // v2 key — resets to "xs" (14px) default; old key used "l" (28.8px)
+  const STORAGE_KEY = "reader-fontsize-v2";
+  const [size, setSizeState] = useState<FontSizeId>("xs");
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as FontSizeId | null;
     if (saved && FONT_SIZES.find((s) => s.id === saved)) setSizeState(saved);
@@ -49,12 +51,12 @@ function useReaderFontSize(): [FontSizeId, (s: FontSizeId) => void] {
 const FONTS = READER_FONTS;
 
 function useReaderFont(): [FontId, (f: FontId) => void] {
-  // v3 key — forces Unkempt as default, ignores old "patrick-hand" saved preference
-  const STORAGE_KEY = "reader-font-v3";
-  const [font, setFontState] = useState<FontId>("unkempt");
+  // v4 key — moves default from "unkempt" to "nunito"
+  const STORAGE_KEY = "reader-font-v4";
+  const [font, setFontState] = useState<FontId>("nunito");
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as FontId | null;
-    if (saved && FONTS.find((f) => f.id === saved)) setFontState(saved);
+    if (saved && saved !== "unkempt" && FONTS.find((f) => f.id === saved)) setFontState(saved);
   }, []);
   const setFont = useCallback((f: FontId) => {
     setFontState(f);
@@ -135,20 +137,60 @@ CoverPage.displayName = "CoverPage";
 
 // ── Story page — full-bleed image + gradient fade into text ───────────────────
 
+type NarrationTime = { currentTime: number; duration: number } | null;
+
+const WordHighlight = forwardRef<HTMLParagraphElement, {
+  text: string;
+  narrationTime: NarrationTime;
+  style: React.CSSProperties;
+  className?: string;
+}>(({ text, narrationTime, style, className }, ref) => {
+  const words = text.split(/(\s+)/);
+  const wordCount = words.filter(w => !/^\s+$/.test(w)).length;
+  const currentWordIndex = narrationTime
+    ? Math.floor((narrationTime.currentTime / narrationTime.duration) * wordCount)
+    : -1;
+
+  let wIdx = 0;
+  return (
+    <p ref={ref} style={style} className={className}>
+      {words.map((chunk, i) => {
+        if (/^\s+$/.test(chunk)) return chunk;
+        const idx = wIdx++;
+        const isActive = narrationTime !== null && idx === currentWordIndex;
+        return (
+          <span key={i} style={isActive ? {
+            backgroundColor: "rgba(255, 200, 40, 0.7)",
+            borderRadius: "3px",
+            padding: "0 1px",
+          } : undefined}>
+            {chunk}
+          </span>
+        );
+      })}
+    </p>
+  );
+});
+WordHighlight.displayName = "WordHighlight";
+
 const StoryPage = forwardRef<
   HTMLDivElement,
-  { page: PageOut; bookId: string; token: string | null; fontStack: string; fontSize: number; fontWeight: number }
->(({ page, bookId, token, fontStack, fontSize, fontWeight }, ref) => {
+  { page: PageOut; bookId: string; token: string | null; fontStack: string; fontSize: number; fontWeight: number; narrationTime?: NarrationTime }
+>(({ page, bookId, token, fontStack, fontSize, fontWeight, narrationTime = null }, ref) => {
   const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Per-page style overrides saved from studio take precedence over reader-level controls
-  const pageFont = page.font_family ? FONTS.find(f => f.id === page.font_family) : null;
+  // Per-page style overrides saved from studio take precedence over reader-level controls.
+  // "unkempt" is treated as unset — it was the old hardcoded default, not a deliberate choice.
+  const pageFontId = page.font_family && page.font_family !== "unkempt" ? page.font_family : null;
+  const pageFont = pageFontId ? FONTS.find(f => f.id === pageFontId) : null;
   const effectiveFontStack  = pageFont?.stack  ?? fontStack;
   const effectiveFontWeight = pageFont?.weight ?? fontWeight;
-  // page.font_size is in px; convert to rem for the reader's sizing system
-  const effectiveFontSize   = page.font_size ? page.font_size / 16 : fontSize;
+  // page.font_size is in px; convert to rem for the reader's sizing system.
+  // Treat 15 as the old default — migrate to 14 (reader XS = 0.875rem).
+  const rawFontSize = page.font_size === 15 ? 14 : page.font_size;
+  const effectiveFontSize   = rawFontSize ? rawFontSize / 16 : fontSize;
   const effectiveTextColor  = page.text_color ?? undefined;
   // Per-page background — matches whatever was saved in studio (Mode1Preview / Mode2Preview)
   const effectiveBgColor    = page.bg_color ?? "#faf8f3";
@@ -156,7 +198,7 @@ const StoryPage = forwardRef<
 
   // Auto-shrink font for overlay mode only (stacked clips like the studio does).
   useEffect(() => {
-    if (page.text_mode === 2) return;
+    if (page.text_mode !== 1) return; // skip for stacked (null or 2)
     const el = textRef.current;
     const container = containerRef.current;
     if (!el || !container) return;
@@ -183,16 +225,28 @@ const StoryPage = forwardRef<
   const gradientZone = "47%";
   const tPos   = page.text_position ?? "bottom";
   const tAlign = (page.text_align ?? "center") as React.CSSProperties["textAlign"];
-  const isStacked = page.text_mode === 2;
+  const isStacked = page.text_mode !== 1; // null (unsaved) and 2 both default to stacked
   const isTextBottom = tPos !== "top";
 
-  // ── Stacked layout (Mode 2): image block + text block ──────────────────────
+  // ── Stacked layout (Mode 2): image (top 72%) + text (bottom 28%) ─────────────
+  // Uses absolute positioning so layout works regardless of whether react-pageflip
+  // gives the page element a CSS-definite height.
+  // Text zone is 28% (not 20%) because reader pages are narrower than studio preview,
+  // causing more line-wraps; 20% clips text that fits fine in studio.
   if (isStacked) {
+    const TEXT_PCT = "28%";
+    const IMG_PCT  = "72%";
+    const imgTop    = isTextBottom ? "0%"      : TEXT_PCT;
+    const imgBottom = isTextBottom ? TEXT_PCT   : "0%";
+    const txtTop    = isTextBottom ? IMG_PCT    : "0%";
+    const txtBottom = isTextBottom ? "0%"       : IMG_PCT;
+
     return (
       <div ref={ref} className="relative overflow-hidden select-none"
-        style={{ height: "100%", background: effectiveBgColor, display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
-        {/* Image block — always rendered so the 80/20 split holds even before image loads */}
-        <div className="relative" style={{ flex: "0 0 80%", minHeight: 0 }}>
+        style={{ height: "100%", background: effectiveBgColor }}>
+
+        {/* Image — top 72% of the page */}
+        <div style={{ position: "absolute", top: imgTop, bottom: imgBottom, left: 0, right: 0, overflow: "hidden" }}>
           {imgUrl ? (
             <img src={imgUrl} alt={`Page ${page.order}`}
               className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
@@ -202,32 +256,41 @@ const StoryPage = forwardRef<
               <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
             </div>
           )}
-          {/* Gradient blend into text block */}
+          {/* Gradient blending into the text area */}
           <div style={{
-            position: "absolute", [isTextBottom ? "bottom" : "top"]: 0, left: 0, right: 0, height: "45%",
+            position: "absolute", left: 0, right: 0, height: "45%",
+            [isTextBottom ? "bottom" : "top"]: 0,
             background: isTextBottom
               ? `linear-gradient(to bottom, transparent, ${effectiveBgColor})`
               : `linear-gradient(to top, transparent, ${effectiveBgColor})`,
           }} />
         </div>
-        {/* Text block — identical styling to Mode2Preview in studio */}
-        <div ref={containerRef}
-          style={{ flex: 1, minHeight: 0, background: effectiveBgColor, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px", overflow: "hidden" }}>
+
+        {/* Text — bottom 28% of the page */}
+        <div style={{
+          position: "absolute", top: txtTop, bottom: txtBottom, left: 0, right: 0,
+          background: effectiveBgColor,
+          display: "flex", alignItems: "flex-start", justifyContent: "center",
+          padding: "16px 20px", overflow: "hidden",
+        }}>
           {page.text ? (
-            <p ref={textRef} style={{
-              margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",
-              whiteSpace: "pre-wrap", wordBreak: "break-word",
-              fontFamily: effectiveFontStack, fontWeight: effectiveFontWeight,
-              fontSize: page.font_size ? `${page.font_size}px` : `${effectiveFontSize * 16}px`,
-              lineHeight: 1.6, textAlign: tAlign,
-              color: effectiveTextColor ?? "#1a1a2e",
-            }}>
-              {page.text}
-            </p>
+            <WordHighlight
+              text={page.text}
+              narrationTime={narrationTime}
+              style={{
+                margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",
+                whiteSpace: "pre-wrap", wordBreak: "break-word",
+                fontFamily: effectiveFontStack, fontWeight: effectiveFontWeight,
+                fontSize: `${(rawFontSize ?? (effectiveFontSize * 16))}px`,
+                lineHeight: 1.6, textAlign: tAlign,
+                color: effectiveTextColor ?? "#1a1a2e",
+              }}
+            />
           ) : (
             <p className="italic text-muted-foreground text-sm" style={{ fontFamily: effectiveFontStack }}>No text yet</p>
           )}
         </div>
+
         <div className="absolute bottom-1.5 right-3 text-[10px] font-bold text-foreground/30 select-none">{page.order}</div>
       </div>
     );
@@ -281,13 +344,13 @@ const StoryPage = forwardRef<
             style={{ height: textZone, padding: "24px", ...posStyle }}
           >
             {page.text ? (
-              <p
+              <WordHighlight
                 ref={textRef}
+                text={page.text}
+                narrationTime={narrationTime}
                 className="text-foreground w-full"
-                style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, ...(effectiveTextColor ? { color: effectiveTextColor } : {}) }}
-              >
-                {page.text}
-              </p>
+                style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, margin: 0, ...(effectiveTextColor ? { color: effectiveTextColor } : {}) }}
+              />
             ) : (
               <p className="italic text-muted-foreground text-sm" style={{ fontFamily: effectiveFontStack }}>
                 No text yet
@@ -582,6 +645,31 @@ function usePageAudio(
     };
   }, []); // intentionally empty — all state read via ctx ref
 
+  // Track narration position for word-level text highlighting.
+  const [narrationPos, setNarrationPos] = useState<{ pageId: string; currentTime: number; duration: number } | null>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onTimeUpdate = () => {
+      if (!audio.duration || isNaN(audio.duration)) return;
+      const pageId = ctx.current.playingRight
+        ? (ctx.current.pages[ctx.current.currentPage + 1]?.id ?? "")
+        : (ctx.current.pages[ctx.current.currentPage]?.id ?? "");
+      setNarrationPos({ pageId, currentTime: audio.currentTime, duration: audio.duration });
+    };
+    const onEnded = () => setNarrationPos(null);
+    const onPause = () => setNarrationPos(null);
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("pause", onPause);
+    return () => {
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("pause", onPause);
+    };
+  }, []);
+
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio || !audio.src) return;
@@ -600,7 +688,7 @@ function usePageAudio(
     });
   }, []);
 
-  return { audioRef, playing, muted, hasAudio, togglePlay, toggleMute };
+  return { audioRef, playing, muted, hasAudio, togglePlay, toggleMute, narrationPos };
 }
 
 // ── Reader ────────────────────────────────────────────────────────────────────
@@ -631,7 +719,7 @@ function ReaderInner() {
   const pages = book ? [...book.pages].sort((a, b) => a.order - b.order) : [];
   const totalPages = pages.length;
 
-  const { audioRef, playing, muted, hasAudio, togglePlay, toggleMute } =
+  const { audioRef, playing, muted, hasAudio, togglePlay, toggleMute, narrationPos } =
     usePageAudio(pages, currentPage, book?.id ?? "", token, bookRef);
 
   const bookHasAnyAudio = pages.some((p) => p.has_audio);
@@ -759,7 +847,8 @@ function ReaderInner() {
             ) : page.is_back_cover ? (
               <BackCoverPage key={page.id} page={page} bookId={book.id} token={token} title={book.brief?.title ?? book.title} />
             ) : (
-              <StoryPage key={page.id} page={page} bookId={book.id} token={token} fontStack={fontStack} fontSize={fontSize} fontWeight={fontWeight} />
+              <StoryPage key={page.id} page={page} bookId={book.id} token={token} fontStack={fontStack} fontSize={fontSize} fontWeight={fontWeight}
+                narrationTime={narrationPos?.pageId === page.id ? { currentTime: narrationPos.currentTime, duration: narrationPos.duration } : null} />
             )
           )}
         </HTMLFlipBook>

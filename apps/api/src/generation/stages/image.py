@@ -17,7 +17,12 @@ from google.genai import types as gtypes
 
 logger = logging.getLogger(__name__)
 
-IMAGE_CONCURRENCY = 3
+# Global semaphore — shared across ALL pipeline instances and HTTP requests so
+# concurrent illustrate calls from the frontend cannot stampede the Gemini API.
+# With per-instance semaphores each new _pipeline() call got its own gate,
+# making the limit meaningless when multiple requests arrived at once.
+IMAGE_CONCURRENCY = 2
+_global_sem = asyncio.Semaphore(IMAGE_CONCURRENCY)
 
 
 @dataclass
@@ -31,7 +36,7 @@ class ImageStage:
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash-image") -> None:
         self._client = genai.Client(api_key=api_key)
         self._model = model
-        self._sem = asyncio.Semaphore(IMAGE_CONCURRENCY)
+        self._sem = _global_sem  # shared, not per-instance
 
     async def run(
         self,

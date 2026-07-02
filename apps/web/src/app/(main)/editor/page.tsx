@@ -19,6 +19,7 @@ import {
   Play,
   PenLine,
   Link2,
+  Square as StopIcon,
 } from "lucide-react";
 import { XsSpinner, SmSpinner, MdSpinner, LgSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
@@ -41,6 +42,7 @@ interface IllJob {
   sheetsGenerating: boolean;
   started: number;
   pageStatuses: Record<string, PageIllStatus>;
+  aborted: boolean;
 }
 
 let _job: IllJob | null = null;
@@ -48,6 +50,10 @@ let _onPageDone: ((updated: BookOut) => void) | null = null;
 const _subs = new Set<() => void>();
 
 function _notifyJob() { _subs.forEach((fn) => fn()); }
+
+function stopIllJob(bookId: string) {
+  if (_job?.bookId === bookId) { _job.aborted = true; _notifyJob(); }
+}
 
 function useIllJob(bookId: string | undefined): IllJob | null {
   const [, tick] = useReducer((x: number) => x + 1, 0);
@@ -75,6 +81,7 @@ async function startIllJob(
     sheetsGenerating: false,
     started: Date.now(),
     pageStatuses: Object.fromEntries(pages.map((p) => [p.id, "idle" as PageIllStatus])),
+    aborted: false,
   };
   _onPageDone = onPageDone;
   _notifyJob();
@@ -121,6 +128,7 @@ async function startIllJob(
     await Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, targets.length) }, async () => {
         while (i < targets.length) {
+          if (_job?.aborted) break;
           const page = targets[i++];
           const ok = await runPage(page);
           if (_job?.bookId === bookId) { _job.done++; _notifyJob(); }
@@ -140,11 +148,13 @@ async function startIllJob(
   // Auto-retry pages that failed (transient rate-limit/API errors) once more
   // before giving up, instead of forcing the user to re-click the button.
   for (let retry = 0; retry < 2; retry++) {
+    if (_job?.aborted) break;
     const failed = pages.filter((p) => _job?.pageStatuses[p.id] === "error");
     if (failed.length === 0 || _job?.bookId !== bookId) break;
     if (_job) { _job.done -= failed.length; }
     for (const p of failed) { if (_job) _job.pageStatuses[p.id] = "generating"; }
     _notifyJob();
+    await new Promise(r => setTimeout(r, 4000));
     await runPool(failed);
   }
 
@@ -475,6 +485,7 @@ export default function EditorPage() {
   // Narration
   const [narratingBook, setNarratingBook] = useState(false);
   const [narrateProgress, setNarrateProgress] = useState<{ done: number; total: number } | null>(null);
+  const narrateCancelledRef = useRef(false);
   const [pageNarrateStatuses, setPageNarrateStatuses] = useState<Record<string, "idle" | "narrating" | "done" | "error">>({});
   type VoiceChoice = { type: "preset"; id: string } | { type: "clone"; profileId: string; name: string };
   const [selectedVoice, setSelectedVoice] = useState<VoiceChoice>({ type: "preset", id: "Kore" });
@@ -525,10 +536,12 @@ export default function EditorPage() {
     if (!token || !book) return;
     const textPages = book.pages.filter((p) => p.text);
     if (textPages.length === 0) { toast("No pages with text."); return; }
+    narrateCancelledRef.current = false;
     setNarratingBook(true);
     setNarrateProgress({ done: 0, total: textPages.length });
     try {
       for (const page of textPages) {
+        if (narrateCancelledRef.current) break;
         const updated = await api.books.narratePage(
           token, book.id, page.id,
           selectedVoice.type === "preset" ? selectedVoice.id : undefined,
@@ -537,8 +550,8 @@ export default function EditorPage() {
         updateBook(updated);
         setNarrateProgress((p) => p ? { ...p, done: p.done + 1 } : null);
       }
-      toast.success("Narration complete!");
-    } catch { toast.error("Narration failed."); }
+      if (!narrateCancelledRef.current) toast.success("Narration complete!");
+    } catch { if (!narrateCancelledRef.current) toast.error("Narration failed."); }
     finally { setNarratingBook(false); setNarrateProgress(null); }
   }
 
@@ -646,9 +659,16 @@ export default function EditorPage() {
             </div>
           )}
         </div>
-        <button onClick={handleIllustrate} disabled={isRunning} className="shrink-0 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0">
-          {isRunning ? <><XsSpinner /> Illustrating…</> : allDone ? <><Sparkles className="h-4 w-4" strokeWidth={3} /> Re-illustrate all</> : <><Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate all</>}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {isRunning && (
+            <button onClick={() => stopIllJob(book.id)} className="inline-flex items-center gap-2 rounded-full bg-destructive px-5 py-2.5 text-sm font-extrabold text-destructive-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+              <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop
+            </button>
+          )}
+          <button onClick={handleIllustrate} disabled={isRunning} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0">
+            {isRunning ? <><XsSpinner /> Illustrating…</> : allDone ? <><Sparkles className="h-4 w-4" strokeWidth={3} /> Re-illustrate all</> : <><Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate all</>}
+          </button>
+        </div>
       </div>
 
       {/* Narration */}
@@ -677,9 +697,15 @@ export default function EditorPage() {
                 {voiceProfiles.length > 0 && <optgroup label="── Your Voices ──">{voiceProfiles.map((p) => <option key={p.id} value={`clone:${p.id}`}>{p.name}</option>)}</optgroup>}
               </select>
             )}
-            <button onClick={handleNarrate} disabled={narratingBook} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0">
-              {narratingBook ? <><XsSpinner />{narrateProgress ? ` ${narrateProgress.done + 1}/${narrateProgress.total}…` : " Starting…"}</> : <><Mic className="h-4 w-4" strokeWidth={2.5} />{allPages.filter((p) => p.has_audio).length > 0 ? " Re-narrate all" : " Narrate all"}</>}
-            </button>
+            {narratingBook ? (
+              <button onClick={() => { narrateCancelledRef.current = true; }} className="inline-flex items-center gap-2 rounded-full bg-destructive px-5 py-2.5 text-sm font-extrabold text-destructive-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+                <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop{narrateProgress ? ` (${narrateProgress.done + 1}/${narrateProgress.total})` : ""}
+              </button>
+            ) : (
+              <button onClick={handleNarrate} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+                <Mic className="h-4 w-4" strokeWidth={2.5} />{allPages.filter((p) => p.has_audio).length > 0 ? " Re-narrate all" : " Narrate all"}
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -86,3 +86,11 @@ export function clearAuthImageCache() {
   _cache.clear();
   _pending.clear();
 }
+
+/** Bust a single cached URL so the next useAuthImage call re-fetches it. */
+export function bustAuthImageCache(url: string) {
+  const blobUrl = _cache.get(url);
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  _cache.delete(url);
+  _pending.delete(url);
+}

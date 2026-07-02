@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,7 +28,7 @@ class ChildProfile(Base):
     # "beginner" | "early_reader" | "chapter_book"
     reading_level: Mapped[str] = mapped_column(String(20), nullable=False, default="beginner")
     # emoji displayed on the profile card
-    avatar_emoji: Mapped[str] = mapped_column(String(10), nullable=False, default="⭐")
+    avatar_emoji: Mapped[str] = mapped_column(Text, nullable=False, default="⭐")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

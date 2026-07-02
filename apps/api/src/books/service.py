@@ -279,6 +279,7 @@ async def create_and_generate(
         model_name=data.model_name,
         stage=GenerationStage.ENHANCING,
         child_profile_id=data.child_profile_id,
+        author_name=data.author_name,
     )
     db.add(book)
     await db.flush()

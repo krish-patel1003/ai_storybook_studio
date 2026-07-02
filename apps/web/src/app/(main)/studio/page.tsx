@@ -17,7 +17,7 @@ import {
   api, pageImageUrl,
   type PageOut, type BookOut, type CanvasOverlay, type TextAlign, type TextPosition,
 } from "@/lib/api";
-import { useAuthImage } from "@/lib/use-auth-image";
+import { useAuthImage, bustAuthImageCache } from "@/lib/use-auth-image";
 import { READER_FONTS, type FontId } from "@/lib/fonts";
 import { cn } from "@/lib/utils";
 import { XsSpinner, SmSpinner, LgSpinner } from "@/components/character-spinner";
@@ -31,49 +31,75 @@ interface IllJob {
   statuses: Record<string, IllStatus>;
   done: number;
   total: number;
+  aborted: boolean;
 }
 
 let _job: IllJob | null = null;
 const _listeners = new Set<() => void>();
 function _notifyJob() { _listeners.forEach(fn => fn()); }
 
+function stopIllJob(bookId: string) {
+  if (_job?.bookId === bookId) { _job.aborted = true; _notifyJob(); }
+}
+
 async function startIllJob(
   token: string,
   book: BookOut,
   onUpdate: (b: BookOut) => void,
-) {
-  const pages = book.pages.filter(p => !p.is_back_cover);
+): Promise<number> {
+  const bookId = book.id;
+  const pages = book.pages.filter(p => !p.is_back_cover).sort((a, b) => a.order - b.order);
   _job = {
-    bookId: book.id,
+    bookId,
     statuses: Object.fromEntries(pages.map(p => [p.id, "pending" as IllStatus])),
     done: 0,
     total: pages.length,
+    aborted: false,
   };
   _notifyJob();
 
-  await Promise.allSettled(
-    pages.map(async (page) => {
-      try {
-        const updated = await api.books.illustratePage(token, book.id, page.id);
-        onUpdate(updated);
-        if (_job?.bookId === book.id) {
-          _job.statuses[page.id] = "done";
-          _job.done++;
-          _notifyJob();
-        }
-      } catch {
-        if (_job?.bookId === book.id) {
-          _job.statuses[page.id] = "error";
-          _job.done++;
-          _notifyJob();
-        }
-      }
-    }),
-  );
+  async function runOne(page: typeof pages[number]): Promise<boolean> {
+    try {
+      const updated = await api.books.illustratePage(token, bookId, page.id);
+      bustAuthImageCache(pageImageUrl(bookId, page.id));
+      onUpdate(updated);
+      if (_job?.bookId === bookId) { _job.statuses[page.id] = "done"; _job.done++; _notifyJob(); }
+      return true;
+    } catch {
+      if (_job?.bookId === bookId) { _job.statuses[page.id] = "error"; _job.done++; _notifyJob(); }
+      return false;
+    }
+  }
 
-  setTimeout(() => {
-    if (_job?.bookId === book.id) { _job = null; _notifyJob(); }
-  }, 4000);
+  async function runPool(targets: typeof pages) {
+    let i = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(2, targets.length) }, async () => {
+        while (i < targets.length) {
+          if (_job?.aborted) break;
+          await runOne(targets[i++]);
+        }
+      }),
+    );
+  }
+
+  await runPool(pages);
+
+  // Two retry passes with a delay so Gemini rate limits have time to clear
+  for (let retry = 0; retry < 2; retry++) {
+    if (_job?.aborted) break;
+    const failed = pages.filter(p => _job?.statuses[p.id] === "error");
+    if (failed.length === 0 || _job?.bookId !== bookId) break;
+    if (_job) { _job.done -= failed.length; }
+    for (const p of failed) { if (_job) _job.statuses[p.id] = "pending"; }
+    _notifyJob();
+    await new Promise(r => setTimeout(r, 4000));
+    await runPool(failed);
+  }
+
+  const failedCount = pages.filter(p => _job?.statuses[p.id] === "error").length;
+  setTimeout(() => { if (_job?.bookId === bookId) { _job = null; _notifyJob(); } }, 4000);
+  return failedCount;
 }
 
 function useIllJob(bookId: string) {
@@ -104,8 +130,8 @@ interface BookTextSettings {
 }
 
 const DEFAULT_SETTINGS: BookTextSettings = {
-  mode: 2,
-  fontSize: 15,
+  mode: 2, // stacked is the default
+  fontSize: 14,
   fontFamily: "nunito",
   textColor: "#000000",
   m1BgStyle: "frosted",
@@ -120,6 +146,8 @@ function loadSettings(bookId: string): BookTextSettings {
     if (raw) {
       const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
       if (parsed.mode === 3) parsed.mode = 2; // canvas mode disabled
+      if (parsed.fontFamily === "unkempt") parsed.fontFamily = "nunito"; // migrate old default
+      if (parsed.fontSize === 15) parsed.fontSize = 14; // migrate old default
       return parsed;
     }
   } catch {}
@@ -273,7 +301,7 @@ function Mode1Preview({
   useEffect(() => {
     const el = textRef.current;
     if (!el || !onOverflow) return;
-    onOverflow(el.scrollHeight > el.parentElement!.clientHeight + 4);
+    onOverflow(el.scrollHeight > el.parentElement!.clientHeight);
   });
 
   const font     = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
@@ -348,14 +376,14 @@ function Mode2Preview({
   useEffect(() => {
     const el = textRef.current;
     if (!el || !onOverflow) return;
-    onOverflow(el.scrollHeight > el.parentElement!.clientHeight + 4);
+    onOverflow(el.scrollHeight > el.parentElement!.clientHeight);
   });
 
   const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
   const isTextBottom = position !== "top";
 
   const imgBlock = (
-    <div className="relative" style={{ flex: "0 0 80%", minHeight: 0 }}>
+    <div className="relative" style={{ flex: "18 0 0px", minHeight: 0, overflow: "hidden" }}>
       {blobUrl ? (
         <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: "center top" }} draggable={false} />
@@ -378,9 +406,9 @@ function Mode2Preview({
 
   const textBlock = (
     <div style={{
-      flex: 1, minHeight: 0, background: settings.bgColor,
+      flex: "7 0 0px", minHeight: 0, background: settings.bgColor,
       display: "flex", alignItems: "flex-start", justifyContent: "center",
-      padding: "24px", overflow: "hidden",
+      padding: "16px 20px", overflow: "hidden",
     }}>
       <p ref={textRef} style={{
         margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",
@@ -408,10 +436,11 @@ function Mode2Preview({
 // ── Center: Cover preview — matches reader exactly (gradient + title overlay) ──
 
 function CoverPagePreview({
-  blobUrl, text, settings, align, position,
+  blobUrl, text, author, settings, align, position,
 }: {
   blobUrl: string | null;
   text: string;
+  author: string;
   settings: BookTextSettings;
   align: TextAlign;
   position: TextPosition;
@@ -446,7 +475,7 @@ function CoverPagePreview({
         height: "55%",
         background: "linear-gradient(to bottom, transparent 0%, rgba(10,10,20,0.55) 40%, rgba(10,10,20,0.88) 100%)",
       }} />
-      {/* Title text */}
+      {/* Title + author — identical layout to reader CoverPage */}
       <div className={`absolute inset-0 flex flex-col items-center px-6 overflow-hidden ${justifyClass}`}
         style={paddingStyle}>
         <p style={{
@@ -459,6 +488,15 @@ function CoverPagePreview({
         }}>
           {text || <span style={{ opacity: 0.4, fontStyle: "italic" }}>Book title…</span>}
         </p>
+        {author && (
+          <p style={{
+            marginTop: 8, fontFamily: font.stack,
+            fontSize: "0.85rem", color: "rgba(255,255,255,0.75)",
+            textShadow: "0 1px 6px rgba(0,0,0,0.5)",
+          }}>
+            by {author}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -705,7 +743,7 @@ function useAudioPreview(bookId: string, pageId: string, token: string | null) {
 
 const DEFAULT_OVERLAY: CanvasOverlay = {
   x: 0.03, y: 0.62, w: 0.94, h: 0.34,
-  fontSize: 14, fontFamily: "unkempt",
+  fontSize: 14, fontFamily: "nunito",
   textColor: "#1a1a2e", bgStyle: "frosted", bgOpacity: 0.82,
 };
 
@@ -722,6 +760,7 @@ function NarrateModal({
   const [voiceId, setVoiceId] = useState("");
   const [progress, setProgress] = useState(0);
   const [running, setRunning] = useState(false);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     api.books.listVoices(token).then(r => {
@@ -733,9 +772,11 @@ function NarrateModal({
 
   async function run() {
     const pages = book.pages.filter(p => !p.is_cover && !!p.text);
+    cancelledRef.current = false;
     setRunning(true);
     setProgress(0);
     for (let i = 0; i < pages.length; i++) {
+      if (cancelledRef.current) break;
       try {
         const updated = await api.books.narratePage(token, book.id, pages[i].id, voiceId || undefined);
         onUpdate(updated);
@@ -743,18 +784,25 @@ function NarrateModal({
       setProgress(i + 1);
     }
     setRunning(false);
-    toast.success("Narration complete!");
-    onClose();
+    if (!cancelledRef.current) {
+      toast.success("Narration complete!");
+      onClose();
+    }
+  }
+
+  function stop() {
+    cancelledRef.current = true;
+    setRunning(false);
   }
 
   const pages = book.pages.filter(p => !p.is_cover && !!p.text);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={running ? undefined : onClose}>
       <div className="w-full max-w-sm rounded-3xl bg-card p-6 chunky-border chunky-shadow"
         onClick={e => e.stopPropagation()}>
         <h2 className="font-display text-2xl font-black mb-4">Narrate all pages</h2>
-        {voices.length > 0 && (
+        {voices.length > 0 && !running && (
           <div className="mb-4">
             <SL>Voice</SL>
             <div className="space-y-1.5">
@@ -776,19 +824,28 @@ function NarrateModal({
                 style={{ width: `${(progress / pages.length) * 100}%` }} />
             </div>
             <p className="mt-1 text-xs text-muted-foreground font-bold">
-              {progress} / {pages.length} pages
+              {progress} / {pages.length} pages narrated
             </p>
           </div>
         )}
         <div className="flex gap-2">
-          <button onClick={onClose} disabled={running}
-            className="flex-1 rounded-full py-2 text-sm font-extrabold chunky-border hover:bg-muted transition-colors disabled:opacity-50">
-            Cancel
-          </button>
-          <button onClick={run} disabled={running}
-            className="flex-1 rounded-full bg-primary py-2 text-sm font-extrabold text-primary-foreground chunky-border hover:opacity-90 transition-opacity disabled:opacity-50">
-            {running ? <span className="flex items-center justify-center gap-1"><XsSpinner /> Narrating…</span> : "Start"}
-          </button>
+          {running ? (
+            <button onClick={stop}
+              className="flex-1 rounded-full bg-destructive py-2 text-sm font-extrabold text-destructive-foreground chunky-border hover:opacity-90 transition-opacity flex items-center justify-center gap-1">
+              <StopIcon className="h-4 w-4" strokeWidth={2.5} /> Stop
+            </button>
+          ) : (
+            <>
+              <button onClick={onClose}
+                className="flex-1 rounded-full py-2 text-sm font-extrabold chunky-border hover:bg-muted transition-colors">
+                Cancel
+              </button>
+              <button onClick={run}
+                className="flex-1 rounded-full bg-primary py-2 text-sm font-extrabold text-primary-foreground chunky-border hover:opacity-90 transition-opacity">
+                Start
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -797,15 +854,15 @@ function NarrateModal({
 
 // ── Export modal (lightweight, same as editor) ─────────────────────────────────
 
-function ExportModal({ book, token, onClose }: { book: BookOut; token: string; onClose: () => void }) {
+function ExportModal({ book, token, fontFamily, onClose }: { book: BookOut; token: string; fontFamily: string; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
 
   async function dl(type: "pdf" | "epub" | "cover") {
     setLoading(true);
     try {
-      const res = type === "pdf"   ? await api.books.exportPdf(token, book.id, "unkempt")
+      const res = type === "pdf"   ? await api.books.exportPdf(token, book.id, fontFamily)
                 : type === "cover" ? await api.books.exportCoverPdf(token, book.id)
-                :                    await api.books.exportEpub(token, book.id, "unkempt");
+                :                    await api.books.exportEpub(token, book.id, fontFamily);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const name = (book.brief?.title ?? book.title).replace(/\s+/g, "_");
@@ -850,7 +907,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string; o
 function StudioInner() {
   const router        = useRouter();
   const searchParams  = useSearchParams();
-  const { token }     = useAuth();
+  const { token, user } = useAuth();
   const { book, setBook } = useBook();
 
   const [pageIdx,  setPageIdx]  = useState(0);
@@ -880,6 +937,7 @@ function StudioInner() {
   const latestRef  = useRef({ text, boxes, settings, pagePosition, pageAlign });
   const undoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSnapshotRef = useRef<string>("");
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pages = book?.pages ?? [];
   const page  = pages[pageIdx] ?? null;
@@ -951,7 +1009,11 @@ function StudioInner() {
     window.history.replaceState({}, "", "/studio");
     setIllustrating(true);
     startIllJob(token, book, b => setBook(b))
-      .then(() => { setIllustrating(false); toast.success("All pages illustrated!"); })
+      .then(failedCount => {
+        setIllustrating(false);
+        if (failedCount > 0) toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to illustrate — click Re-illustrate to retry`);
+        else toast.success("All pages illustrated!");
+      })
       .catch(() => setIllustrating(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1055,6 +1117,14 @@ function StudioInner() {
   function markDirty() {
     setDirty(true);
   }
+
+  // Auto-save 2 seconds after the last change
+  useEffect(() => {
+    if (!dirty) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => { save(); }, 2000);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  }, [dirty, save]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Push a text snapshot to undo stack (debounced — groups rapid keystrokes)
   function pushUndoSnapshot(prev: string) {
@@ -1210,17 +1280,15 @@ function StudioInner() {
         toast.success(`Page ${page.order} split — illustrating new page ${page.order + 1}…`);
         setReIllLoading(true);
         (async () => {
-          // Gemini image generation occasionally fails transiently even with
-          // backend retries; one extra client-side attempt avoids forcing the
-          // user to manually click Illustrate.
-          for (let attempt = 0; attempt < 2; attempt++) {
+          for (let attempt = 0; attempt < 3; attempt++) {
             try {
               const withImage = await api.books.illustratePage(token, book.id, newPageId);
               setBook(withImage as unknown as BookOut);
               toast.success(`Page ${page.order + 1} illustrated!`);
               return;
             } catch {
-              if (attempt === 1) toast.error("Auto-illustration failed — click Illustrate to retry");
+              if (attempt < 2) await new Promise(r => setTimeout(r, 4000));
+              else toast.error("Auto-illustration failed — click Illustrate to retry");
             }
           }
         })().finally(() => setReIllLoading(false));
@@ -1253,6 +1321,8 @@ function StudioInner() {
     setReIllLoading(true);
     try {
       const updated = await api.books.illustratePage(token, book.id, page.id);
+      // Bust the image cache so the new illustration loads immediately
+      bustAuthImageCache(pageImageUrl(book.id, page.id));
       setBook(updated as unknown as BookOut);
       toast.success("Re-illustrated!");
     } catch { toast.error("Illustration failed"); }
@@ -1321,13 +1391,21 @@ function StudioInner() {
           </p>
         </div>
 
-        {/* Progress bar when illustrating */}
+        {/* Progress bar + stop when illustrating */}
         {illustrating && illJob && (
-          <div className="hidden sm:flex w-32 flex-col gap-0.5">
-            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden chunky-border">
-              <div className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${(illJob.done / total) * 100}%` }} />
+          <div className="hidden sm:flex items-center gap-2">
+            <div className="w-28 flex flex-col gap-0.5">
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden chunky-border">
+                <div className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${(illJob.done / illJob.total) * 100}%` }} />
+              </div>
             </div>
+            <button
+              onClick={() => stopIllJob(book.id)}
+              title="Stop illustration"
+              className="grid h-7 w-7 place-items-center rounded-full bg-destructive text-destructive-foreground chunky-border hover:opacity-80 transition-opacity">
+              <StopIcon className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
           </div>
         )}
 
@@ -1360,7 +1438,7 @@ function StudioInner() {
             {saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </button>
           <button
-            onClick={() => router.push(`/reader?from=studio`)}
+            onClick={async () => { if (dirty) await save(); router.push(`/reader?from=studio`); }}
             className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-sm font-extrabold text-accent-foreground chunky-border hover:-translate-y-0.5 transition-transform"
           >
             <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview
@@ -1581,6 +1659,7 @@ function StudioInner() {
             <BackCoverPreview blobUrl={blobUrl} />
           ) : page?.is_cover ? (
             <CoverPagePreview blobUrl={blobUrl} text={text} settings={settings}
+              author={book.author_name || user?.username || ""}
               align={pageAlign} position={pagePosition} />
           ) : settings.mode === 1 ? (
             <Mode1Preview blobUrl={blobUrl} text={text} settings={settings}
@@ -1772,7 +1851,7 @@ function StudioInner() {
         <NarrateModal token={token} book={book} onUpdate={b => setBook(b as unknown as BookOut)} onClose={() => setNarrateModal(false)} />
       )}
       {exportModal && token && (
-        <ExportModal book={book} token={token} onClose={() => setExportModal(false)} />
+        <ExportModal book={book} token={token} fontFamily={settings.fontFamily} onClose={() => setExportModal(false)} />
       )}
     </div>
   );

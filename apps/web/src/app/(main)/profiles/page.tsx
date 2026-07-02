@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { api, type ChildProfile, type CreateProfileIn } from "@/lib/api";
 import { toast } from "sonner";
 import { LgSpinner } from "@/components/character-spinner";
+import { AvatarDisplay } from "@/components/avatar-display";
+import { AvataaaarsPicker, DEFAULT_AVATAAARS_URL, parseAvataaarsUrl } from "@/components/avataaars-picker";
 
 const GRADE_OPTIONS = ["preschool", "K", "1", "2", "3", "4", "5", "6+"];
 const READING_LEVELS = [
@@ -19,16 +21,135 @@ const GENDER_OPTIONS = [
   { id: "nonbinary",   label: "Non-binary",  emoji: "🧒" },
   { id: "unspecified", label: "Prefer not to say", emoji: "⭐" },
 ];
-const AVATAR_EMOJIS = ["⭐","🦊","🐻","🦁","🐼","🐨","🦄","🐉","🚀","🌈","🦋","🐸","🎨","🎵","⚽","📚"];
 
 const INTEREST_TAGS = [
   "dinosaurs","space","animals","robots","magic","ocean","forest","art","music","sports",
   "cooking","science","history","superheroes","fairy tales","adventure",
 ];
 
+// ── DiceBear helpers ──────────────────────────────────────────────────────────
+
+const DB = "https://api.dicebear.com/9.x";
+
+function av(style: string, seed: string, bg: string) {
+  return `${DB}/${style}/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${bg}&backgroundType=solid`;
+}
+
+// Pre-curated seeds that produce visually distinct characters per style
+const PRINCESS_BG  = "ffd5dc";
+const HERO_BG      = "b6e3f4";
+const FANTASY_BG   = "c0aede";
+const ANIMAL_BG    = "c3f0c8";
+const ROBOT_BG     = "d1d4f9";
+const PIXEL_BG     = "ffdfbf";
+
+const CHARACTER_CATEGORIES = [
+  {
+    type: "character" as const,
+    label: "Princesses",
+    icon: "👸",
+    avatars: [
+      "starlette","crystalbelle","moonroseprince","goldenivy","silvermistprincess",
+      "rubyrosegown","violetdreamqueen","pearljasmineroyal","sapphirecrownella",
+      "amberaurore","emeraldmoanawave","coralmeridabow",
+    ].map((s) => av("adventurer", s, PRINCESS_BG)),
+  },
+  {
+    type: "character" as const,
+    label: "Heroes",
+    icon: "🦸",
+    avatars: [
+      "bravecaptain","starrangerx","fearlessjack","heroicmax","legendfinn",
+      "valorousrex","knightoflight","scoutadventure","guardianzero","champion99",
+      "boltstrike","cosmicalex",
+    ].map((s) => av("adventurer", s, HERO_BG)),
+  },
+  {
+    type: "character" as const,
+    label: "Fantasy",
+    icon: "🧙",
+    avatars: [
+      "fairywingdust","spellboundmage","mysticelf","enchantedfae","dragonrider",
+      "wizardoftime","nightskysorceress","stardusttpixie","moonrisewitch",
+      "twilightwarlock","runekeeper","lightbringer",
+    ].map((s) => av("adventurer", s, FANTASY_BG)),
+  },
+  {
+    type: "character" as const,
+    label: "Animal Pals",
+    icon: "🐾",
+    avatars: [
+      "cubbybearpaw","kittenpurr","puppywag","bunnyhop","foalgraze",
+      "ducklingquack","lambfluff","fawnleap","kitfox","hatchlingegg",
+      "pigletsnort","owlblink",
+    ].map((s) => av("adventurer", s, ANIMAL_BG)),
+  },
+  {
+    type: "character" as const,
+    label: "Robots",
+    icon: "🤖",
+    avatars: [
+      "astrobot1","astrobot2","astrobot3","astrobot4","astrobot5","astrobot6",
+      "astrobot7","astrobot8","astrobot9","astrobot10","astrobot11","astrobot12",
+    ].map((s) => av("bottts", s, ROBOT_BG)),
+  },
+  {
+    type: "character" as const,
+    label: "Pixel Pals",
+    icon: "🎮",
+    avatars: [
+      "pixelknight","pixelwizard","pixelprincess","pixelranger","pixelrobot",
+      "pixelcat","pixeldog","pixelbunny","pixelfox","pixelbird","pixeldragon","pixelunicorn",
+    ].map((s) => av("pixel-art", s, PIXEL_BG)),
+  },
+];
+
+const EMOJI_CATEGORIES = [
+  {
+    type: "emoji" as const,
+    label: "Animals",
+    icon: "🐾",
+    emojis: ["🐶","🐱","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🦋","🐝","🐞","🐧","🦜","🦚","🦩","🦓","🦒","🦔","🐺","🦝","🐿️","🦘","🐑","🐄","🐓","🦌"],
+  },
+  {
+    type: "emoji" as const,
+    label: "Ocean",
+    icon: "🌊",
+    emojis: ["🐬","🐳","🦈","🐠","🐟","🐙","🦑","🦀","🦞","🐡","🐚","🪸","🦭","🐊","🐢","🦦"],
+  },
+  {
+    type: "emoji" as const,
+    label: "Magic",
+    icon: "✨",
+    emojis: ["🦄","🐉","🧚","🧙","🧝","🧜","🧛","🧞","🪄","🔮","👑","🏰","🌈","💫","🌟","⚡","🍄","🌙","🌠","🎆"],
+  },
+  {
+    type: "emoji" as const,
+    label: "Space",
+    icon: "🚀",
+    emojis: ["🚀","🛸","🌙","⭐","🪐","🌍","🌠","👽","🤖","🔭","🧪","💡","🛰️","☄️","🌌","🌞"],
+  },
+  {
+    type: "emoji" as const,
+    label: "Sports",
+    icon: "⚽",
+    emojis: ["⚽","🏀","🏈","⚾","🎾","🏐","🎱","🏓","🥊","🎯","🎳","🏋️","🤸","🛹","🛼","🏄","🚴","🏇","🧗","🎿"],
+  },
+  {
+    type: "emoji" as const,
+    label: "Food",
+    icon: "🍕",
+    emojis: ["🍕","🍦","🍩","🍪","🎂","🍰","🧁","🍫","🍬","🍭","🍓","🍉","🍇","🌮","🍜","🧇","🥞","🍟","🍡","🍧"],
+  },
+];
+
+const ALL_CATEGORIES = [...CHARACTER_CATEGORIES, ...EMOJI_CATEGORIES];
+
+function isUrl(v: string) { return v.startsWith("https://") || v.startsWith("http://"); }
+
 const BLANK: CreateProfileIn = {
   name: "", author_name: null, age: 5, gender: "unspecified", grade_level: "K",
-  interests: [], reading_level: "beginner", avatar_emoji: "⭐",
+  interests: [], reading_level: "beginner", avatar_emoji: CHARACTER_CATEGORIES[0].avatars[0],
 };
 
 function ProfileForm({
@@ -44,6 +165,19 @@ function ProfileForm({
 }) {
   const [form, setForm] = useState<CreateProfileIn>(initial);
 
+  const [activeCategory, setActiveCategory] = useState<string>(() => {
+    const cur = initial.avatar_emoji ?? "";
+    if (parseAvataaarsUrl(cur)) return "__custom__";
+    if (isUrl(cur)) {
+      const found = CHARACTER_CATEGORIES.find((c) => c.avatars.includes(cur));
+      return found?.label ?? CHARACTER_CATEGORIES[0].label;
+    }
+    const found = EMOJI_CATEGORIES.find((c) => c.emojis.includes(cur));
+    return found?.label ?? CHARACTER_CATEGORIES[0].label;
+  });
+
+  const category = ALL_CATEGORIES.find((c) => c.label === activeCategory) ?? ALL_CATEGORIES[0];
+
   function toggleInterest(tag: string) {
     setForm((f) => ({
       ...f,
@@ -57,26 +191,109 @@ function ProfileForm({
     <div className="rounded-3xl bg-card p-6 chunky-border chunky-shadow-sm space-y-5">
       {/* Avatar picker */}
       <div>
-        <p className="text-xs font-extrabold text-muted-foreground mb-2 uppercase tracking-wide">Avatar</p>
-        <div className="flex flex-wrap gap-2">
-          {AVATAR_EMOJIS.map((emoji) => (
+        <div className="flex flex-col items-center gap-2 mb-4">
+          <div className="w-24 h-24 rounded-2xl bg-accent chunky-border overflow-hidden flex items-center justify-center shrink-0">
+            {isUrl(form.avatar_emoji ?? "") ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={form.avatar_emoji ?? ""} alt="selected avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-5xl">{form.avatar_emoji}</span>
+            )}
+          </div>
+          <p className="text-xs font-extrabold text-muted-foreground uppercase tracking-wide">Avatar</p>
+        </div>
+
+        {/* Category pills */}
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          <span className="text-xs font-bold text-muted-foreground self-center mr-1">Characters:</span>
+          {CHARACTER_CATEGORIES.map((cat) => (
             <button
-              key={emoji}
-              onClick={() => setForm((f) => ({ ...f, avatar_emoji: emoji }))}
-              className={`text-2xl w-10 h-10 rounded-xl flex items-center justify-center chunky-border transition-colors ${
-                form.avatar_emoji === emoji ? "bg-primary" : "bg-background hover:bg-muted"
+              key={cat.label}
+              onClick={() => setActiveCategory(cat.label)}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold chunky-border transition-colors ${
+                activeCategory === cat.label ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
               }`}
             >
-              {emoji}
+              {cat.icon} {cat.label}
             </button>
           ))}
         </div>
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          <span className="text-xs font-bold text-muted-foreground self-center mr-1">Emojis:</span>
+          {EMOJI_CATEGORIES.map((cat) => (
+            <button
+              key={cat.label}
+              onClick={() => setActiveCategory(cat.label)}
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold chunky-border transition-colors ${
+                activeCategory === cat.label ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+              }`}
+            >
+              {cat.icon} {cat.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          <button
+            onClick={() => {
+              setActiveCategory("__custom__");
+              if (!parseAvataaarsUrl(form.avatar_emoji ?? "")) {
+                setForm((f) => ({ ...f, avatar_emoji: DEFAULT_AVATAAARS_URL }));
+              }
+            }}
+            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold chunky-border transition-colors ${
+              activeCategory === "__custom__" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+            }`}
+          >
+            ✏️ Make Your Own
+          </button>
+        </div>
+
+        {/* Avatar grid / customizer */}
+        {activeCategory === "__custom__" ? (
+          <AvataaaarsPicker
+            value={form.avatar_emoji ?? ""}
+            onChange={(v) => setForm((f) => ({ ...f, avatar_emoji: v }))}
+          />
+        ) : (
+          <div className="rounded-2xl bg-background p-3 chunky-border max-h-44 overflow-y-auto">
+            {category.type === "character" ? (
+              <div className="grid grid-cols-6 gap-2">
+                {category.avatars.map((url) => (
+                  <button
+                    key={url}
+                    onClick={() => setForm((f) => ({ ...f, avatar_emoji: url }))}
+                    className={`rounded-xl overflow-hidden chunky-border transition-all aspect-square ${
+                      form.avatar_emoji === url ? "ring-2 ring-primary ring-offset-1 bg-primary/10" : "hover:scale-105"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="avatar option" className="w-full h-full object-cover" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(category as typeof EMOJI_CATEGORIES[0]).emojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => setForm((f) => ({ ...f, avatar_emoji: emoji }))}
+                    className={`text-2xl w-10 h-10 rounded-xl flex items-center justify-center chunky-border transition-colors ${
+                      form.avatar_emoji === emoji ? "bg-primary" : "hover:bg-muted"
+                    }`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Name + Age row */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wide">Child's Name</label>
+          <label className="text-xs font-extrabold text-muted-foreground uppercase tracking-wide">Child&apos;s Name</label>
           <input
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -212,8 +429,11 @@ function ProfileCard({
 
   return (
     <div className="rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm flex gap-4">
-      <div className="text-4xl shrink-0 w-16 h-16 flex items-center justify-center rounded-2xl bg-accent chunky-border">
-        {profile.avatar_emoji}
+      <div className="shrink-0 w-16 h-16 flex items-center justify-center rounded-2xl bg-accent chunky-border overflow-hidden">
+        <AvatarDisplay
+          value={profile.avatar_emoji}
+          className={isUrl(profile.avatar_emoji) ? "w-full h-full object-cover" : "text-4xl"}
+        />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">

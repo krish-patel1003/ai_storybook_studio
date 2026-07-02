@@ -1,4 +1,5 @@
 import enum
+import re
 import uuid
 from datetime import datetime
 
@@ -14,9 +15,15 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.models import Base
+
+
+def _strip_newlines(text: str) -> str:
+    """Collapse all newline variants into a single space and trim."""
+    collapsed = re.sub(r"\s*[\r\n]+\s*", " ", text)
+    return re.sub(r" {2,}", " ", collapsed).strip()
 
 
 class GenerationStage(str, enum.Enum):
@@ -175,5 +182,11 @@ class Page(Base):
     text_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     text_mode: Mapped[int | None] = mapped_column(nullable=True)
     bg_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    @validates("text")
+    def _validate_text(self, key: str, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _strip_newlines(value)
 
     book: Mapped["Book"] = relationship(back_populates="pages")
