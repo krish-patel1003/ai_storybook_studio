@@ -1,15 +1,16 @@
 """widen avatar_emoji to text
 
-Revision ID: 2026_07_02_widen_avatar_emoji
-Revises: 2026_06_30_clean_newlines_in_page_text
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-07-02
 """
 
+from typing import Union
 from alembic import op
 import sqlalchemy as sa
 
-revision = "2026_07_02_widen_avatar_emoji"
-down_revision = "2026_06_30_clean_newlines_in_page_text"
+revision: str = "0021"
+down_revision: Union[str, None] = "0020"
 branch_labels = None
 depends_on = None
 
