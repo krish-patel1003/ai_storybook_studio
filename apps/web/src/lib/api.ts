@@ -711,5 +711,12 @@ export const api = {
         method: "DELETE",
         headers: authed(token),
       }),
+
+    generateAvatar: (token: string, prompt: string) =>
+      request<{ url: string }>("/profiles/generate-avatar", {
+        method: "POST",
+        headers: authed(token),
+        body: JSON.stringify({ prompt }),
+      }),
   },
 };

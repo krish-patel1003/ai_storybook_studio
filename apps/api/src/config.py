@@ -42,6 +42,7 @@ class Config(BaseSettings):
     SMTP_PASSWORD: str = ""      # Gmail App Password (16-char, no spaces)
     EMAIL_FROM: str = "Storybook.Studio <noreply@storybook.studio>"
     FRONTEND_URL: str = "https://ai-storybook-studio.vercel.app"
+    API_URL: str = "https://storybook-api-741258687011.us-central1.run.app"
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""

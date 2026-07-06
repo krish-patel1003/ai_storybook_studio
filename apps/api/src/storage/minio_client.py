@@ -154,6 +154,15 @@ def download_audio(key: str) -> bytes:
     return data
 
 
+def avatar_key(user_id: str, filename: str) -> str:
+    return f"avatars/{user_id}/{filename}"
+
+
+def upload_avatar(user_id: str, filename: str, data: bytes, mime_type: str = "image/png") -> str:
+    key = avatar_key(user_id, filename)
+    return upload(key, data, mime_type)
+
+
 def upload_voice_sample(user_id: str, profile_id: str, data: bytes, mime_type: str = "audio/webm") -> str:
     key = voice_sample_key(user_id, profile_id)
     return upload(key, data, mime_type)

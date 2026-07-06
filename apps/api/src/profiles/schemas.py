@@ -26,6 +26,14 @@ class UpdateProfileIn(BaseModel):
     avatar_emoji: str | None = Field(default=None, max_length=2000)
 
 
+class GenerateAvatarIn(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=500)
+
+
+class GenerateAvatarOut(BaseModel):
+    url: str
+
+
 class ProfileOut(BaseModel):
     id: uuid.UUID
     name: str

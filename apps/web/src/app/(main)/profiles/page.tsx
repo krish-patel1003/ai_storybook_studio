@@ -7,7 +7,6 @@ import { api, type ChildProfile, type CreateProfileIn } from "@/lib/api";
 import { toast } from "sonner";
 import { LgSpinner } from "@/components/character-spinner";
 import { AvatarDisplay } from "@/components/avatar-display";
-import { AvataaaarsPicker, DEFAULT_AVATAAARS_URL, parseAvataaarsUrl } from "@/components/avataaars-picker";
 
 const GRADE_OPTIONS = ["preschool", "K", "1", "2", "3", "4", "5", "6+"];
 const READING_LEVELS = [
@@ -163,11 +162,14 @@ function ProfileForm({
   onCancel: () => void;
   saving: boolean;
 }) {
+  const { token } = useAuth();
   const [form, setForm] = useState<CreateProfileIn>(initial);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [generatingAvatar, setGeneratingAvatar] = useState(false);
 
   const [activeCategory, setActiveCategory] = useState<string>(() => {
     const cur = initial.avatar_emoji ?? "";
-    if (parseAvataaarsUrl(cur)) return "__custom__";
+    if (isUrl(cur) && cur.includes("/profiles/avatar-image")) return "__ai__";
     if (isUrl(cur)) {
       const found = CHARACTER_CATEGORIES.find((c) => c.avatars.includes(cur));
       return found?.label ?? CHARACTER_CATEGORIES[0].label;
@@ -177,6 +179,19 @@ function ProfileForm({
   });
 
   const category = ALL_CATEGORIES.find((c) => c.label === activeCategory) ?? ALL_CATEGORIES[0];
+
+  async function handleGenerateAvatar() {
+    if (!aiPrompt.trim() || !token) return;
+    setGeneratingAvatar(true);
+    try {
+      const { url } = await api.profiles.generateAvatar(token, aiPrompt.trim());
+      setForm((f) => ({ ...f, avatar_emoji: url }));
+    } catch {
+      toast.error("Avatar generation failed — try a different description.");
+    } finally {
+      setGeneratingAvatar(false);
+    }
+  }
 
   function toggleInterest(tag: string) {
     setForm((f) => ({
@@ -234,26 +249,40 @@ function ProfileForm({
         </div>
         <div className="flex flex-wrap gap-1.5 mb-3">
           <button
-            onClick={() => {
-              setActiveCategory("__custom__");
-              if (!parseAvataaarsUrl(form.avatar_emoji ?? "")) {
-                setForm((f) => ({ ...f, avatar_emoji: DEFAULT_AVATAAARS_URL }));
-              }
-            }}
+            onClick={() => setActiveCategory("__ai__")}
             className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold chunky-border transition-colors ${
-              activeCategory === "__custom__" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+              activeCategory === "__ai__" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
             }`}
           >
-            ✏️ Make Your Own
+            ✨ AI Avatar
           </button>
         </div>
 
-        {/* Avatar grid / customizer */}
-        {activeCategory === "__custom__" ? (
-          <AvataaaarsPicker
-            value={form.avatar_emoji ?? ""}
-            onChange={(v) => setForm((f) => ({ ...f, avatar_emoji: v }))}
-          />
+        {/* Avatar grid / AI generator */}
+        {activeCategory === "__ai__" ? (
+          <div className="rounded-2xl bg-background p-4 chunky-border space-y-3">
+            <p className="text-xs text-muted-foreground">Describe the avatar and AI will draw it</p>
+            <div className="flex gap-2">
+              <input
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleGenerateAvatar()}
+                placeholder="e.g. a brave little fox wearing a knight helmet"
+                className="flex-1 rounded-xl bg-card px-3 py-2 text-sm font-bold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40"
+                disabled={generatingAvatar}
+              />
+              <button
+                onClick={handleGenerateAvatar}
+                disabled={generatingAvatar || !aiPrompt.trim()}
+                className="rounded-xl px-4 py-2 text-sm font-bold bg-primary text-primary-foreground chunky-border disabled:opacity-50 shrink-0"
+              >
+                {generatingAvatar ? "Generating…" : "Generate"}
+              </button>
+            </div>
+            {generatingAvatar && (
+              <p className="text-xs text-muted-foreground text-center animate-pulse">Creating your avatar…</p>
+            )}
+          </div>
         ) : (
           <div className="rounded-2xl bg-background p-3 chunky-border max-h-44 overflow-y-auto">
             {category.type === "character" ? (
