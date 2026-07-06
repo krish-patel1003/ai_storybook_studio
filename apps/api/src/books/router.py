@@ -1,7 +1,7 @@
 import uuid
 from typing import Sequence
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -13,21 +13,33 @@ from src.books.schemas import (
     AddPageIn,
     BookOut,
     BookSummaryOut,
+    BrainstormIn,
+    BrainstormOut,
+    BriefFieldRegenerateIn,
     BriefGenerateIn,
     BriefOptionsOut,
+    BriefOut,
     CreateBookIn,
     CreateDraftIn,
+    ExpandPromptIn,
+    ExpandedPromptOut,
     GenerateIn,
     ModelInfo,
     ModelsOut,
+    NarrateIn,
     PageCountOptionsOut,
     PageOut,
     ProviderInfo,
     RecalibrateIn,
+    StorySeedOut,
     UpdateBookIn,
+    BulkPageStyleIn,
     UpdatePageIn,
 )
+from src.books.kdp import KDPOut, KDPUpdateIn, generate_kdp_fields
+from src.config import settings
 from src.database import get_db
+from src.generation.gemini import GeminiClient
 from src.generation.constants import (
     DEFAULT_PAGE_COUNT,
     MAX_PAGE_COUNT,
@@ -62,8 +74,8 @@ async def list_models(user: User = Depends(current_user)) -> ModelsOut:
                 description="Cloud-hosted · High quality",
                 available=bool(settings.GEMINI_API_KEY),
                 models=[
-                    ModelInfo(id="gemini-2.0-flash", name="Gemini Flash", description="Fast & efficient · Best for drafting", size="cloud"),
-                    ModelInfo(id="gemini-1.5-pro", name="Gemini Pro", description="Highest quality · Slower", size="cloud"),
+                    ModelInfo(id="gemini-3.5-flash", name="Gemini Flash", description="Fast & efficient · Best for drafting", size="cloud"),
+                    ModelInfo(id="gemini-3.1-pro-preview", name="Gemini Pro", description="Highest quality · Slower", size="cloud"),
                 ],
             ),
             ProviderInfo(
@@ -77,27 +89,59 @@ async def list_models(user: User = Depends(current_user)) -> ModelsOut:
     )
 
 
-@router.post("/briefs/generate", response_model=BriefOptionsOut)
-async def generate_brief_options(
+@router.post("/prompts/brainstorm", response_model=BrainstormOut)
+async def brainstorm_ideas(
+    data: BrainstormIn,
+    user: User = Depends(current_user),
+) -> BrainstormOut:
+    """Generate 6 short story seed ideas to inspire the user before they write their prompt."""
+    result = await service.brainstorm(data)
+    return BrainstormOut(seeds=[StorySeedOut(title=s.title, hook=s.hook) for s in result.seeds])
+
+
+@router.post("/prompts/expand", response_model=ExpandedPromptOut)
+async def expand_prompt(
+    data: ExpandPromptIn,
+    user: User = Depends(current_user),
+) -> ExpandedPromptOut:
+    """Expand a user's prompt into a rich story concept."""
+    result = await service.expand_prompt(data)
+    return ExpandedPromptOut(
+        title=result.title,
+        story_concept=result.story_concept,
+        key_characters=result.key_characters,
+        story_highlights=result.story_highlights,
+        themes=result.themes,
+        visual_style=result.visual_style,
+    )
+
+
+@router.post("/briefs/generate", response_model=BriefOut)
+async def generate_brief(
     data: BriefGenerateIn,
     user: User = Depends(current_user),
-) -> BriefOptionsOut:
-    briefs = await service.generate_brief_options(data)
-    from src.books.schemas import BriefOut, ArcStageOut
-    return BriefOptionsOut(
-        briefs=[
-            BriefOut(
-                title=b.title,
-                logline=b.logline,
-                central_conflict=b.central_conflict,
-                moral=b.moral,
-                world=b.world,
-                narrative_structure=b.narrative_structure,
-                arc=[ArcStageOut(name=a.name, description=a.description, page_span=a.page_span) for a in b.arc],
-            )
-            for b in briefs
-        ]
+) -> BriefOut:
+    """Generate a single story brief from the user's prompt and settings."""
+    b = await service.generate_brief(data)
+    from src.books.schemas import ArcStageOut
+    return BriefOut(
+        title=b.title,
+        description=b.description,
+        characters_intro=b.characters_intro,
+        themes=b.themes,
+        lesson=b.lesson,
+        arc=[ArcStageOut(name=a.name, description=a.description, page_span=a.page_span) for a in b.arc],
     )
+
+
+@router.post("/briefs/regenerate-field", response_model=BriefOut)
+async def regenerate_brief_field(
+    data: BriefFieldRegenerateIn,
+    user: User = Depends(current_user),
+) -> BriefOut:
+    """Regenerate a single field of an existing brief, keeping everything else intact."""
+    merged = await service.regenerate_brief_field(data)
+    return BriefOut(**merged)
 
 
 @router.get("/page-count-options", response_model=PageCountOptionsOut)
@@ -124,12 +168,15 @@ async def create_book(
 async def list_books(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(current_user),
+    request: Request = None,
 ) -> list[BookSummaryOut]:
     rows = await service.list_books(db, user.id)
     result = []
-    for book, illustrated_count in rows:
+    for book, illustrated_count, cover_page_id in rows:
         summary = BookSummaryOut.model_validate(book)
         summary.illustrated_page_count = illustrated_count
+        if cover_page_id:
+            summary.cover_image_url = f"/books/{book.id}/pages/{cover_page_id}/image"
         result.append(summary)
     return result
 
@@ -144,9 +191,81 @@ async def create_draft(
     return BookOut.model_validate(book)
 
 
+# ── Public endpoints (no auth — must be BEFORE /{book_id}) ───────────────────
+
+@router.get("/public/{book_id}", response_model=BookOut)
+async def get_public_book(
+    book_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> BookOut:
+    from fastapi import HTTPException
+    from sqlalchemy import select as sa_select
+    from src.books.models import Book as BookModel
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        sa_select(BookModel).where(BookModel.id == book_id, BookModel.visibility == "public")
+    )
+    book = result.scalar_one_or_none()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found or not public")
+    result2 = await db.execute(
+        sa_select(BookModel)
+        .options(selectinload(BookModel.pages), selectinload(BookModel.characters))
+        .where(BookModel.id == book_id)
+    )
+    book = result2.scalar_one()
+    return BookOut.model_validate(book)
+
+
+@router.get("/public/{book_id}/pages/{page_id}/image")
+async def get_public_page_image(
+    book_id: uuid.UUID,
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    from fastapi import HTTPException
+    from sqlalchemy import select as sa_select
+    from src.books.models import Book as BookModel, Page
+    from src.storage import minio_client
+
+    book_result = await db.execute(
+        sa_select(BookModel.visibility).where(BookModel.id == book_id)
+    )
+    row = book_result.one_or_none()
+    if row is None or row.visibility != "public":
+        raise HTTPException(status_code=404, detail="Not found or not public")
+
+    page_result = await db.execute(
+        sa_select(Page.image_key).where(Page.id == page_id, Page.book_id == book_id)
+    )
+    page_row = page_result.one_or_none()
+    if page_row is None or page_row.image_key is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    data, content_type = minio_client.download_image(page_row.image_key)
+    return Response(content=data, media_type=content_type)
+
+
+@router.get("/voices", response_model=dict)
+async def list_voices(user: User = Depends(current_user)) -> dict:
+    """Return available TTS voices with descriptions."""
+    from src.generation.tts import AVAILABLE_VOICES, DEFAULT_VOICE
+    return {
+        "voices": [
+            {"id": k, "description": v, "is_default": k == DEFAULT_VOICE}
+            for k, v in AVAILABLE_VOICES.items()
+        ]
+    }
+
+
 @router.get("/{book_id}", response_model=BookOut)
 async def get_book(book: Book = Depends(owned_book)) -> BookOut:
-    return BookOut.model_validate(book)
+    try:
+        return BookOut.model_validate(book)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("BookOut.model_validate failed for book %s: %s", book.id, exc)
+        raise
 
 
 @router.patch("/{book_id}", response_model=BookOut)
@@ -165,6 +284,157 @@ async def delete_book(
     book: Book = Depends(owned_book),
 ) -> None:
     await service.delete_book(db, book.id, book.user_id)
+
+
+# ── Export font list ──────────────────────────────────────────────────────────
+
+@router.get("/export/fonts")
+async def list_export_fonts(user: User = Depends(current_user)) -> dict:
+    """Return available fonts for PDF/EPUB export."""
+    from src.books.export import EXPORT_FONTS, DEFAULT_EXPORT_FONT
+    return {
+        "fonts": [
+            {"id": fid, "label": cfg["label"], "is_default": fid == DEFAULT_EXPORT_FONT}
+            for fid, cfg in EXPORT_FONTS.items()
+        ]
+    }
+
+
+# ── Export endpoints (must be BEFORE /{book_id}/pages/{page_id}) ─────────────
+
+@router.get("/{book_id}/export/pdf")
+async def export_pdf(
+    font: str = Query(default="nunito"),
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> Response:
+    from src.books import service
+    from src.books.export import build_pdf, EXPORT_FONTS, DEFAULT_EXPORT_FONT
+    from fastapi.responses import Response as FastAPIResponse
+
+    import re as _re
+    font_id = font if font in EXPORT_FONTS else DEFAULT_EXPORT_FONT
+    export_pages = await service.build_export_pages(db, book)
+    title = book.brief.get("title", book.title) if book.brief else book.title
+    author = book.author_name or getattr(user, "username", "") or ""
+    pdf_bytes = await build_pdf(title, export_pages, author=author, font_id=font_id)
+    safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
+    )
+
+
+@router.get("/{book_id}/export/cover-pdf")
+async def export_cover_pdf(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> Response:
+    """Single-page PDF of the front cover — needed for Amazon publishing."""
+    import re as _re
+    from src.books import service
+    from src.books.export import build_cover_pdf
+    from fastapi.responses import Response as FastAPIResponse
+
+    export_pages = await service.build_export_pages(db, book)
+    cover = next((p for p in export_pages if p.is_cover), None)
+    if not cover:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No cover page found")
+
+    title  = book.brief.get("title", book.title) if book.brief else book.title
+    author = book.author_name or getattr(user, "username", "") or ""
+    pdf_bytes  = await build_cover_pdf(title, cover, author=author)
+    safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}_cover.pdf"'},
+    )
+
+
+@router.get("/{book_id}/export/epub")
+async def export_epub(
+    font: str = Query(default="nunito"),
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> Response:
+    import re as _re
+    from src.books import service
+    from src.books.export import build_epub, EXPORT_FONTS, DEFAULT_EXPORT_FONT
+    from fastapi.responses import Response as FastAPIResponse
+
+    font_id = font if font in EXPORT_FONTS else DEFAULT_EXPORT_FONT
+    export_pages = await service.build_export_pages(db, book)
+    title = book.brief.get("title", book.title) if book.brief else book.title
+    author = book.author_name or getattr(user, "username", "") or ""
+    epub_bytes = await build_epub(title, author or "AI Storybook Studio", export_pages, font_id=font_id)
+    safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
+    return FastAPIResponse(
+        content=epub_bytes,
+        media_type="application/epub+zip",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.epub"'},
+    )
+
+
+# ── KDP publishing assistant ──────────────────────────────────────────────────
+
+@router.get("/{book_id}/kdp", response_model=KDPOut)
+async def get_kdp_fields(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> KDPOut:
+    """Return KDP publishing fields for this book. Uses cached result if available."""
+    client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+    out = await generate_kdp_fields(book, user, client)
+    await db.commit()
+    return out
+
+
+@router.post("/{book_id}/kdp/regenerate", response_model=KDPOut)
+async def regenerate_kdp_fields(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
+) -> KDPOut:
+    """Force-regenerate KDP fields, overwriting any cached version."""
+    client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+    out = await generate_kdp_fields(book, user, client, force=True)
+    await db.commit()
+    return out
+
+
+@router.patch("/{book_id}/kdp", response_model=KDPOut)
+async def update_kdp_fields(
+    data: KDPUpdateIn,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> KDPOut:
+    """Merge partial edits into the stored KDP fields."""
+    from src.books.kdp import KDPOut as _KDPOut
+
+    current = dict(book.kdp_fields or {})
+    updates = data.model_dump(exclude_none=True)
+    current.update(updates)
+    book.kdp_fields = current
+    await db.commit()
+    return _KDPOut(**current, is_cached=True)
+
+
+@router.patch("/{book_id}/pages/style", response_model=BookOut)
+async def bulk_page_style(
+    data: BulkPageStyleIn,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    """Apply book-level style (font, size, color, mode) to every content page."""
+    updated = await service.bulk_apply_page_style(db, book.id, book.user_id, data)
+    return BookOut.model_validate(updated)
 
 
 @router.patch("/{book_id}/pages/{page_id}", response_model=BookOut)
@@ -208,6 +478,39 @@ async def generate_from_draft(
     return BookOut.model_validate(updated)
 
 
+@router.post("/{book_id}/characters/sheets", response_model=BookOut)
+async def generate_character_sheets(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.generate_character_sheets(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.get("/{book_id}/characters/{character_id}/image")
+async def get_character_image(
+    character_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> Response:
+    from fastapi import HTTPException
+    from sqlalchemy import select as sa_select
+    from src.books.models import Character
+    from src.storage import minio_client
+
+    result = await db.execute(
+        sa_select(Character.reference_image_key).where(
+            Character.id == character_id, Character.book_id == book.id
+        )
+    )
+    row = result.one_or_none()
+    if row is None or row.reference_image_key is None:
+        raise HTTPException(status_code=404, detail="Character reference image not generated yet")
+
+    data, content_type = minio_client.download(row.reference_image_key)
+    return Response(content=data, media_type=content_type)
+
+
 @router.post("/{book_id}/pages/{page_id}/illustrate", response_model=BookOut)
 async def illustrate_page(
     page_id: uuid.UUID,
@@ -215,6 +518,38 @@ async def illustrate_page(
     book: Book = Depends(owned_book),
 ) -> BookOut:
     updated = await service.illustrate_page(db, book.id, page_id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/back-cover", response_model=BookOut)
+async def create_back_cover(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.create_back_cover_page(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/back-cover/illustrate", response_model=BookOut)
+async def illustrate_back_cover(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.illustrate_back_cover(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/pages/{page_id}/split", response_model=BookOut)
+async def split_page(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    from fastapi import HTTPException
+    try:
+        updated = await service.split_page(db, book.id, page_id, book.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return BookOut.model_validate(updated)
 
 
@@ -240,6 +575,90 @@ async def get_page_image(
 
     data, content_type = minio_client.download_image(row.image_key)
     return Response(content=data, media_type=content_type)
+
+
+
+@router.post("/{book_id}/pages/{page_id}/narrate", response_model=BookOut)
+async def narrate_page(
+    page_id: uuid.UUID,
+    data: NarrateIn = NarrateIn(),
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.narrate_page(
+        db, book.id, page_id, book.user_id,
+        voice_name=data.voice_name,
+        voice_profile_id=data.voice_profile_id,
+    )
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/narrate", response_model=BookOut)
+async def narrate_book(
+    data: NarrateIn = NarrateIn(),
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    """Narrate all un-narrated pages in the book sequentially."""
+    updated = await service.narrate_book(
+        db, book.id, book.user_id,
+        voice_name=data.voice_name,
+        voice_profile_id=data.voice_profile_id,
+    )
+    return BookOut.model_validate(updated)
+
+
+@router.get("/{book_id}/pages/{page_id}/audio")
+async def get_page_audio(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> Response:
+    from fastapi import HTTPException
+    from sqlalchemy import select as sa_select
+    from src.books.models import Page
+    from src.storage import minio_client
+    from fastapi.responses import Response as FastAPIResponse
+
+    result = await db.execute(
+        sa_select(Page.audio_key).where(
+            Page.id == page_id, Page.book_id == book.id
+        )
+    )
+    row = result.one_or_none()
+    if row is None or row.audio_key is None:
+        raise HTTPException(status_code=404, detail="Audio not generated yet")
+
+    data = minio_client.download_audio(row.audio_key)
+    return FastAPIResponse(content=data, media_type="audio/wav")
+
+
+@router.get("/{book_id}/pages/{page_id}/audio/raw")
+async def get_page_audio_raw(
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> Response:
+    """Download the raw PCM debug file for a page (saved alongside the WAV)."""
+    from fastapi import HTTPException
+    from src.config import settings
+    from src.storage import minio_client
+    from fastapi.responses import Response as FastAPIResponse
+
+    raw_key = f"audio/{book.id}/{page_id}.raw.pcm"
+    try:
+        response = minio_client._client().get_object(settings.MINIO_BUCKET, raw_key)
+        data = response.read()
+        response.close()
+        response.release_conn()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Raw PCM not found — narrate the page first")
+
+    return FastAPIResponse(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename=\"page_{page_id}.raw.pcm\""},
+    )
 
 
 @router.post("/{book_id}/pages", response_model=BookOut, status_code=status.HTTP_201_CREATED)

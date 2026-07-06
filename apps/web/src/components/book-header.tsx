@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User } from "lucide-react";
+import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useState, useRef, useEffect } from "react";
 
 const navItems = [
-  { href: "/create", label: "Create" },
-  { href: "/library", label: "Library" },
-  { href: "/outline", label: "Outline" },
-  { href: "/editor", label: "Editor" },
-  { href: "/reader", label: "Reader" },
+  { href: "/create",   label: "Create"       },
+  { href: "/library",  label: "Library"      },
+  { href: "/studio",   label: "Studio"       },
+  { href: "/reader",   label: "Reader"       },
+  { href: "/voices",   label: "Voice Studio" },
+  { href: "/kdp",      label: "Publish"      },
 ] as const;
 
 export function BookHeader() {
@@ -93,10 +94,10 @@ export function BookHeader() {
                   className="flex items-center gap-2 rounded-full bg-card py-1.5 pl-1.5 pr-3 chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"
                 >
                   <span className="grid h-7 w-7 place-items-center rounded-full bg-primary text-xs font-black text-primary-foreground">
-                    {user.pen_name.charAt(0).toUpperCase()}
+                    {user.username.charAt(0).toUpperCase()}
                   </span>
                   <span className="hidden max-w-[100px] truncate text-sm font-extrabold md:block">
-                    {user.pen_name}
+                    {user.username}
                   </span>
                   <ChevronDown
                     className={`h-3.5 w-3.5 transition-transform ${menuOpen ? "rotate-180" : ""}`}
@@ -114,12 +115,21 @@ export function BookHeader() {
                     </div>
 
                     <Link
-                      href="/books"
+                      href="/library"
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-bold transition-colors hover:bg-highlight"
                     >
                       <Library className="h-4 w-4" strokeWidth={2.5} />
                       My Library
+                    </Link>
+
+                    <Link
+                      href="/profiles"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-bold transition-colors hover:bg-highlight"
+                    >
+                      <Baby className="h-4 w-4" strokeWidth={2.5} />
+                      Child Profiles
                     </Link>
 
                     <Link

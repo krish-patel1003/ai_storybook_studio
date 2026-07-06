@@ -8,9 +8,9 @@ class AuthConfig(BaseSettings):
 
     JWT_SECRET: str
     JWT_ALG: str = "HS256"
-    JWT_EXP: int = 15  # minutes
+    JWT_EXP: int = 60 * 24  # minutes — 24 hours
 
-    REFRESH_TOKEN_EXP_DAYS: int = 30
+    REFRESH_TOKEN_EXP_DAYS: int = 90
 
     GOOGLE_CLIENT_ID: str = ""
 

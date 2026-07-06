@@ -1,6 +1,5 @@
 from enum import StrEnum
 
-from pydantic import PostgresDsn, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,8 +12,8 @@ class Environment(StrEnum):
 class Config(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    DATABASE_URL: PostgresDsn
-    REDIS_URL: RedisDsn
+    DATABASE_URL: str
+    REDIS_URL: str
 
     ENVIRONMENT: Environment = Environment.LOCAL
 
@@ -24,6 +23,7 @@ class Config(BaseSettings):
     APP_VERSION: str = "0.1.0"
 
     GEMINI_API_KEY: str = ""
+    ELEVENLABS_API_KEY: str = ""
 
     # Ollama — override when running inside Docker
     OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
@@ -34,6 +34,22 @@ class Config(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "illustrations"
     MINIO_SECURE: bool = False
+
+    # Email (Gmail SMTP / Google Workspace SMTP)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""          # e.g. ira-tech@csulb.edu
+    SMTP_PASSWORD: str = ""      # Gmail App Password (16-char, no spaces)
+    EMAIL_FROM: str = "Storybook.Studio <noreply@storybook.studio>"
+    FRONTEND_URL: str = "https://ai-storybook-studio.vercel.app"
+    API_URL: str = "https://storybook-api-741258687011.us-central1.run.app"
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+
+    # Admin dashboard — REQUIRED: set via environment variables, no defaults
+    ADMIN_USERNAME: str
+    ADMIN_PASSWORD: str
 
 
 settings = Config()

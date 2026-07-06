@@ -14,3 +14,9 @@ python-multipart==0.0.20
 google-genai==1.14.0
 redis[hiredis]==5.2.1
 minio==7.2.15
+google-cloud-storage==2.19.0
+fpdf2==2.8.3
+Pillow==11.2.1
+ebooklib==0.18
+numpy>=1.26.0
+soundfile>=0.12.1

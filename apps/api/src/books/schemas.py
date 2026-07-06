@@ -18,7 +18,7 @@ from src.generation.schemas import IllustrationMetadata
 class CreateBookIn(BaseModel):
     raw_prompt: str = Field(min_length=10, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
-    tone: list[str] = Field(default_factory=list, max_length=5)
+    tone: list[str] = Field(default_factory=list)
     art_style: str = Field(min_length=3, max_length=100)
     safety_mode: bool = True
     page_count: int = Field(
@@ -27,15 +27,46 @@ class CreateBookIn(BaseModel):
         le=MAX_PAGE_COUNT,
     )
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
+    child_profile_id: uuid.UUID | None = None
+    author_name: str | None = None
 
 
 class UpdatePageIn(BaseModel):
-    """User editing a beat on the /outline screen."""
+    """User editing a page on the /outline or review screen."""
     beat: str | None = Field(default=None, min_length=5)
     emotional_note: str | None = None
     setting_note: str | None = None
     is_locked: bool | None = None
+    text: str | None = None
+    text_align: str | None = Field(default=None, pattern=r"^(left|center|right)$")
+    text_position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
+    canvas_overlay: dict | None = None
+    font_size: float | None = None
+    font_family: str | None = None
+    text_color: str | None = None
+    text_mode: int | None = None
+    bg_color: str | None = None
+
+
+class BulkTextStyleIn(BaseModel):
+    """Apply text layout to all content pages at once, or randomize."""
+    text_align: str | None = Field(default=None, pattern=r"^(left|center|right)$")
+    text_position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
+    randomize: bool = False
+    # When randomize=True, pick from these subsets (defaults to all if empty)
+    align_pool: list[str] = Field(default_factory=list)
+    position_pool: list[str] = Field(default_factory=list)
+
+
+class BulkPageStyleIn(BaseModel):
+    """Apply book-level style settings to every content page at once."""
+    font_family: str | None = None
+    font_size: float | None = None
+    text_color: str | None = None
+    text_mode: int | None = None
+    bg_color: str | None = None
+    canvas_overlay: dict | None = None
 
 
 class RecalibrateIn(BaseModel):
@@ -56,11 +87,10 @@ class ArcStageOut(BaseModel):
 
 class BriefOut(BaseModel):
     title: str
-    logline: str
-    central_conflict: str
-    moral: str
-    world: str
-    narrative_structure: str
+    description: str
+    characters_intro: list[str]
+    themes: list[str]
+    lesson: str
     arc: list[ArcStageOut]
 
 
@@ -72,31 +102,50 @@ class CharacterOut(BaseModel):
     personality: str
     visual_anchors: list[str]
     illustration_prompt: str
+    reference_image_key: str | None = Field(default=None, exclude=True)
+    has_reference_image: bool = False
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _set_has_ref_image(self) -> "CharacterOut":
+        self.has_reference_image = self.reference_image_key is not None
+        return self
 
 
 class PageOut(BaseModel):
     id: uuid.UUID
     order: int
     is_cover: bool
+    is_back_cover: bool = False
     is_locked: bool
-    narrative_role: str
-    beat: str
-    emotional_note: str
-    characters_present: list[str]
-    setting_note: str
+    narrative_role: str = ""
+    beat: str = ""
+    emotional_note: str = ""
+    characters_present: list[str] = Field(default_factory=list)
+    setting_note: str = ""
     text: str | None
     word_count: int | None
     illustration_metadata: IllustrationMetadata | None
     image_key: str | None = Field(default=None, exclude=True)
     has_image: bool = False
+    audio_key: str | None = Field(default=None, exclude=True)
+    has_audio: bool = False
+    text_align: str = "center"
+    text_position: str = "bottom"
+    canvas_overlay: dict | None = None
+    font_size: float | None = None
+    font_family: str | None = None
+    text_color: str | None = None
+    text_mode: int | None = None
+    bg_color: str | None = None
 
     model_config = {"from_attributes": True}
 
     @model_validator(mode="after")
-    def _set_has_image(self) -> "PageOut":
+    def _set_flags(self) -> "PageOut":
         self.has_image = self.image_key is not None
+        self.has_audio = self.audio_key is not None
         return self
 
 
@@ -119,6 +168,8 @@ class BookOut(BaseModel):
     pages: list[PageOut]
     created_at: datetime
     updated_at: datetime
+    child_profile_id: uuid.UUID | None = None
+    author_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -133,6 +184,7 @@ class BookSummaryOut(BaseModel):
     visibility: str
     stage: GenerationStage
     illustrated_page_count: int = 0
+    cover_image_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -146,6 +198,42 @@ class PageCountOptionsOut(BaseModel):
     max: int
 
 
+class BrainstormIn(BaseModel):
+    age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
+    tone: list[str] = Field(default_factory=list)
+    page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+    model_provider: str = "gemini"
+    model_name: str = "gemini-3.1-pro-preview"
+
+
+class StorySeedOut(BaseModel):
+    title: str
+    hook: str
+
+
+class BrainstormOut(BaseModel):
+    seeds: list[StorySeedOut]
+
+
+class ExpandPromptIn(BaseModel):
+    raw_prompt: str = Field(min_length=3, max_length=2000)
+    age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
+    tone: list[str] = Field(default_factory=list)
+    safety_mode: bool = True
+    page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+    model_provider: str = "gemini"
+    model_name: str = "gemini-3.1-pro-preview"
+
+
+class ExpandedPromptOut(BaseModel):
+    title: str
+    story_concept: str
+    key_characters: list[str]
+    story_highlights: list[str]
+    themes: list[str]
+    visual_style: str
+
+
 class BriefGenerateIn(BaseModel):
     raw_prompt: str = Field(min_length=10, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
@@ -153,11 +241,24 @@ class BriefGenerateIn(BaseModel):
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
+    expanded_concept: ExpandedPromptOut | None = None
 
 
 class BriefOptionsOut(BaseModel):
     briefs: list[BriefOut]
+
+
+class BriefFieldRegenerateIn(BaseModel):
+    raw_prompt: str = Field(min_length=10, max_length=2000)
+    age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
+    tone: list[str] = Field(default_factory=list)
+    safety_mode: bool = True
+    page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+    model_provider: str = "gemini"
+    model_name: str = "gemini-3.1-pro-preview"
+    current_brief: BriefOut
+    field: str = Field(description="One of: title, description, characters_intro, themes, lesson")
 
 
 class ModelInfo(BaseModel):
@@ -183,15 +284,22 @@ class CreateDraftIn(BaseModel):
     """Saves a project record before full generation starts."""
     raw_prompt: str = Field(min_length=10, max_length=2000)
     age_range: str = Field(pattern=r"^(3-5|6-8|9-11)$")
-    tone: list[str] = Field(default_factory=list, max_length=5)
+    tone: list[str] = Field(default_factory=list)
     safety_mode: bool = True
     page_count: int = Field(default=DEFAULT_PAGE_COUNT, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
     model_provider: str = "gemini"
-    model_name: str = "gemini-3.5-flash"
+    model_name: str = "gemini-3.1-pro-preview"
+    child_profile_id: uuid.UUID | None = None
+    author_name: str | None = None
 
 
 class GenerateIn(BaseModel):
     art_style: str = Field(min_length=3, max_length=100)
+
+
+class NarrateIn(BaseModel):
+    voice_name: str = "Kore"
+    voice_profile_id: uuid.UUID | None = None  # User's cloned voice — overrides voice_name when set
 
 
 class AddPageIn(BaseModel):

@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.admin.router import router as admin_router
 from src.auth.router import router as auth_router
 from src.books.router import router as books_router
+from src.profiles.router import router as profiles_router
+from src.voices.router import router as voices_router
 from src.config import Environment, settings
 from src.exceptions import register_exception_handlers
 
@@ -16,16 +19,19 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=settings.CORS_HEADERS,
+    allow_headers=["*"],
 )
 
 register_exception_handlers(app)
 
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 app.include_router(books_router, prefix="/books", tags=["Books"])
+app.include_router(profiles_router, prefix="/profiles", tags=["Profiles"])
+app.include_router(voices_router, prefix="/voices", tags=["Voices"])
+app.include_router(admin_router, prefix="/admin", tags=["Admin"])
 
 
 @app.get("/health", include_in_schema=False)

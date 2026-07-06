@@ -7,6 +7,7 @@ to a background worker, but the interface here is designed so that swap is trivi
 """
 
 import asyncio
+import re
 import uuid
 import logging
 from typing import Sequence
@@ -15,8 +16,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.auth.models import User
 from src.books.models import Book, Character, GenerationStage, Page
-from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
+from src.books.schemas import AddCharacterIn, AddPageIn, BrainstormIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, ExpandPromptIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
 from src.config import settings
 from src.exceptions import NotFoundError
 from src.generation.pipeline import ModelConfig, StoryPipeline
@@ -30,6 +32,19 @@ from src.generation.schemas import (
 logger = logging.getLogger(__name__)
 
 
+def _clean_text(text: str) -> str:
+    """Strip all newlines from page text.
+
+    LLMs occasionally insert newlines between sentences and dialogue lines,
+    but picture-book page text is always a single flowing prose block —
+    the renderer does word-wrap; explicit line breaks just cause visible gaps.
+    Replace every newline (and any surrounding whitespace) with a single space,
+    then collapse any doubled spaces that result.
+    """
+    collapsed = re.sub(r"\s*\n\s*", " ", text)
+    return re.sub(r" {2,}", " ", collapsed).strip()
+
+
 def _pipeline(model_config: ModelConfig | None = None) -> StoryPipeline:
     return StoryPipeline(
         api_key=settings.GEMINI_API_KEY,
@@ -40,21 +55,88 @@ def _pipeline(model_config: ModelConfig | None = None) -> StoryPipeline:
 
 # ── Read helpers ──────────────────────────────────────────────────────────────
 
-async def generate_brief_options(data: BriefGenerateIn) -> list:
-    """Run EnhanceStage 4x concurrently — LLM non-determinism gives natural variety."""
+async def brainstorm(data: BrainstormIn):
+    """Generate 6 story seed ideas to spark the user's imagination."""
     cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
     pipeline = _pipeline(cfg)
-    tasks = [
-        pipeline._enhance.run(
-            raw_prompt=data.raw_prompt,
-            age_range=data.age_range,
-            tone=data.tone,
-            safety=data.safety_mode,
-            page_count=data.page_count,
+    return await pipeline._brainstorm.run(
+        age_range=data.age_range,
+        tone=data.tone,
+        page_count=data.page_count,
+    )
+
+
+async def expand_prompt(data: ExpandPromptIn):
+    """Expand a user's prompt into 2 distinct concept takes via ExpandStage."""
+    cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
+    pipeline = _pipeline(cfg)
+    return await pipeline._expand.run(
+        raw_prompt=data.raw_prompt,
+        age_range=data.age_range,
+        tone=data.tone,
+        safety=data.safety_mode,
+        page_count=data.page_count,
+    )
+
+
+async def generate_brief(data: BriefGenerateIn):
+    """Generate a single story brief via EnhanceStage, optionally grounded in an expanded concept."""
+    from src.generation.schemas import ExpandedPrompt as ExpandedPromptSchema
+    cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
+    pipeline = _pipeline(cfg)
+    # Convert ExpandedPromptOut (Pydantic schema from books) → ExpandedPrompt (generation schema)
+    expanded = None
+    if data.expanded_concept:
+        ec = data.expanded_concept
+        expanded = ExpandedPromptSchema(
+            title=ec.title,
+            story_concept=ec.story_concept,
+            key_characters=ec.key_characters,
+            story_highlights=ec.story_highlights,
+            themes=ec.themes,
+            visual_style=ec.visual_style,
         )
-        for _ in range(4)
-    ]
-    return list(await asyncio.gather(*tasks))
+    return await pipeline._enhance.run(
+        raw_prompt=data.raw_prompt,
+        age_range=data.age_range,
+        tone=data.tone,
+        safety=data.safety_mode,
+        page_count=data.page_count,
+        expanded_concept=expanded,
+    )
+
+
+async def regenerate_brief_field(data) -> dict:
+    """
+    Regenerate one field of an existing brief.
+    Generates a fresh brief from the same prompt, then splices in just the
+    requested field so every other field stays exactly as the user left it.
+    """
+    from src.books.schemas import BriefFieldRegenerateIn
+    assert isinstance(data, BriefFieldRegenerateIn)
+
+    valid_fields = {"title", "description", "characters_intro", "themes", "lesson"}
+    if data.field not in valid_fields:
+        raise ValueError(f"field must be one of {valid_fields}")
+
+    cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
+    pipeline = _pipeline(cfg)
+    new_brief = await pipeline._enhance.run(
+        raw_prompt=data.raw_prompt,
+        age_range=data.age_range,
+        tone=data.tone,
+        safety=data.safety_mode,
+        page_count=data.page_count,
+    )
+
+    # Merge: keep everything from current_brief, replace only the requested field
+    merged = data.current_brief.model_dump()
+    merged[data.field] = getattr(new_brief, data.field)
+    return merged
+
+
+# Keep old name as alias so any other callers don't break
+generate_brief_options = lambda data: generate_brief(data)  # type: ignore
 
 
 async def get_book(db: AsyncSession, book_id: uuid.UUID, user_id: uuid.UUID) -> Book:
@@ -69,7 +151,8 @@ async def get_book(db: AsyncSession, book_id: uuid.UUID, user_id: uuid.UUID) -> 
     return book
 
 
-async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, int]]:
+async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, int, str | None]]:
+    """Return (book, illustrated_page_count, cover_page_id | None) for each book."""
     from sqlalchemy import func
     illustrated_sq = (
         select(Page.book_id, func.count(Page.id).label("cnt"))
@@ -77,14 +160,28 @@ async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, i
         .group_by(Page.book_id)
         .subquery()
     )
+    # Subquery: the ID of the cover page for each book (null if not illustrated yet)
+    cover_sq = (
+        select(Page.book_id, Page.id.label("cover_page_id"))
+        .where(Page.is_cover.is_(True), Page.image_key.isnot(None))
+        .subquery()
+    )
     stmt = (
-        select(Book, func.coalesce(illustrated_sq.c.cnt, 0).label("illustrated_count"))
+        select(
+            Book,
+            func.coalesce(illustrated_sq.c.cnt, 0).label("illustrated_count"),
+            cover_sq.c.cover_page_id,
+        )
         .outerjoin(illustrated_sq, illustrated_sq.c.book_id == Book.id)
+        .outerjoin(cover_sq, cover_sq.c.book_id == Book.id)
         .where(Book.user_id == user_id)
         .order_by(Book.updated_at.desc())
     )
     result = await db.execute(stmt)
-    return [(row.Book, int(row.illustrated_count)) for row in result.all()]
+    return [
+        (row.Book, int(row.illustrated_count), str(row.cover_page_id) if row.cover_page_id else None)
+        for row in result.all()
+    ]
 
 
 # ── Draft & generate ──────────────────────────────────────────────────────────
@@ -106,6 +203,8 @@ async def create_draft(
         model_provider=data.model_provider,
         model_name=data.model_name,
         stage=GenerationStage.PENDING,
+        child_profile_id=data.child_profile_id,
+        author_name=data.author_name,
     )
     db.add(book)
     await db.commit()
@@ -136,11 +235,15 @@ async def generate_from_draft(
             page_count=book.page_count,
         )
 
-        await _persist_result(db, book, result.brief, result.characters, result.beats, result.pages)
+        split_pages, split_beats = _split_overlong_pages(result.pages, result.beats, book.age_range)
+        await _persist_result(db, book, result.brief, result.characters, split_beats, split_pages)
         book.stage = GenerationStage.COMPLETE
         book.title = result.brief.title
         await db.commit()
         await db.refresh(book)
+
+        # Auto-generate KDP fields — don't let a failure here break book creation
+        await _try_generate_kdp(db, book)
 
     except Exception as exc:
         logger.exception("Generation failed for book %s", book.id)
@@ -175,6 +278,8 @@ async def create_and_generate(
         model_provider=data.model_provider,
         model_name=data.model_name,
         stage=GenerationStage.ENHANCING,
+        child_profile_id=data.child_profile_id,
+        author_name=data.author_name,
     )
     db.add(book)
     await db.flush()
@@ -193,11 +298,15 @@ async def create_and_generate(
             page_count=data.page_count,
         )
 
-        await _persist_result(db, book, result.brief, result.characters, result.beats, result.pages)
+        split_pages, split_beats = _split_overlong_pages(result.pages, result.beats, data.age_range)
+        await _persist_result(db, book, result.brief, result.characters, split_beats, split_pages)
         book.stage = GenerationStage.COMPLETE
         book.title = result.brief.title
         await db.commit()
         await db.refresh(book)
+
+        # Auto-generate KDP fields — don't let a failure here break book creation
+        await _try_generate_kdp(db, book)
 
     except Exception as exc:
         logger.exception("Generation failed for book %s", book.id)
@@ -235,6 +344,82 @@ async def update_page(
         page.setting_note = data.setting_note
     if data.is_locked is not None:
         page.is_locked = data.is_locked
+    if data.text is not None:
+        page.text = _clean_text(data.text)
+    if data.text_align is not None:
+        page.text_align = data.text_align
+    if data.text_position is not None:
+        page.text_position = data.text_position
+    if "canvas_overlay" in data.model_fields_set:
+        page.canvas_overlay = data.canvas_overlay
+    if data.font_size is not None:
+        page.font_size = data.font_size
+    if data.font_family is not None:
+        page.font_family = data.font_family
+    if data.text_color is not None:
+        page.text_color = data.text_color
+    if data.text_mode is not None:
+        page.text_mode = data.text_mode
+    if data.bg_color is not None:
+        page.bg_color = data.bg_color
+
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def bulk_apply_page_style(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: "BulkPageStyleIn",
+) -> "Book":
+    from src.books.schemas import BulkPageStyleIn
+    book = await get_book(db, book_id, user_id)
+    for page in book.pages:
+        if page.is_cover or getattr(page, "is_back_cover", False):
+            continue
+        if data.font_family is not None:
+            page.font_family = data.font_family
+        if data.font_size is not None:
+            page.font_size = data.font_size
+        if data.text_color is not None:
+            page.text_color = data.text_color
+        if data.text_mode is not None:
+            page.text_mode = data.text_mode
+        if data.bg_color is not None:
+            page.bg_color = data.bg_color
+        if "canvas_overlay" in data.model_fields_set:
+            page.canvas_overlay = data.canvas_overlay
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def bulk_text_style(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: "BulkTextStyleIn",
+) -> "Book":
+    import random as _random
+    from src.books.schemas import BulkTextStyleIn
+
+    book = await get_book(db, book_id, user_id)
+    content_pages = [p for p in book.pages if not p.is_cover]
+
+    _ALIGNS    = ["left", "center", "right"]
+    _POSITIONS = ["top", "center", "bottom"]
+    align_pool    = [a for a in (data.align_pool    or _ALIGNS)    if a in _ALIGNS]
+    position_pool = [p for p in (data.position_pool or _POSITIONS) if p in _POSITIONS]
+
+    for page in content_pages:
+        if data.randomize:
+            page.text_align    = _random.choice(align_pool)
+            page.text_position = _random.choice(position_pool)
+        else:
+            if data.text_align is not None:
+                page.text_align = data.text_align
+            if data.text_position is not None:
+                page.text_position = data.text_position
 
     await db.commit()
     return await get_book(db, book_id, user_id)
@@ -278,8 +463,8 @@ async def regenerate_page(
         orders={page.order},
     )
 
-    page.text = generated.text
-    page.word_count = generated.word_count
+    page.text = _clean_text(generated.text)
+    page.word_count = len(page.text.split())
     page.illustration_metadata = generated.illustration_metadata.model_dump()
     await db.commit()
 
@@ -328,6 +513,41 @@ async def recalibrate_book(
 # ── Illustration ─────────────────────────────────────────────────────────────
 
 
+async def generate_character_sheets(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from src.storage import minio_client as mc
+
+    book = await get_book(db, book_id, user_id)
+    if not book.characters:
+        raise ValueError("Book has no characters")
+
+    pipeline = _pipeline()
+    sheets = await pipeline.generate_character_sheets(
+        characters=book.characters,
+        art_style=book.art_style,
+        visual_seed=book.visual_seed,
+    )
+
+    sheet_map = {s.character_id: s for s in sheets}
+    for char in book.characters:
+        sheet = sheet_map.get(str(char.id))
+        if sheet:
+            if char.reference_image_key:
+                mc.delete_image(char.reference_image_key)
+            key = mc.upload(
+                mc.character_key(str(book_id), str(char.id)),
+                sheet.image_data,
+                sheet.mime_type,
+            )
+            char.reference_image_key = key
+
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
 async def illustrate_page(
     db: AsyncSession,
     book_id: uuid.UUID,
@@ -343,10 +563,24 @@ async def illustrate_page(
     if page.illustration_metadata is None:
         raise ValueError("Page has no illustration metadata yet")
 
-    pipeline = _pipeline()
-    img = await pipeline.illustrate_single(page=page, visual_seed=book.visual_seed)
+    # Fetch character reference images for characters present on this page
+    character_refs: dict[str, bytes] = {}
+    present = set(page.characters_present or [])
+    for char in book.characters:
+        if char.name in present and char.reference_image_key:
+            try:
+                data, _ = minio_client.download(char.reference_image_key)
+                character_refs[char.name] = data
+            except Exception:
+                pass  # missing ref is non-fatal — fall back to text-only
 
-    # Upload to MinIO; delete old object if regenerating
+    pipeline = _pipeline()
+    img = await pipeline.illustrate_single(
+        page=page,
+        visual_seed=book.visual_seed,
+        character_refs=character_refs if character_refs else None,
+    )
+
     if page.image_key:
         minio_client.delete_image(page.image_key)
     key = minio_client.upload_image(
@@ -357,6 +591,245 @@ async def illustrate_page(
     )
     page.image_key = key
     await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+# ── Back cover ───────────────────────────────────────────────────────────────
+
+async def create_back_cover_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    book = await get_book(db, book_id, user_id)
+
+    # Check for existing back cover
+    existing = next((p for p in book.pages if getattr(p, "is_back_cover", False)), None)
+    if existing is not None:
+        raise ValueError("Back cover already exists")
+
+    max_order = max((p.order for p in book.pages), default=-1)
+    db.add(Page(
+        book_id=book_id,
+        order=max_order + 1,
+        is_cover=False,
+        is_back_cover=True,
+        is_locked=False,
+        narrative_role="back_cover",
+        beat="Back cover — a warm closing scene",
+        emotional_note="warm, hopeful, complete",
+        setting_note="A peaceful final vignette",
+        characters_present=[],
+        text=None,
+        word_count=None,
+        illustration_metadata=None,
+    ))
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def illustrate_back_cover(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from src.storage import minio_client
+
+    book = await get_book(db, book_id, user_id)
+    back_cover_page = next((p for p in book.pages if getattr(p, "is_back_cover", False)), None)
+    if back_cover_page is None:
+        raise NotFoundError("Back cover page not found — create it first")
+
+    # Build illustration metadata
+    assembled_prompt = (
+        f"Children's picture book back cover illustration. "
+        f"Art style: {book.art_style}. "
+        f"Story: '{book.title}'. "
+        f"A warm, peaceful closing vignette — the adventure has ended, "
+        f"characters are content and at rest. Soft colors, gentle composition, "
+        f"suitable for the back cover of a children's picture book. "
+        f"No text in the image."
+    )
+    meta = {
+        "assembled_prompt": assembled_prompt,
+        "negative_prompt": "text, words, letters, harsh colors",
+    }
+    back_cover_page.illustration_metadata = meta
+
+    # Inherit characters_present from front cover if available
+    front_cover = next((p for p in book.pages if p.is_cover), None)
+    if front_cover and front_cover.characters_present:
+        back_cover_page.characters_present = list(front_cover.characters_present)
+
+    # Fetch character reference images
+    character_refs: dict[str, bytes] = {}
+    present = set(back_cover_page.characters_present or [])
+    for char in book.characters:
+        if char.name in present and char.reference_image_key:
+            try:
+                data, _ = minio_client.download(char.reference_image_key)
+                character_refs[char.name] = data
+            except Exception:
+                pass
+
+    pipeline = _pipeline()
+    img = await pipeline.illustrate_single(
+        page=back_cover_page,
+        visual_seed=book.visual_seed,
+        character_refs=character_refs if character_refs else None,
+    )
+
+    if back_cover_page.image_key:
+        minio_client.delete_image(back_cover_page.image_key)
+    key = minio_client.upload_image(
+        book_id=str(book_id),
+        page_id=str(back_cover_page.id),
+        data=img.image_data,
+        mime_type=img.mime_type,
+    )
+    back_cover_page.image_key = key
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+# ── Page split ────────────────────────────────────────────────────────────────
+
+async def split_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    page_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    from pydantic import BaseModel as _BM
+    from src.generation.gemini import GeminiClient
+
+    book = await get_book(db, book_id, user_id)
+    page = next((p for p in book.pages if p.id == page_id), None)
+    if page is None:
+        raise NotFoundError("Page not found")
+    if not page.text:
+        raise ValueError("Page has no text to split")
+    if page.is_cover:
+        raise ValueError("Cannot split the cover page")
+    if getattr(page, "is_back_cover", False):
+        raise ValueError("Cannot split the back cover page")
+
+    # Call Gemini to split the text
+    class _SplitResult(_BM):
+        part1: str
+        part2: str
+
+    client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+    split_result = await client.generate(
+        prompt=(
+            f'Split this children\'s story page text into two parts at the most natural '
+            f'narrative sentence boundary.\n'
+            f'Return JSON: {{"part1": "...", "part2": "..."}}\n'
+            f'Part 1 should be roughly half the text or end at a natural pause.\n'
+            f'Text: "{page.text}"'
+        ),
+        schema=_SplitResult,
+        system="You are a children's book editor. Split story text cleanly at sentence boundaries.",
+        model="gemini-3.1-pro-preview",
+        temperature=0.3,
+    )
+
+    part1 = _clean_text(split_result.part1)
+    part2 = _clean_text(split_result.part2)
+
+    # Update current page with part1
+    page.text = part1
+    page.word_count = len(part1.split())
+
+    # Shift all later pages (including back cover) up by 1.
+    # uq_page_book_order is DEFERRABLE INITIALLY DEFERRED so constraint is
+    # checked at commit, not per-row — no unique violations mid-transaction.
+    for p in book.pages:
+        if p.order > page.order:
+            p.order += 1
+
+    # Create new page with part2
+    new_page = Page(
+        book_id=book_id,
+        order=page.order + 1,
+        is_cover=False,
+        is_back_cover=False,
+        is_locked=False,
+        narrative_role=page.narrative_role,
+        beat=page.beat,
+        emotional_note=page.emotional_note,
+        characters_present=list(page.characters_present or []),
+        setting_note=page.setting_note,
+        text=part2,
+        word_count=len(part2.split()),
+        illustration_metadata=dict(page.illustration_metadata) if page.illustration_metadata else None,
+        image_key=None,
+    )
+    db.add(new_page)
+
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+# ── Narration ────────────────────────────────────────────────────────────────
+
+async def narrate_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    page_id: uuid.UUID,
+    user_id: uuid.UUID,
+    voice_name: str = "Kore",
+    voice_profile_id: uuid.UUID | None = None,
+) -> Book:
+    from src.storage import minio_client
+    from src.generation.tts import synthesize, DEFAULT_VOICE
+
+    book = await get_book(db, book_id, user_id)
+    page = next((p for p in book.pages if p.id == page_id), None)
+    if page is None:
+        raise NotFoundError("Page not found")
+    if not page.text:
+        raise ValueError("Page has no text yet")
+
+    # Route to ElevenLabs if a cloned voice profile is requested
+    if voice_profile_id is not None:
+        from src.voices.models import VoiceProfile
+        from src.generation.elevenlabs import synthesize as el_synthesize
+        profile = await db.get(VoiceProfile, voice_profile_id)
+        if profile is None or profile.user_id != user_id:
+            raise NotFoundError("Voice profile not found")
+        wav = await el_synthesize(page.text, profile.elevenlabs_voice_id, age_range=book.age_range)
+    else:
+        raw_key = f"audio/{book_id}/{page_id}.raw.pcm"
+        wav = await synthesize(page.text, voice_name=voice_name or DEFAULT_VOICE, debug_raw_key=raw_key)
+
+    if page.audio_key:
+        try:
+            minio_client.delete_image(page.audio_key)
+        except Exception:
+            pass
+    key = minio_client.upload_audio(str(book_id), str(page_id), wav)
+    page.audio_key = key
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def narrate_book(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    voice_name: str = "Kore",
+    voice_profile_id: uuid.UUID | None = None,
+) -> Book:
+    """Narrate all pages with text using the selected voice (overwrites existing audio)."""
+    book = await get_book(db, book_id, user_id)
+    pages_to_narrate = [p for p in book.pages if p.text]
+    for page in pages_to_narrate:
+        await narrate_page(
+            db, book_id, page.id, user_id,
+            voice_name=voice_name,
+            voice_profile_id=voice_profile_id,
+        )
     return await get_book(db, book_id, user_id)
 
 
@@ -434,7 +907,68 @@ async def add_character(
     return await get_book(db, book_id, user_id)
 
 
+# ── Export ────────────────────────────────────────────────────────────────────
+
+async def build_export_pages(db: AsyncSession, book: Book) -> list:
+    """Download all page images from MinIO and return ExportPage list.
+
+    Continuation pages (split overflow) have no image_key of their own —
+    they reuse the last available image so no page is left blank in the export.
+    """
+    from src.books.export import ExportPage
+    from src.storage import minio_client
+
+    result = []
+    last_image_bytes: bytes | None = None
+
+    for page in sorted(book.pages, key=lambda p: p.order):
+        image_bytes = None
+        if page.image_key:
+            try:
+                image_bytes, _ = minio_client.download_image(page.image_key)
+                last_image_bytes = image_bytes   # cache for continuation pages
+            except Exception:
+                image_bytes = last_image_bytes   # fallback to previous
+        elif not page.is_cover:
+            # Continuation / split page — reuse previous page's image
+            image_bytes = last_image_bytes
+
+        result.append(ExportPage(
+            order=page.order,
+            is_cover=page.is_cover,
+            is_back_cover=getattr(page, "is_back_cover", False),
+            text=page.text,
+            image_bytes=image_bytes,
+            text_align=getattr(page, "text_align", "center"),
+            text_position=getattr(page, "text_position", "bottom"),
+            font_family=getattr(page, "font_family", None),
+            font_size=getattr(page, "font_size", None),
+            text_color=getattr(page, "text_color", None),
+            text_mode=getattr(page, "text_mode", None),
+            bg_color=getattr(page, "bg_color", None),
+        ))
+    return result
+
+
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+async def _try_generate_kdp(db: AsyncSession, book: Book) -> None:
+    """Silently generate KDP fields after a book completes. Failures are logged, not raised."""
+    try:
+        from src.books.kdp import generate_kdp_fields
+        from src.generation.gemini import GeminiClient
+
+        user = await db.get(User, book.user_id)
+        if user is None:
+            return
+
+        client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+        await generate_kdp_fields(book, user, client)
+        await db.commit()
+        logger.info("KDP fields auto-generated for book %s", book.id)
+    except Exception:
+        logger.exception("KDP auto-generation failed for book %s (non-fatal)", book.id)
+
 
 async def _set_stage(db: AsyncSession, book: Book, stage: GenerationStage) -> None:
     book.stage = stage
@@ -458,7 +992,8 @@ async def _persist_result(db, book, brief, characters, beats, pages) -> None:
     beat_map = {b.order: b for b in beats}
     # Deduplicate by order — small models occasionally return duplicate orders
     page_by_order = {gpage.order: gpage for gpage in pages}
-    for gpage in sorted(page_by_order.values(), key=lambda p: p.order):
+    sorted_pages = sorted(page_by_order.values(), key=lambda p: p.order)
+    for gpage in sorted_pages:
         beat = beat_map.get(gpage.order)
         db.add(Page(
             book_id=book.id,
@@ -470,12 +1005,169 @@ async def _persist_result(db, book, brief, characters, beats, pages) -> None:
             emotional_note=beat.emotional_note if beat else "",
             characters_present=beat.characters_present if beat else [],
             setting_note=beat.setting_note if beat else "",
-            text=gpage.text,
-            word_count=gpage.word_count,
+            text=_clean_text(gpage.text),
+            word_count=len(_clean_text(gpage.text).split()),
             illustration_metadata=gpage.illustration_metadata.model_dump(),
         ))
 
+    # Auto-create back cover alongside front cover — illustrated like any regular page
+    max_order = max(gpage.order for gpage in sorted_pages)
+    cover_beat = next((beat_map[gpage.order] for gpage in sorted_pages if gpage.is_cover and gpage.order in beat_map), None)
+    back_cover_prompt = (
+        f"Children's picture book back cover illustration. "
+        f"Art style: {book.art_style}. "
+        f"Story: '{brief.title}'. "
+        f"A warm, peaceful closing vignette — the adventure has ended, "
+        f"characters are content and at rest. Soft colors, gentle composition, "
+        f"suitable for the back cover of a children's picture book. "
+        f"No text in the image."
+    )
+    db.add(Page(
+        book_id=book.id,
+        order=max_order + 1,
+        is_cover=False,
+        is_back_cover=True,
+        is_locked=False,
+        narrative_role="back_cover",
+        beat="Back cover — a warm closing scene",
+        emotional_note="warm, hopeful, complete",
+        setting_note="A peaceful final vignette",
+        characters_present=cover_beat.characters_present if cover_beat else [],
+        text=None,
+        word_count=None,
+        illustration_metadata={
+            "assembled_prompt": back_cover_prompt,
+            "negative_prompt": "text, words, letters, harsh colors",
+        },
+    ))
+
     await db.flush()
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into individual sentences at . ! ? boundaries."""
+    import re
+    parts = re.split(r'(?<=[.!?])\s+', text.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _split_overlong_pages(
+    pages: list,
+    beats: list,
+    age_range: str,
+) -> tuple[list, list]:
+    """
+    Find pages whose word count >= PAGE_SPLIT_THRESHOLD[age_range], split each one at
+    the sentence boundary closest to the text midpoint, insert a continuation page
+    directly after it, and renumber all non-cover pages sequentially.
+
+    Returns (new_pages, new_beats) — new_beats includes synthetic continuation beats so
+    _persist_result can fill in narrative_role, characters_present, setting_note, etc.
+    """
+    from src.generation.constants import PAGE_SPLIT_THRESHOLD
+    from src.generation.schemas import GeneratedPage, IllustrationMetadata, StoryBeat as SBeat
+
+    threshold = PAGE_SPLIT_THRESHOLD.get(age_range, 9999)
+    beat_map = {b.order: b for b in beats}
+
+    expanded_pages: list = []
+    extra_beat_queue: list[dict] = []   # raw dicts for continuation beats, order filled in later
+
+    for page in sorted(pages, key=lambda p: p.order):
+        if page.is_cover or not page.text or page.word_count < threshold:
+            expanded_pages.append(page)
+            continue
+
+        sentences = _split_sentences(page.text)
+        if len(sentences) < 2:
+            expanded_pages.append(page)
+            continue
+
+        # Sentence boundary closest to midpoint word count
+        target = page.word_count // 2
+        running = 0
+        split_idx = max(1, len(sentences) // 2)
+        for i, sent in enumerate(sentences):
+            running += len(sent.split())
+            if running >= target:
+                split_idx = i + 1
+                break
+
+        first_half_sents = sentences[:split_idx]
+        second_half_sents = sentences[split_idx:]
+        if not first_half_sents or not second_half_sents:
+            expanded_pages.append(page)
+            continue
+
+        first_text  = " ".join(first_half_sents)
+        second_text = " ".join(second_half_sents)
+
+        expanded_pages.append(page.model_copy(update={
+            "text": first_text,
+            "word_count": len(first_text.split()),
+        }))
+
+        # Continuation illustration — same visual world, slightly shifted moment
+        orig_meta = page.illustration_metadata
+        cont_meta = IllustrationMetadata(
+            mood=orig_meta.mood,
+            characters_present=orig_meta.characters_present,
+            key_visual_elements=orig_meta.key_visual_elements,
+            composition_note=(
+                "Continuation of the previous scene — same location, characters, and lighting. "
+                "Slightly shifted angle or beat-moment. " + orig_meta.composition_note
+            ),
+            assembled_prompt=(
+                "Continuation scene — same art style, characters, and location as the preceding image. "
+                + orig_meta.assembled_prompt
+            ),
+            negative_prompt=orig_meta.negative_prompt,
+        )
+
+        cont_page = GeneratedPage(
+            order=-1,  # placeholder; renumbered below
+            is_cover=False,
+            beat_reference=page.beat_reference + " (continued)",
+            text=second_text,
+            word_count=len(second_text.split()),
+            illustration_metadata=cont_meta,
+        )
+        expanded_pages.append(cont_page)
+
+        parent_beat = beat_map.get(page.order)
+        extra_beat_queue.append({
+            "order": -1,  # placeholder
+            "narrative_role": "continuation",
+            "beat": (parent_beat.beat + " (continued)") if parent_beat else page.beat_reference + " (continued)",
+            "emotional_note": parent_beat.emotional_note if parent_beat else "",
+            "characters_present": parent_beat.characters_present if parent_beat else [],
+            "setting_note": parent_beat.setting_note if parent_beat else "",
+        })
+
+    # Renumber pages AND rebuild beat list so orders stay in sync.
+    # expanded_pages may contain new continuation pages (order=-1) interleaved with
+    # original pages whose old orders are no longer consecutive after splits.
+    cover_pages   = [p for p in expanded_pages if p.is_cover]
+    content_pages = [p for p in expanded_pages if not p.is_cover]
+
+    extra_beat_iter = iter(extra_beat_queue)
+    renumbered_pages: list = list(cover_pages)
+    renumbered_beats: list = [b for b in beats if b.order == 0]  # keep cover beat(s)
+
+    for new_order, p in enumerate(content_pages, start=1):
+        renumbered_pages.append(p.model_copy(update={"order": new_order}))
+        if p.order == -1:
+            # Continuation page — synthesise a beat at the new order
+            raw = next(extra_beat_iter)
+            raw["order"] = new_order
+            renumbered_beats.append(SBeat(**raw))
+        else:
+            # Original page — copy its beat with updated order so _persist_result finds it
+            orig_beat = beat_map.get(p.order)
+            if orig_beat is not None:
+                renumbered_beats.append(orig_beat.model_copy(update={"order": new_order}))
+
+    return renumbered_pages, renumbered_beats
 
 
 def _page_to_beat(page: Page) -> StoryBeat:

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   GripVertical,
   RefreshCw,
@@ -13,12 +14,12 @@ import {
   BookOpen,
   Check,
   X,
-  Loader2,
   User,
 } from "lucide-react";
+import { XsSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, type PageOut } from "@/lib/api";
+import { api, characterImageUrl, type CharacterOut, type PageOut } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { toast } from "sonner";
 
@@ -59,7 +60,7 @@ function BeatEditor({
           disabled={saving}
           className="flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border"
         >
-          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={3} />}
+          {saving ? <XsSpinner /> : <Check className="h-3 w-3" strokeWidth={3} />}
           Save
         </button>
         <button
@@ -120,7 +121,7 @@ function AddPageForm({
             disabled={saving || beat.trim().length < 5}
             className="flex items-center gap-1 rounded-xl bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" strokeWidth={3} />}
+            {saving ? <XsSpinner /> : <Check className="h-3 w-3" strokeWidth={3} />}
             Add page
           </button>
           <button
@@ -260,7 +261,7 @@ function AddCharacterModal({
             disabled={saving || name.trim().length === 0}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <User className="h-4 w-4" strokeWidth={2.5} />}
+            {saving ? <XsSpinner /> : <User className="h-4 w-4" strokeWidth={2.5} />}
             Add character
           </button>
           <button
@@ -270,6 +271,92 @@ function AddCharacterModal({
             Cancel
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Character card with reference image ───────────────────────────────────────
+
+function useAuthImage(url: string, token: string | null, hasImage: boolean) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hasImage || !token) { setBlobUrl(null); return; }
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (blob && !cancelled) {
+          objectUrl = URL.createObjectURL(blob);
+          setBlobUrl(objectUrl);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, token, hasImage]);
+  return blobUrl;
+}
+
+function CharacterCard({
+  character, bookId, token, regenerating, onRegenerate,
+}: {
+  character: CharacterOut;
+  bookId: string;
+  token: string | null;
+  regenerating: boolean;
+  onRegenerate: () => void;
+}) {
+  const imgUrl = characterImageUrl(bookId, character.id);
+  const blobUrl = useAuthImage(imgUrl, token, character.has_reference_image);
+
+  return (
+    <div className="rounded-2xl bg-background p-3 chunky-border">
+      <div className="flex items-center gap-3">
+        {/* Avatar / reference image */}
+        <div className="relative grid h-14 w-14 shrink-0 place-items-center rounded-xl overflow-hidden chunky-border">
+          {blobUrl ? (
+            <img src={blobUrl} alt={character.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full w-full place-items-center bg-primary/10 font-display text-2xl font-black text-primary">
+              {character.name.charAt(0)}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-lg font-black truncate">{character.name}</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            {character.has_reference_image ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-accent-foreground">
+                <Check className="h-3 w-3" strokeWidth={3} /> Sheet ready
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground">
+                No sheet yet
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={onRegenerate}
+          disabled={regenerating}
+          title="Regenerate reference sheet"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-secondary disabled:opacity-40"
+        >
+          {regenerating
+            ? <XsSpinner />
+            : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {character.visual_anchors.map((t) => (
+          <span key={t} className="rounded-full bg-accent/50 px-2 py-0.5 text-xs font-bold text-accent-foreground">
+            {t}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -308,6 +395,7 @@ function NoBook() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function OutlinePage() {
+  const router = useRouter();
   const { token } = useAuth();
   const { book, updateBook } = useBook();
   const lastSaved = useRelativeTime(book?.updated_at);
@@ -316,11 +404,28 @@ export default function OutlinePage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [expandedTextId, setExpandedTextId] = useState<string | null>(null);
 
   const [addingPage, setAddingPage] = useState(false);
   const [savingPage, setSavingPage] = useState(false);
   const [showCharModal, setShowCharModal] = useState(false);
   const [savingChar, setSavingChar] = useState(false);
+  const [generatingSheets, setGeneratingSheets] = useState(false);
+  const [regeneratingCharId, setRegeneratingCharId] = useState<string | null>(null);
+  const [illustratingBook, setIllustratingBook] = useState(false);
+
+  async function handleIllustrateBook() {
+    if (!token || !book) return;
+    setIllustratingBook(true);
+    try {
+      // Generate character sheets first (needed for consistent illustration)
+      await api.books.generateCharacterSheets(token, book.id);
+    } catch {
+      // Non-fatal — proceed even if sheets fail
+    }
+    // Navigate to studio; it will auto-start page illustration
+    router.push("/studio?illustrating=true");
+  }
 
   if (!book) return <main className="mx-auto max-w-7xl px-4 py-10"><NoBook /></main>;
 
@@ -414,6 +519,34 @@ export default function OutlinePage() {
     }
   }
 
+  async function handleGenerateAllSheets() {
+    if (!token) return;
+    setGeneratingSheets(true);
+    try {
+      const updated = await api.books.generateCharacterSheets(token, book!.id);
+      updateBook({ characters: updated.characters });
+      toast.success("Character sheets generated!");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to generate character sheets");
+    } finally {
+      setGeneratingSheets(false);
+    }
+  }
+
+  async function handleRegenerateSheet(characterId: string) {
+    if (!token) return;
+    setRegeneratingCharId(characterId);
+    try {
+      const updated = await api.books.generateCharacterSheets(token, book!.id);
+      updateBook({ characters: updated.characters });
+      toast.success("Character sheet regenerated!");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to regenerate sheet");
+    } finally {
+      setRegeneratingCharId(null);
+    }
+  }
+
   const lockedCount = contentPages.filter((p) => p.is_locked).length;
 
   return (
@@ -433,9 +566,9 @@ export default function OutlinePage() {
               <h1 className="font-display text-4xl font-black md:text-5xl">Story outline</h1>
               <p className="mt-1 text-muted-foreground">
                 {contentPages.length} pages · {lockedCount} locked.
-                {book.brief && (
+                {book.brief && book.brief.themes?.length > 0 && (
                   <span className="ml-1 font-semibold text-foreground">
-                    {book.brief.narrative_structure}
+                    {book.brief.themes.join(" · ")}
                   </span>
                 )}
               </p>
@@ -443,19 +576,24 @@ export default function OutlinePage() {
                 <p className="mt-1 text-xs font-bold text-muted-foreground">Saved {lastSaved}</p>
               )}
             </div>
-            <Link
-              href="/editor"
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+            <button
+              onClick={handleIllustrateBook}
+              disabled={illustratingBook}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-70 disabled:translate-y-0"
             >
-              <Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate it
-            </Link>
+              {illustratingBook ? (
+                <><XsSpinner /> Preparing…</>
+              ) : (
+                <><Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate the Book</>
+              )}
+            </button>
           </div>
 
           {/* Brief summary */}
           {book.brief && (
             <div className="mt-4 rounded-2xl bg-card p-4 chunky-border chunky-shadow-sm">
               <p className="font-display text-lg font-black">{book.brief.title}</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">{book.brief.logline}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{book.brief.description}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {book.brief.arc.map((stage) => (
                   <span
@@ -466,6 +604,15 @@ export default function OutlinePage() {
                   </span>
                 ))}
               </div>
+              {book.raw_prompt && (
+                <details className="group mt-3 border-t border-foreground/10 pt-3">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-extrabold text-muted-foreground hover:text-foreground transition-colors w-fit select-none">
+                    <span className="transition-transform group-open:rotate-90">›</span>
+                    Your original prompt
+                  </summary>
+                  <p className="mt-2 text-sm text-foreground/70 italic leading-relaxed">"{book.raw_prompt}"</p>
+                </details>
+              )}
             </div>
           )}
 
@@ -507,9 +654,17 @@ export default function OutlinePage() {
                           )}
                         </div>
                         {page.text && (
-                          <p className="mt-2 text-sm text-muted-foreground line-clamp-2 italic">
-                            &ldquo;{page.text}&rdquo;
-                          </p>
+                          <div className="mt-2">
+                            <p className={`text-sm text-muted-foreground italic ${expandedTextId === page.id ? "" : "line-clamp-2"}`}>
+                              &ldquo;{page.text}&rdquo;
+                            </p>
+                            <button
+                              onClick={() => setExpandedTextId(expandedTextId === page.id ? null : page.id)}
+                              className="mt-0.5 text-xs font-bold text-primary/70 hover:text-primary"
+                            >
+                              {expandedTextId === page.id ? "Show less ↑" : "Read more ↓"}
+                            </button>
+                          </div>
                         )}
                       </>
                     )}
@@ -526,7 +681,7 @@ export default function OutlinePage() {
                         }`}
                       >
                         {togglingId === page.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <XsSpinner />
                         ) : page.is_locked ? (
                           <Lock className="h-4 w-4" strokeWidth={2.5} />
                         ) : (
@@ -547,7 +702,7 @@ export default function OutlinePage() {
                         className="grid h-9 w-9 place-items-center rounded-full bg-background hover:bg-accent chunky-border disabled:opacity-50"
                       >
                         {regeneratingId === page.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <XsSpinner />
                         ) : (
                           <RefreshCw className="h-4 w-4" strokeWidth={2.5} />
                         )}
@@ -580,39 +735,36 @@ export default function OutlinePage() {
         {/* Cast sidebar */}
         <aside className="lg:sticky lg:top-20 lg:self-start">
           <div className="rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
-            <h2 className="font-display text-2xl font-black">Cast</h2>
-            <p className="text-sm text-muted-foreground">Locked traits keep them consistent.</p>
-            <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-display text-2xl font-black">Cast</h2>
+              {book.characters.length > 0 && (
+                <button
+                  onClick={handleGenerateAllSheets}
+                  disabled={generatingSheets}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border disabled:opacity-50"
+                >
+                  {generatingSheets
+                    ? <><XsSpinner /> Generating…</>
+                    : <><Sparkles className="h-3 w-3" strokeWidth={2.5} /> Generate sheets</>}
+                </button>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">Reference images keep characters consistent across illustrations.</p>
+            <div className="space-y-3">
               {book.characters.length === 0 ? (
                 <p className="text-sm text-muted-foreground italic">No characters yet</p>
               ) : (
                 book.characters.map((c) => (
-                  <div key={c.id} className="rounded-2xl bg-background p-3 chunky-border">
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-primary/10 chunky-border font-display text-2xl font-black text-primary">
-                        {c.name.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-display text-lg font-black truncate">{c.name}</div>
-                        <div className="flex items-center gap-1 text-xs font-bold text-accent-foreground">
-                          <Lock className="h-3 w-3" /> {c.visual_anchors.length} visual anchors
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {c.visual_anchors.map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full bg-accent px-2 py-0.5 text-xs font-bold text-accent-foreground"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                  <CharacterCard
+                    key={c.id}
+                    character={c}
+                    bookId={book.id}
+                    token={token}
+                    regenerating={regeneratingCharId === c.id}
+                    onRegenerate={() => handleRegenerateSheet(c.id)}
+                  />
                 ))
               )}
-
               <button
                 onClick={() => setShowCharModal(true)}
                 className="flex w-full items-center justify-center gap-1.5 rounded-2xl border-[2.5px] border-dashed border-foreground/40 px-3 py-3 text-sm font-extrabold text-foreground/60 hover:bg-background hover:text-foreground"

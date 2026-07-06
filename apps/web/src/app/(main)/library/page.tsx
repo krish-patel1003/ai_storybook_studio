@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
   BookOpen,
   Plus,
   Sparkles,
-  Loader2,
   AlertCircle,
   Clock,
   CheckCircle2,
@@ -15,16 +14,44 @@ import {
   Trash2,
   Globe,
   Lock,
-  ArrowRight,
   Pencil,
   Eye,
   ImageIcon,
 } from "lucide-react";
+import { XsSpinner, LgSpinner } from "@/components/character-spinner";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, type BookSummaryOut, type BookOut } from "@/lib/api";
 import { toast } from "sonner";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Fetches a protected cover image with auth and renders it
+function CoverImage({ path, token }: { path: string; token: string }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const prevUrl = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (cancelled || !blob) return;
+        const url = URL.createObjectURL(blob);
+        prevUrl.current = url;
+        setObjectUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (prevUrl.current) URL.revokeObjectURL(prevUrl.current);
+    };
+  }, [path, token]);
+
+  if (!objectUrl) return null;
+  return <img src={objectUrl} alt="Cover" className="h-full w-full object-cover" />;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,7 +102,7 @@ function StageBadge({ stage }: { stage: string }) {
     }`}>
       {isComplete && <CheckCircle2 className="h-3 w-3" />}
       {isFailed && <XCircle className="h-3 w-3" />}
-      {!isComplete && !isFailed && !isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+      {!isComplete && !isFailed && !isPending && <XsSpinner />}
       {label}
     </span>
   );
@@ -97,7 +124,7 @@ function DeleteDialog({
         <div className="mt-5 flex gap-2">
           <button onClick={onConfirm} disabled={deleting}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-destructive px-4 py-2.5 text-sm font-extrabold text-white chunky-border disabled:opacity-60">
-            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" strokeWidth={2.5} />}
+            {deleting ? <XsSpinner /> : <Trash2 className="h-4 w-4" strokeWidth={2.5} />}
             Delete
           </button>
           <button onClick={onCancel} className="rounded-xl bg-background px-4 py-2.5 text-sm font-extrabold chunky-border">
@@ -110,10 +137,11 @@ function DeleteDialog({
 }
 
 function BookCard({
-  book, onContinue, onPreview, onDelete, onToggleVisibility,
+  book, token, onContinue, onPreview, onDelete, onToggleVisibility,
   loadingContinue, loadingPreview, loadingVisibility,
 }: {
   book: BookSummaryOut;
+  token: string;
   onContinue: () => void;
   onPreview: () => void;
   onDelete: () => void;
@@ -139,9 +167,16 @@ function BookCard({
       animate={{ opacity: 1, y: 0 }}
       className="group flex flex-col rounded-3xl bg-card chunky-border chunky-shadow-sm overflow-hidden"
     >
-      {/* Card header / cover */}
-      <div className="relative flex h-32 items-center justify-center bg-primary/10 border-b-[2.5px] border-foreground">
-        <BookOpen className="h-14 w-14 text-primary/30" strokeWidth={1.5} />
+      {/* Card header / cover thumbnail */}
+      <div className="relative h-44 overflow-hidden border-b-[2.5px] border-foreground bg-primary/10">
+        {/* Cover image — fetched with auth */}
+        {book.cover_image_url ? (
+          <CoverImage path={book.cover_image_url} token={token} />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <BookOpen className="h-14 w-14 text-primary/30" strokeWidth={1.5} />
+          </div>
+        )}
 
         {/* Stage badge */}
         <div className="absolute top-3 right-3">
@@ -156,7 +191,7 @@ function BookCard({
               isPublic ? "bg-accent text-accent-foreground" : "bg-background text-muted-foreground hover:bg-secondary"
             }`}>
             {loadingVisibility
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ? <XsSpinner />
               : isPublic ? <Globe className="h-3.5 w-3.5" strokeWidth={2.5} />
               : <Lock className="h-3.5 w-3.5" strokeWidth={2.5} />}
           </button>
@@ -164,7 +199,7 @@ function BookCard({
 
         {/* Illustration progress strip */}
         {isComplete && book.page_count > 0 && (
-          <div className="absolute bottom-0 inset-x-0 h-1.5 bg-muted">
+          <div className="absolute bottom-0 inset-x-0 h-1.5 bg-black/20">
             <div
               className="h-full bg-primary transition-all duration-500"
               style={{ width: `${Math.round((book.illustrated_page_count / book.page_count) * 100)}%` }}
@@ -208,7 +243,7 @@ function BookCard({
         <button onClick={onContinue} disabled={!canContinue || loadingContinue}
           className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:translate-y-0">
           {loadingContinue
-            ? <Loader2 className="h-4 w-4 animate-spin" />
+            ? <XsSpinner />
             : <>{continueIcon} {continueLabel}</>}
         </button>
 
@@ -216,7 +251,7 @@ function BookCard({
           <button onClick={onPreview} disabled={loadingPreview}
             title="Preview book"
             className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-accent text-accent-foreground chunky-border transition-transform hover:-translate-y-0.5">
-            {loadingPreview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" strokeWidth={2.5} />}
+            {loadingPreview ? <XsSpinner /> : <Eye className="h-4 w-4" strokeWidth={2.5} />}
           </button>
         )}
 
@@ -294,7 +329,7 @@ export default function LibraryPage() {
   }
 
   function previewBook(book: BookSummaryOut) {
-    loadAndGo(book, "/reader", setPreviewLoadingId);
+    loadAndGo(book, "/reader?from=library", setPreviewLoadingId);
   }
 
   async function toggleVisibility(book: BookSummaryOut) {
@@ -360,7 +395,7 @@ export default function LibraryPage() {
 
         {fetching ? (
           <div className="flex justify-center py-32">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <LgSpinner />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">
@@ -380,6 +415,7 @@ export default function LibraryPage() {
                 <BookCard
                   key={book.id}
                   book={book}
+                  token={token ?? ""}
                   onContinue={() => continueBook(book)}
                   onPreview={() => previewBook(book)}
                   onDelete={() => setDeleteTarget(book)}

@@ -10,6 +10,8 @@ from src.models import metadata
 
 # Import all models so Alembic can detect them
 import src.auth.models  # noqa: F401
+import src.voices.models  # noqa: F401
+import src.profiles.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))

@@ -1,4 +1,5 @@
 import enum
+import re
 import uuid
 from datetime import datetime
 
@@ -14,9 +15,15 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.models import Base
+
+
+def _strip_newlines(text: str) -> str:
+    """Collapse all newline variants into a single space and trim."""
+    collapsed = re.sub(r"\s*[\r\n]+\s*", " ", text)
+    return re.sub(r" {2,}", " ", collapsed).strip()
 
 
 class GenerationStage(str, enum.Enum):
@@ -51,13 +58,24 @@ class Book(Base):
     safety_mode: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False)
     model_provider: Mapped[str] = mapped_column(String(20), nullable=False, default="gemini")
-    model_name: Mapped[str] = mapped_column(String(100), nullable=False, default="gemini-2.0-flash")
+    model_name: Mapped[str] = mapped_column(String(100), nullable=False, default="gemini-3.5-flash")
 
     # Generated content (stored as JSONB so no migration needed when schemas evolve)
     brief: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # KDP publishing fields — generated on demand, cached here
+    kdp_fields: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
+
     # Visibility
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")
+
+    # Author attribution — resolved at creation from parent user or chosen child profile
+    author_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Optional child profile — personalises prompts and loading UX
+    child_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("child_profile.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Seed for illustration consistency — set once, used as base for per-page seeds
     visual_seed: Mapped[int] = mapped_column(Integer, nullable=False, default=lambda: __import__('random').randint(0, 2**31 - 1))
@@ -106,6 +124,7 @@ class Character(Base):
     personality: Mapped[str] = mapped_column(Text, nullable=False)
     visual_anchors: Mapped[list] = mapped_column(JSONB, nullable=False)
     illustration_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    reference_image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     book: Mapped["Book"] = relationship(back_populates="characters")
 
@@ -126,6 +145,7 @@ class Page(Base):
 
     order: Mapped[int] = mapped_column(Integer, nullable=False)
     is_cover: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_back_cover: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Beat (outline)
@@ -144,5 +164,29 @@ class Page(Base):
 
     # MinIO object key — set after illustration is uploaded (null = not yet illustrated)
     image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # MinIO object key — set after narration is generated (null = not yet narrated)
+    audio_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Text layout — applied in reader and PDF export
+    text_align: Mapped[str] = mapped_column(String(10), nullable=False, server_default="center")
+    text_position: Mapped[str] = mapped_column(String(10), nullable=False, server_default="bottom")
+
+    # Canvas-style text overlay — set by the canvas editor; overrides text_align/text_position when present
+    # Schema: { x, y, w, fontSize, fontFamily, textColor, bgStyle, bgOpacity }
+    canvas_overlay: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Per-page style (set by studio; null = use reader/export defaults)
+    font_size: Mapped[float | None] = mapped_column(nullable=True)
+    font_family: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    text_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    text_mode: Mapped[int | None] = mapped_column(nullable=True)
+    bg_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    @validates("text")
+    def _validate_text(self, key: str, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _strip_newlines(value)
 
     book: Mapped["Book"] = relationship(back_populates="pages")
