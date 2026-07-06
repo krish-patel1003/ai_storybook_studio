@@ -2,6 +2,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--no-cache'
       - '--platform=linux/amd64'
       - '-t'
       - 'us-central1-docker.pkg.dev/ai-storybook-studio-496817/storybook/api:latest'
