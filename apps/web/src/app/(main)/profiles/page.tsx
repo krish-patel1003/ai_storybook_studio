@@ -250,8 +250,10 @@ function ProfileForm({
         <div className="flex flex-wrap gap-1.5 mb-3">
           <button
             onClick={() => setActiveCategory("__ai__")}
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold chunky-border transition-colors ${
-              activeCategory === "__ai__" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-extrabold chunky-border transition-all ${
+              activeCategory === "__ai__"
+                ? "bg-violet-600 text-white scale-105"
+                : "bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:hover:bg-violet-900"
             }`}
           >
             ✨ AI Avatar
@@ -546,7 +548,7 @@ export default function ProfilesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
+    <main className="mx-auto max-w-4xl px-4 py-10">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="font-display text-4xl font-black">Child Profiles</h1>
