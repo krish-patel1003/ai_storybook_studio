@@ -15,6 +15,8 @@ from src.billing.tiers import get_tier
 
 def require_feature(user: User, feature: str) -> None:
     """Raise 402 if the user's tier doesn't include the given feature."""
+    if user.bypass_limits:
+        return
     tier = get_tier(user.subscription_tier)
     if not getattr(tier, feature, False):
         tier_name = tier.display_name
@@ -26,6 +28,8 @@ def require_feature(user: User, feature: str) -> None:
 
 def require_active_subscription(user: User) -> None:
     """Raise 402 if subscription is past_due (access grace period has ended)."""
+    if user.bypass_limits:
+        return
     if user.subscription_status == "past_due" and user.subscription_tier != "free":
         raise HTTPException(
             status_code=402,
@@ -35,6 +39,8 @@ def require_active_subscription(user: User) -> None:
 
 def check_page_pool(user: User, pages: int = 1) -> None:
     """Raise 402 if the user has used up their page pool."""
+    if user.bypass_limits:
+        return
     tier = get_tier(user.subscription_tier)
     remaining = max(0, tier.page_pool - user.page_pool_used)
     if remaining < pages:
@@ -49,6 +55,8 @@ def check_page_pool(user: User, pages: int = 1) -> None:
 
 def check_book_page_limit(user: User, page_count: int) -> None:
     """Raise 400 if page_count exceeds the tier's per-book hard maximum."""
+    if user.bypass_limits:
+        return
     tier = get_tier(user.subscription_tier)
     if page_count > tier.hard_max_per_book:
         raise HTTPException(
@@ -64,7 +72,7 @@ async def deduct_page_pool(db: AsyncSession, user_id: uuid.UUID, pages: int = 1)
     """Increment page_pool_used after a successful generation. Non-fatal on error."""
     try:
         user = await db.get(User, user_id)
-        if user:
+        if user and not user.bypass_limits:
             user.page_pool_used = user.page_pool_used + pages
             await db.commit()
     except Exception:

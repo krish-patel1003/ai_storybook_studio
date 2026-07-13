@@ -46,6 +46,7 @@ class User(Base):
     subscription_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     page_pool_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     page_pool_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    bypass_limits: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

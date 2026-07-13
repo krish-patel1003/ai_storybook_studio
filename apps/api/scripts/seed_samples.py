@@ -101,25 +101,16 @@ async def run() -> None:
     log.info("Connecting to DB: %s", str(settings.DATABASE_URL)[:60])
 
     async with async_session_factory() as db:
-        # Pick the seed user: env override → first user in DB
-        seed_email = os.environ.get("SEED_USER_EMAIL")
-        if seed_email:
-            result = await db.execute(select(User).where(User.email == seed_email))
-        else:
-            result = await db.execute(select(User).order_by(User.created_at).limit(1))
+        # Always use the designated test user (bypass_limits=true, no pool restrictions)
+        seed_email = "patel.krish1003@gmail.com"
+        result = await db.execute(select(User).where(User.email == seed_email))
         user = result.scalar_one_or_none()
 
         if not user:
-            log.error("No users found in DB — create at least one account first")
+            log.error("Test user %s not found — run migrations first", seed_email)
             sys.exit(1)
 
-        log.info("Seeding as user: %s (%s)", user.username, user.email)
-
-        # Temporarily give unlimited page pool for seeding
-        original_pool = user.page_pool_used
-        user.page_pool_used = 0
-        user.subscription_tier = "creator"
-        await db.commit()
+        log.info("Seeding as user: %s (%s) bypass_limits=%s", user.username, user.email, user.bypass_limits)
 
         try:
             for i, spec in enumerate(SAMPLE_BOOKS, 1):
@@ -186,13 +177,6 @@ async def run() -> None:
                 book.visibility = "public"
                 await db.commit()
                 log.info("  ✓ Book %d complete: %s → /read/%s", i, book.title, book.id)
-
-        finally:
-            # Restore page pool
-            await db.refresh(user)
-            user.page_pool_used = original_pool
-            await db.commit()
-            log.info("Restored user page pool to %d", original_pool)
 
     log.info("All sample books seeded.")
 
