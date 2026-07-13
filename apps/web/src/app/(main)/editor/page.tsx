@@ -46,7 +46,9 @@ interface IllJob {
 }
 
 let _job: IllJob | null = null;
-let _onPageDone: ((updated: BookOut) => void) | null = null;
+// Receives only the single page that just finished, so a stale whole-book
+// snapshot from a concurrent request can't overwrite sibling pages.
+let _onPageDone: ((page: PageOut) => void) | null = null;
 const _subs = new Set<() => void>();
 
 function _notifyJob() { _subs.forEach((fn) => fn()); }
@@ -67,7 +69,8 @@ function useIllJob(bookId: string | undefined): IllJob | null {
 async function startIllJob(
   token: string,
   book: BookOut,
-  onPageDone: (updated: BookOut) => void,
+  onPageDone: (page: PageOut) => void,
+  reconcile: () => void,
 ): Promise<number> {
   const bookId = book.id;
   if (_job?.bookId === bookId && _job.done < _job.total) return 0;
@@ -113,7 +116,10 @@ async function startIllJob(
       bustAuthImageCache(pageImageUrl(bookId, page.id));
       if (_job?.bookId === bookId) {
         _job.pageStatuses[page.id] = "done";
-        _onPageDone?.(updated);
+        // Only trust this response for the page it was actually for — merge that
+        // single page, never the whole (possibly stale) book snapshot.
+        const freshPage = updated.pages.find((p) => p.id === page.id);
+        if (freshPage) _onPageDone?.(freshPage);
         _notifyJob();
       }
       return true;
@@ -162,6 +168,10 @@ async function startIllJob(
   }
 
   const failedCount = pages.filter((p) => _job?.pageStatuses[p.id] === "error").length;
+
+  // Reconcile once against ground truth so the final state is always authoritative,
+  // regardless of the order concurrent per-page responses arrived in.
+  if (!_job?.aborted) reconcile();
 
   setTimeout(() => {
     if (_job?.bookId === bookId) { _job = null; _notifyJob(); }
@@ -470,7 +480,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
 
 export default function EditorPage() {
   const { token } = useAuth();
-  const { book, updateBook } = useBook();
+  const { book, mergePages, setBook } = useBook();
   const lastSaved = useRelativeTime(book?.updated_at);
 
   const [showExport, setShowExport] = useState(false);
@@ -483,7 +493,7 @@ export default function EditorPage() {
   const pageStatuses: Record<string, PageIllStatus> = {};
   if (job) { for (const [id, s] of Object.entries(job.pageStatuses)) { pageStatuses[id] = s; } }
 
-  useEffect(() => { _onPageDone = (updated: BookOut) => updateBook(updated); }, [updateBook]);
+  useEffect(() => { _onPageDone = (page: PageOut) => mergePages([page]); }, [mergePages]);
 
   // Narration
   const [narratingBook, setNarratingBook] = useState(false);
@@ -513,10 +523,25 @@ export default function EditorPage() {
     if (pageTimerRefs.current[pageId]) { clearInterval(pageTimerRefs.current[pageId]); delete pageTimerRefs.current[pageId]; }
   }
 
+  // Fetch ground truth once and snap the store to it — used to reconcile after
+  // a batch job so the final state can't be left wrong by out-of-order responses.
+  const reconcileBook = useCallback(async () => {
+    if (!token || !book) return;
+    try {
+      const fresh = await api.books.get(token, book.id);
+      setBook(fresh);
+    } catch { /* non-fatal — per-page merges already reflect the truth */ }
+  }, [token, book, setBook]);
+
   async function handleIllustrate() {
     if (!token || !book || isRunning) return;
     timer.start();
-    const failedCount = await startIllJob(token, book, (updated) => updateBook(updated));
+    const failedCount = await startIllJob(
+      token,
+      book,
+      (page) => mergePages([page]),
+      reconcileBook,
+    );
     timer.stop();
     if (failedCount > 0) {
       toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to illustrate — click Illustrate all to retry`);
@@ -529,9 +554,12 @@ export default function EditorPage() {
     if (!token || !book || isRunning) return;
     startPageTimer(page.id);
     try {
-      const updated = await api.books.illustratePage(token, book.id, page.id);
+      const updated = page.is_back_cover
+        ? await api.books.illustrateBackCover(token, book.id)
+        : await api.books.illustratePage(token, book.id, page.id);
       bustAuthImageCache(pageImageUrl(book.id, page.id));
-      updateBook(updated);
+      const freshPage = updated.pages.find((p) => p.id === page.id);
+      if (freshPage) mergePages([freshPage]);
     } catch (e: any) { toast.error(`Page ${page.order} failed: ${e.message ?? "Unknown error"}`); }
     finally { stopPageTimer(page.id); }
   }
@@ -551,7 +579,8 @@ export default function EditorPage() {
           selectedVoice.type === "preset" ? selectedVoice.id : undefined,
           selectedVoice.type === "clone" ? selectedVoice.profileId : undefined,
         );
-        updateBook(updated);
+        const freshPage = updated.pages.find((p) => p.id === page.id);
+        if (freshPage) mergePages([freshPage]);
         setNarrateProgress((p) => p ? { ...p, done: p.done + 1 } : null);
       }
       if (!narrateCancelledRef.current) toast.success("Narration complete!");
@@ -568,7 +597,8 @@ export default function EditorPage() {
         selectedVoice.type === "preset" ? selectedVoice.id : undefined,
         selectedVoice.type === "clone" ? selectedVoice.profileId : undefined,
       );
-      updateBook(updated);
+      const freshPage = updated.pages.find((p) => p.id === page.id);
+      if (freshPage) mergePages([freshPage]);
       setPageNarrateStatuses((s) => ({ ...s, [page.id]: "done" }));
     } catch (err) {
       setPageNarrateStatuses((s) => ({ ...s, [page.id]: "error" }));
