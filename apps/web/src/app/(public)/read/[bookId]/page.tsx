@@ -54,7 +54,7 @@ const BookPage = forwardRef<
           <img
             src={publicPageImageUrl(bookId, page.id)}
             alt={page.is_cover ? "Cover" : `Page ${page.order}`}
-            className={`h-full w-full ${page.is_cover ? "object-contain" : "object-cover"}`}
+            className="h-full w-full object-cover"
             draggable={false}
           />
         ) : (

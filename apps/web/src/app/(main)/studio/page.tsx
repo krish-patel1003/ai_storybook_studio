@@ -463,7 +463,7 @@ function CoverPagePreview({
     <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
       style={{ ...PREVIEW_STYLE, background: "#0a0a14" }}>
       {blobUrl ? (
-        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
       ) : (
         <div className="absolute inset-0 bg-muted flex flex-col items-center justify-center gap-2">
           <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
@@ -509,7 +509,7 @@ function BackCoverPreview({ blobUrl }: { blobUrl: string | null }) {
     <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
       style={{ ...PREVIEW_STYLE, background: READER_BG }}>
       {blobUrl ? (
-        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+        <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
       ) : (
         <div className="absolute inset-0 bg-muted flex flex-col items-center justify-center gap-2">
           <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
