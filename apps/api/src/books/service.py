@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from src.auth.models import User
 from src.books.models import Book, Character, GenerationStage, Page
+from src.generation.events import set_context as _set_gen_context
 from src.books.schemas import AddCharacterIn, AddPageIn, BrainstormIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, ExpandPromptIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
 from src.config import settings
 from src.exceptions import NotFoundError
@@ -217,6 +218,7 @@ async def generate_from_draft(
     user_id: uuid.UUID,
     data: GenerateIn,
 ) -> Book:
+    _set_gen_context(user_id, book_id)
     book = await get_book(db, book_id, user_id)
     book.art_style = data.art_style
     book.stage = GenerationStage.ENHANCING
@@ -266,6 +268,7 @@ async def create_and_generate(
     user_id: uuid.UUID,
     data: CreateBookIn,
 ) -> Book:
+    _set_gen_context(user_id)  # book_id set below after flush
     book = Book(
         user_id=user_id,
         title=data.raw_prompt[:60],
@@ -283,6 +286,7 @@ async def create_and_generate(
     )
     db.add(book)
     await db.flush()
+    _set_gen_context(user_id, book.id)  # now we have the real book ID
 
     try:
         cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
@@ -433,6 +437,7 @@ async def regenerate_page(
     page_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Book:
+    _set_gen_context(user_id, book_id)
     book = await get_book(db, book_id, user_id)
     page = next((p for p in book.pages if p.id == page_id), None)
     if page is None:
@@ -479,6 +484,7 @@ async def recalibrate_book(
     user_id: uuid.UUID,
     data: RecalibrateIn,
 ) -> Book:
+    _set_gen_context(user_id, book_id)
     book = await get_book(db, book_id, user_id)
     if book.brief is None:
         raise ValueError("Book has no brief yet — generation may still be in progress")
@@ -518,6 +524,7 @@ async def generate_character_sheets(
     book_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Book:
+    _set_gen_context(user_id, book_id)
     from src.storage import minio_client as mc
 
     book = await get_book(db, book_id, user_id)
@@ -554,6 +561,7 @@ async def illustrate_page(
     page_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Book:
+    _set_gen_context(user_id, book_id)
     from src.storage import minio_client
 
     book = await get_book(db, book_id, user_id)
@@ -781,6 +789,7 @@ async def narrate_page(
     voice_name: str = "Kore",
     voice_profile_id: uuid.UUID | None = None,
 ) -> Book:
+    _set_gen_context(user_id, book_id)
     from src.storage import minio_client
     from src.generation.tts import synthesize, DEFAULT_VOICE
 

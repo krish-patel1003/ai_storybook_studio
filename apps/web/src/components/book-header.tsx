@@ -13,6 +13,7 @@ const navItems = [
   { href: "/reader",   label: "Reader"       },
   { href: "/voices",   label: "Voice Studio" },
   { href: "/kdp",      label: "Publish"      },
+  { href: "/pricing",  label: "Pricing"      },
 ] as const;
 
 export function BookHeader() {

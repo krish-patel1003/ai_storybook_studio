@@ -1,15 +1,32 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { Sparkles, Wand2, Palette, BookMarked, ArrowRight, Star, Lock, BookOpen, Download } from "lucide-react";
 
-const SAMPLE_BOOKS = [
-  { img: "/assets/cover.jpg",  title: "The Brave Little Fox",    age: "Ages 3–5", pages: 10 },
-  { img: "/assets/page1.jpg",  title: "Pip's Cozy Morning",      age: "Ages 3–5", pages: 8  },
-  { img: "/assets/page2.jpg",  title: "Professor Hoot Knows",    age: "Ages 6–8", pages: 12 },
-  { img: "/assets/page3.jpg",  title: "Berries by the Stream",   age: "Ages 3–5", pages: 10 },
-];
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+interface SampleBook {
+  id: string;
+  title: string;
+  age_range: string;
+  page_count: number;
+  cover_image_url: string | null;
+}
+
+function useSampleBooks() {
+  const [books, setBooks] = useState<SampleBook[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch(`${API}/books/samples`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setBooks)
+      .catch(() => setBooks([]))
+      .finally(() => setLoading(false));
+  }, []);
+  return { books, loading };
+}
 
 const HOW_IT_WORKS = [
   {
@@ -35,6 +52,79 @@ const TRUST_POINTS = [
   { icon: Download, text: "Export PDF at any time — no lock-in"        },
   { icon: BookOpen, text: "Amazon self-publishing guide included"       },
 ];
+
+function SampleBooksSection() {
+  const { books, loading } = useSampleBooks();
+
+  return (
+    <section className="bg-card border-t-[2.5px] border-foreground">
+      <div className="mx-auto max-w-7xl px-4 py-20">
+        <div className="flex items-end justify-between mb-10">
+          <div>
+            <h2 className="font-display text-4xl font-black md:text-5xl">Stories made with our studio</h2>
+            <p className="mt-2 text-muted-foreground">Click to read one — it takes 30 seconds.</p>
+          </div>
+          <Link href="/library" className="hidden text-sm font-extrabold underline-offset-4 hover:underline md:inline">
+            Browse more →
+          </Link>
+        </div>
+
+        {loading ? (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="overflow-hidden rounded-2xl bg-background chunky-border chunky-shadow-sm animate-pulse">
+                <div className="aspect-[3/4] bg-muted" />
+                <div className="border-t-[2.5px] border-foreground p-3 space-y-2">
+                  <div className="h-4 rounded bg-muted w-3/4" />
+                  <div className="h-3 rounded bg-muted w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : books.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-30" strokeWidth={1.5} />
+            <p className="font-bold">Sample books coming soon.</p>
+          </div>
+        ) : (
+          <div className={`grid gap-6 sm:grid-cols-2 ${books.length >= 4 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
+            {books.map((b, i) => (
+              <motion.div
+                key={b.id}
+                whileHover={{ y: -6, rotate: i % 2 === 0 ? -1 : 1 }}
+                className="group overflow-hidden rounded-2xl bg-background chunky-border chunky-shadow-sm"
+              >
+                <Link href={`/read/${b.id}`} className="block">
+                  <div className="aspect-[3/4] overflow-hidden bg-muted relative">
+                    {b.cover_image_url ? (
+                      <img
+                        src={`${API}${b.cover_image_url}`}
+                        alt={b.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center">
+                        <BookOpen className="h-16 w-16 opacity-20" strokeWidth={1} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t-[2.5px] border-foreground p-3">
+                    <div className="font-display text-base font-black leading-tight line-clamp-2">{b.title}</div>
+                    <div className="flex items-center justify-between text-xs font-bold text-muted-foreground mt-0.5">
+                      <span>Ages {b.age_range}</span>
+                      <span>{b.page_count} pages</span>
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 export default function HomePage() {
   return (
@@ -195,39 +285,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Sample books grid ─────────────────────────────────────────────── */}
-      <section className="bg-card border-t-[2.5px] border-foreground">
-        <div className="mx-auto max-w-7xl px-4 py-20">
-          <div className="flex items-end justify-between mb-10">
-            <div>
-              <h2 className="font-display text-4xl font-black md:text-5xl">Stories made with our studio</h2>
-              <p className="mt-2 text-muted-foreground">Click to read one — it takes 30 seconds.</p>
-            </div>
-            <Link href="/library" className="hidden text-sm font-extrabold underline-offset-4 hover:underline md:inline">
-              Browse more →
-            </Link>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {SAMPLE_BOOKS.map((b, i) => (
-              <motion.div
-                key={b.title}
-                whileHover={{ y: -6, rotate: i % 2 === 0 ? -1 : 1 }}
-                className="group overflow-hidden rounded-2xl bg-background chunky-border chunky-shadow-sm"
-              >
-                <div className="aspect-[3/4] overflow-hidden bg-muted">
-                  <img src={b.img} alt={b.title} loading="lazy" className="h-full w-full object-cover" />
-                </div>
-                <div className="border-t-[2.5px] border-foreground p-3">
-                  <div className="font-display text-lg font-black leading-tight">{b.title}</div>
-                  <div className="flex items-center justify-between text-xs font-bold text-muted-foreground mt-0.5">
-                    <span>{b.age}</span>
-                    <span>{b.pages} pages</span>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <SampleBooksSection />
 
       {/* ── KDP Publishing callout ────────────────────────────────────────── */}
       <section className="border-y-[2.5px] border-foreground bg-primary text-primary-foreground">

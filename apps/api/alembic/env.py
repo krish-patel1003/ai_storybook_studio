@@ -12,6 +12,7 @@ from src.models import metadata
 import src.auth.models  # noqa: F401
 import src.voices.models  # noqa: F401
 import src.profiles.models  # noqa: F401
+import src.generation.event_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))

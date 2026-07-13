@@ -1,6 +1,7 @@
 import uuid
 from typing import Sequence
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +49,25 @@ from src.generation.constants import (
 )
 
 router = APIRouter()
+
+
+def _generation_detail(exc: Exception) -> str:
+    """Convert a generation exception to a user-facing HTTP detail string."""
+    from fastapi import HTTPException
+    msg = str(exc)
+    if "SAFETY_BLOCK:" in msg:
+        return msg.split("SAFETY_BLOCK:", 1)[-1].strip()
+    if "429" in msg or "quota" in msg.lower() or "rate limit" in msg.lower():
+        return "AI quota exceeded — please wait a moment and try again."
+    if "timeout" in msg.lower() or "504" in msg or "timed out" in msg.lower():
+        return "The AI took too long to respond — please try again."
+    if "503" in msg or "unavailable" in msg.lower() or "overloaded" in msg.lower():
+        return "The AI service is temporarily overloaded — please try again in a moment."
+    if "No image returned" in msg or "No image data" in msg:
+        return "The AI didn't return an image — try a different prompt or art style."
+    if "empty response" in msg.lower():
+        return "The AI returned an empty response — try rephrasing your prompt."
+    return "Generation failed — please try again. If the problem persists, try adjusting your prompt."
 
 
 @router.get("/models", response_model=ModelsOut)
@@ -192,6 +212,36 @@ async def create_draft(
 
 
 # ── Public endpoints (no auth — must be BEFORE /{book_id}) ───────────────────
+
+@router.get("/samples", response_model=list[BookSummaryOut])
+async def get_sample_books(
+    db: AsyncSession = Depends(get_db),
+) -> list[BookSummaryOut]:
+    """Return all books marked as samples (public, curated). Used by the landing page."""
+    from sqlalchemy import select as sa_select
+    from src.books.models import Book as BookModel, Page as PageModel
+    from sqlalchemy import func, case
+
+    rows = await db.execute(
+        sa_select(
+            BookModel,
+            func.count(PageModel.id).filter(PageModel.image_key.isnot(None)).label("illustrated_count"),
+            func.min(case((PageModel.image_key.isnot(None), PageModel.id.cast(sa.String)), else_=None)).label("cover_page_id"),
+        )
+        .outerjoin(PageModel, PageModel.book_id == BookModel.id)
+        .where(BookModel.is_sample.is_(True), BookModel.visibility == "public")
+        .group_by(BookModel.id)
+        .order_by(BookModel.created_at.asc())
+    )
+    result = []
+    for book, illustrated_count, cover_page_id in rows:
+        summary = BookSummaryOut.model_validate(book)
+        summary.illustrated_page_count = illustrated_count or 0
+        if cover_page_id:
+            summary.cover_image_url = f"/books/public/{book.id}/pages/{cover_page_id}/image"
+        result.append(summary)
+    return result
+
 
 @router.get("/public/{book_id}", response_model=BookOut)
 async def get_public_book(
@@ -483,7 +533,11 @@ async def generate_character_sheets(
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
 ) -> BookOut:
-    updated = await service.generate_character_sheets(db, book.id, book.user_id)
+    from fastapi import HTTPException
+    try:
+        updated = await service.generate_character_sheets(db, book.id, book.user_id)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=_generation_detail(exc))
     return BookOut.model_validate(updated)
 
 
@@ -516,8 +570,16 @@ async def illustrate_page(
     page_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
 ) -> BookOut:
-    updated = await service.illustrate_page(db, book.id, page_id, book.user_id)
+    from fastapi import HTTPException
+    from src.billing.guards import check_page_pool, deduct_page_pool
+    check_page_pool(user)
+    try:
+        updated = await service.illustrate_page(db, book.id, page_id, book.user_id)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=_generation_detail(exc))
+    await deduct_page_pool(db, user.id)
     return BookOut.model_validate(updated)
 
 
@@ -535,7 +597,11 @@ async def illustrate_back_cover(
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
 ) -> BookOut:
-    updated = await service.illustrate_back_cover(db, book.id, book.user_id)
+    from fastapi import HTTPException
+    try:
+        updated = await service.illustrate_back_cover(db, book.id, book.user_id)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=_generation_detail(exc))
     return BookOut.model_validate(updated)
 
 
@@ -584,12 +650,26 @@ async def narrate_page(
     data: NarrateIn = NarrateIn(),
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
 ) -> BookOut:
-    updated = await service.narrate_page(
-        db, book.id, page_id, book.user_id,
-        voice_name=data.voice_name,
-        voice_profile_id=data.voice_profile_id,
-    )
+    from fastapi import HTTPException
+    from src.billing.guards import require_feature
+    require_feature(user, "narration")
+    try:
+        updated = await service.narrate_page(
+            db, book.id, page_id, book.user_id,
+            voice_name=data.voice_name,
+            voice_profile_id=data.voice_profile_id,
+        )
+    except (RuntimeError, ValueError) as exc:
+        msg = str(exc)
+        if "voice profile not found" in msg.lower():
+            raise HTTPException(status_code=404, detail="Voice profile not found — it may have been deleted.")
+        if "elevenlabs" in msg.lower() or "tts failed" in msg.lower():
+            raise HTTPException(status_code=502, detail="Voice narration service error — please try again or switch to a built-in voice.")
+        if "429" in msg or "quota" in msg.lower():
+            raise HTTPException(status_code=429, detail="Narration quota exceeded — please wait a moment and try again.")
+        raise HTTPException(status_code=422, detail=_generation_detail(exc))
     return BookOut.model_validate(updated)
 
 
@@ -600,11 +680,15 @@ async def narrate_book(
     book: Book = Depends(owned_book),
 ) -> BookOut:
     """Narrate all un-narrated pages in the book sequentially."""
-    updated = await service.narrate_book(
-        db, book.id, book.user_id,
-        voice_name=data.voice_name,
-        voice_profile_id=data.voice_profile_id,
-    )
+    from fastapi import HTTPException
+    try:
+        updated = await service.narrate_book(
+            db, book.id, book.user_id,
+            voice_name=data.voice_name,
+            voice_profile_id=data.voice_profile_id,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=_generation_detail(exc))
     return BookOut.model_validate(updated)
 
 

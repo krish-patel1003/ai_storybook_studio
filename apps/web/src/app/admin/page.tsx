@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Users, BookOpen, ImageIcon, Mic, TrendingUp,
   LogOut, RefreshCw, CheckCircle, Chrome, Shield,
-  BarChart2, Clock, DollarSign, X, Activity, AlertCircle,
+  BarChart2, Clock, DollarSign, X, Activity, AlertCircle, Tag,
 } from "lucide-react";
 import { XsSpinner, LgSpinner, MdSpinner } from "@/components/character-spinner";
 
@@ -157,6 +158,42 @@ function ProgressRow({ label, value, total, color = "bg-primary" }: {
 
 // ── User detail panel ─────────────────────────────────────────────────────────
 
+function ToggleSampleButton({ bookId, creds }: { bookId: string; creds: { user: string; pass: string } }) {
+  const [isSample, setIsSample] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function toggle() {
+    setLoading(true);
+    try {
+      const auth = `Basic ${btoa(`${creds.user}:${creds.pass}`)}`;
+      const res = await fetch(`${API}/admin/books/${bookId}/sample`, {
+        method: "PATCH",
+        headers: { Authorization: auth },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsSample(data.is_sample);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const active = isSample === true;
+  return (
+    <button
+      onClick={toggle}
+      disabled={loading}
+      className={`text-[10px] font-extrabold px-2 py-1 rounded-lg chunky-border transition-colors ${
+        active ? "bg-amber-100 text-amber-700 border-amber-300" : "bg-muted text-muted-foreground"
+      } disabled:opacity-50`}
+      title="Toggle landing page sample"
+    >
+      {loading ? "…" : active ? "★ Sample" : "☆ Mark sample"}
+    </button>
+  );
+}
+
 function UserDetailPanel({
   userId, creds, onClose,
 }: { userId: string; creds: { user: string; pass: string }; onClose: () => void }) {
@@ -278,10 +315,11 @@ function UserDetailPanel({
                             <span>{timeAgo(b.created)}</span>
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
+                        <div className="text-right shrink-0 space-y-1">
                           <p className="font-display text-lg font-black text-primary">{fmtCost(b.cost.total)}</p>
                           <p className="text-[10px] text-muted-foreground">{b.illustrated} illus · {b.narrated} audio</p>
                           <p className="text-[10px] text-muted-foreground">LLM {fmtCost(b.cost.llm)}</p>
+                          <ToggleSampleButton bookId={b.id} creds={creds!} />
                         </div>
                       </div>
                     </div>
@@ -457,6 +495,13 @@ export default function AdminDashboard() {
                 Updated {timeAgo(lastRefresh.toISOString())}
               </span>
             )}
+            <Link
+              href="/admin/pricing"
+              className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-bold chunky-border hover:-translate-y-0.5 transition-transform"
+            >
+              <Tag className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Pricing
+            </Link>
             <button
               onClick={() => creds && fetchAll(creds.user, creds.pass)}
               disabled={loading}

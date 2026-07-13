@@ -1,10 +1,294 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { User, Mail, BookOpen, LogOut, Shield, Pencil, Check, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  User, Mail, BookOpen, LogOut, Shield, Pencil, Check, X,
+  Zap, Crown, Star, Layers, ArrowUpRight, RefreshCw,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
+import { XsSpinner } from "@/components/character-spinner";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface TierOut {
+  name: string;
+  display_name: string;
+  price_usd: number;
+  page_pool: number;
+  hard_max_per_book: number;
+  books_per_month: number | null;
+  narration: boolean;
+  avatars: boolean;
+  pro_model: boolean;
+  priority_queue: boolean;
+  commercial_license: boolean;
+  voice_count: number;
+  art_style_count: number;
+  is_current: boolean;
+}
+
+interface SubscriptionOut {
+  tier: string;
+  display_name: string;
+  status: string | null;
+  page_pool_total: number;
+  page_pool_used: number;
+  page_pool_remaining: number;
+  period_end: string | null;
+  publishable_key: string;
+  tiers: TierOut[];
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const TIER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  free:    { bg: "bg-slate-500",  text: "text-slate-600",  border: "border-slate-300" },
+  starter: { bg: "bg-blue-500",   text: "text-blue-600",   border: "border-blue-300" },
+  family:  { bg: "bg-purple-500", text: "text-purple-600", border: "border-purple-300" },
+  creator: { bg: "bg-amber-500",  text: "text-amber-600",  border: "border-amber-300" },
+};
+
+const TIER_ICONS: Record<string, React.ElementType> = {
+  free: Star, starter: Zap, family: Layers, creator: Crown,
+};
+
+function tierLabel(tier: TierOut) {
+  return tier.price_usd === 0 ? "Free" : `$${tier.price_usd.toFixed(2)}/mo`;
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+// ── Subscription card ─────────────────────────────────────────────────────────
+
+function SubscriptionSection({ token }: { token: string }) {
+  const searchParams = useSearchParams();
+  const [sub, setSub] = useState<SubscriptionOut | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [checkingOut, setCheckingOut] = useState<string | null>(null);
+  const [openingPortal, setOpeningPortal] = useState(false);
+
+  useEffect(() => {
+    const outcome = searchParams.get("checkout");
+    if (outcome === "success") {
+      const tier = searchParams.get("tier") ?? "";
+      toast.success(`Welcome to ${tier.charAt(0).toUpperCase() + tier.slice(1)}! Your plan is now active.`);
+    } else if (outcome === "canceled") {
+      toast.info("Checkout canceled — you can upgrade any time.");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API}/billing/subscription`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setSub)
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  async function handleUpgrade(tierName: string) {
+    if (!token) return;
+    setCheckingOut(tierName);
+    try {
+      const res = await fetch(`${API}/billing/checkout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: tierName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Checkout failed");
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not start checkout — please try again.");
+    } finally {
+      setCheckingOut(null);
+    }
+  }
+
+  async function handleManage() {
+    if (!token) return;
+    setOpeningPortal(true);
+    try {
+      const res = await fetch(`${API}/billing/portal`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Could not open billing portal");
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not open billing portal.");
+    } finally {
+      setOpeningPortal(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="mt-6 h-48 animate-pulse rounded-3xl bg-muted" />
+    );
+  }
+
+  if (!sub) {
+    return (
+      <div className="mt-6 rounded-3xl bg-card p-5 chunky-border text-sm text-muted-foreground text-center">
+        Subscription info unavailable
+      </div>
+    );
+  }
+
+  const colors = TIER_COLORS[sub.tier] ?? TIER_COLORS.free;
+  const TierIcon = TIER_ICONS[sub.tier] ?? Star;
+  const poolPct = Math.min(100, Math.round((sub.page_pool_used / sub.page_pool_total) * 100));
+  const isPaid = sub.tier !== "free";
+
+  return (
+    <div className="mt-6 space-y-4">
+      {/* Current plan */}
+      <div className="rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <span className={`grid h-10 w-10 place-items-center rounded-xl ${colors.bg} chunky-border`}>
+              <TierIcon className="h-5 w-5 text-white" strokeWidth={2.5} />
+            </span>
+            <div>
+              <p className="font-display text-lg font-black">{sub.display_name} Plan</p>
+              {sub.status && sub.status !== "active" && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  sub.status === "past_due" ? "bg-red-100 text-red-700" :
+                  sub.status === "trialing" ? "bg-green-100 text-green-700" :
+                  "bg-muted text-muted-foreground"
+                }`}>
+                  {sub.status.replace("_", " ")}
+                </span>
+              )}
+            </div>
+          </div>
+          {isPaid && (
+            <button
+              onClick={handleManage}
+              disabled={openingPortal}
+              className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-xs font-bold chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50"
+            >
+              {openingPortal ? <XsSpinner /> : <RefreshCw className="h-3 w-3" strokeWidth={2.5} />}
+              Manage billing
+            </button>
+          )}
+        </div>
+
+        {/* Page pool */}
+        <div className="rounded-2xl bg-background p-4 chunky-border">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-extrabold">Page pool</p>
+            <p className="text-sm font-bold">
+              <span className={poolPct >= 90 ? "text-destructive" : colors.text}>
+                {sub.page_pool_used}
+              </span>
+              <span className="text-muted-foreground"> / {sub.page_pool_total} pages</span>
+            </p>
+          </div>
+          <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                poolPct >= 90 ? "bg-destructive" : poolPct >= 70 ? "bg-amber-500" : colors.bg
+              }`}
+              style={{ width: `${poolPct}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
+            <span>{sub.page_pool_remaining} pages remaining</span>
+            {sub.period_end && <span>Resets {fmtDate(sub.period_end)}</span>}
+          </div>
+        </div>
+
+        {sub.tier === "free" && sub.page_pool_remaining <= 4 && (
+          <p className="mt-3 text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2 font-bold border border-amber-200">
+            Running low — upgrade to get more pages and unlock narration, avatars, and longer books.
+          </p>
+        )}
+      </div>
+
+      {/* Tier cards */}
+      <div>
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-3">
+          {isPaid ? "Compare plans" : "Upgrade your plan"}
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {sub.tiers.map((tier) => {
+            const tc = TIER_COLORS[tier.name] ?? TIER_COLORS.free;
+            const TIcon = TIER_ICONS[tier.name] ?? Star;
+            const isCurrentTier = tier.is_current;
+            const isPaidTier = tier.price_usd > 0;
+            const isDowngrade = sub.tiers.findIndex(t => t.name === tier.name) <
+                                sub.tiers.findIndex(t => t.name === sub.tier);
+
+            return (
+              <div
+                key={tier.name}
+                className={`rounded-2xl bg-card p-4 chunky-border overflow-hidden ${isCurrentTier ? "ring-2 ring-offset-0 " + tc.border.replace("border-", "ring-") : ""}`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white ${tc.bg}`}>
+                    <TIcon className="h-3 w-3" strokeWidth={3} />
+                    {tier.display_name}
+                  </span>
+                  {isCurrentTier && (
+                    <span className="text-[10px] font-extrabold text-muted-foreground">Current</span>
+                  )}
+                </div>
+
+                <p className="font-display text-xl font-black mb-1">{tierLabel(tier)}</p>
+
+                <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
+                  <p>{tier.page_pool} pages/mo · max {tier.hard_max_per_book}/book</p>
+                  <p>{tier.books_per_month ?? "Unlimited"} books · {tier.art_style_count} styles</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {tier.narration && <span className="rounded-full bg-green-100 text-green-700 px-1.5 py-0.5 font-bold">Narration</span>}
+                    {tier.avatars && <span className="rounded-full bg-purple-100 text-purple-700 px-1.5 py-0.5 font-bold">Avatars</span>}
+                    {tier.commercial_license && <span className="rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 font-bold">Commercial</span>}
+                  </div>
+                </div>
+
+                {!isCurrentTier && isPaidTier && !isDowngrade && (
+                  <button
+                    onClick={() => handleUpgrade(tier.name)}
+                    disabled={!!checkingOut}
+                    className={`flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold text-white ${tc.bg} chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0`}
+                  >
+                    {checkingOut === tier.name ? <XsSpinner /> : <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={3} />}
+                    {checkingOut === tier.name ? "Redirecting…" : "Upgrade"}
+                  </button>
+                )}
+                {!isCurrentTier && isPaid && isDowngrade && (
+                  <button
+                    onClick={handleManage}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold bg-muted chunky-border hover:-translate-y-0.5 transition-transform"
+                  >
+                    Switch via portal
+                  </button>
+                )}
+                {isCurrentTier && (
+                  <div className="flex items-center justify-center gap-1 rounded-xl bg-muted py-2 text-xs font-bold text-muted-foreground">
+                    <Check className="h-3.5 w-3.5" strokeWidth={3} /> Active
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function AccountPage() {
   const { user, token, logout, isLoading, updateUser } = useAuth();
@@ -26,8 +310,8 @@ export default function AccountPage() {
     try {
       await updateUser({ username: usernameValue.trim() });
       toast.success("Username updated");
-    } catch {
-      toast.error("Failed to update username");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update username");
     } finally {
       setSaving(false);
       setEditingUsername(false);
@@ -40,8 +324,8 @@ export default function AccountPage() {
     try {
       await updateUser({ author_name: authorNameValue.trim() || undefined });
       toast.success("Author name updated");
-    } catch {
-      toast.error("Failed to update author name");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update author name");
     } finally {
       setSaving(false);
       setEditingAuthorName(false);
@@ -68,7 +352,7 @@ export default function AccountPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-12">
       <h1 className="font-display text-4xl font-black md:text-5xl">Your Account</h1>
-      <p className="mt-2 text-muted-foreground">Manage your profile and preferences.</p>
+      <p className="mt-2 text-muted-foreground">Manage your profile, preferences, and subscription.</p>
 
       {/* Avatar + username */}
       <div className="mt-8 flex items-center gap-4 rounded-3xl bg-card p-6 chunky-border chunky-shadow-sm">
@@ -84,28 +368,17 @@ export default function AccountPage() {
                 className="flex-1 rounded-xl border-[2px] border-foreground bg-background px-3 py-1.5 text-lg font-black focus:outline-none"
                 autoFocus
               />
-              <button
-                onClick={saveUsername}
-                disabled={saving}
-                className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-50"
-              >
+              <button onClick={saveUsername} disabled={saving} className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-50">
                 <Check className="h-4 w-4" strokeWidth={3} />
               </button>
-              <button
-                onClick={() => { setEditingUsername(false); setUsernameValue(user.username); }}
-                className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border"
-              >
+              <button onClick={() => { setEditingUsername(false); setUsernameValue(user.username); }} className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border">
                 <X className="h-4 w-4" strokeWidth={3} />
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <span className="font-display text-xl font-black">{user.username}</span>
-              <button
-                onClick={() => { setEditingUsername(true); setUsernameValue(user.username); }}
-                className="rounded-full p-1 hover:bg-highlight transition-colors"
-                title="Edit username"
-              >
+              <button onClick={() => { setEditingUsername(true); setUsernameValue(user.username); }} className="rounded-full p-1 hover:bg-highlight transition-colors" title="Edit username">
                 <Pencil className="h-3.5 w-3.5" strokeWidth={2.5} />
               </button>
             </div>
@@ -126,7 +399,6 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* Author name — editable, used on book covers */}
         <div className="flex items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent chunky-border">
             <User className="h-5 w-5" strokeWidth={2.5} />
@@ -136,35 +408,18 @@ export default function AccountPage() {
             <p className="text-xs text-muted-foreground mb-1">Shown on book covers and exports</p>
             {editingAuthorName ? (
               <div className="flex items-center gap-2 mt-1">
-                <input
-                  value={authorNameValue}
-                  onChange={(e) => setAuthorNameValue(e.target.value)}
-                  placeholder="e.g. Jane Smith"
-                  className="flex-1 rounded-xl border-[2px] border-foreground bg-background px-3 py-1.5 text-sm font-bold focus:outline-none"
-                  autoFocus
-                />
-                <button
-                  onClick={saveAuthorName}
-                  disabled={saving}
-                  className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-50"
-                >
+                <input value={authorNameValue} onChange={(e) => setAuthorNameValue(e.target.value)} placeholder="e.g. Jane Smith" className="flex-1 rounded-xl border-[2px] border-foreground bg-background px-3 py-1.5 text-sm font-bold focus:outline-none" autoFocus />
+                <button onClick={saveAuthorName} disabled={saving} className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground chunky-border disabled:opacity-50">
                   <Check className="h-4 w-4" strokeWidth={3} />
                 </button>
-                <button
-                  onClick={() => { setEditingAuthorName(false); setAuthorNameValue(user.author_name ?? ""); }}
-                  className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border"
-                >
+                <button onClick={() => { setEditingAuthorName(false); setAuthorNameValue(user.author_name ?? ""); }} className="grid h-8 w-8 place-items-center rounded-full bg-card chunky-border">
                   <X className="h-4 w-4" strokeWidth={3} />
                 </button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <p className="font-bold">{user.author_name || <span className="text-muted-foreground italic font-normal text-sm">Not set — using username</span>}</p>
-                <button
-                  onClick={() => { setEditingAuthorName(true); setAuthorNameValue(user.author_name ?? ""); }}
-                  className="rounded-full p-1 hover:bg-highlight transition-colors"
-                  title="Edit author name"
-                >
+                <button onClick={() => { setEditingAuthorName(true); setAuthorNameValue(user.author_name ?? ""); }} className="rounded-full p-1 hover:bg-highlight transition-colors" title="Edit author name">
                   <Pencil className="h-3.5 w-3.5" strokeWidth={2.5} />
                 </button>
               </div>
@@ -183,19 +438,16 @@ export default function AccountPage() {
         </div>
       </div>
 
+      {/* Subscription */}
+      {token && <SubscriptionSection token={token} />}
+
       {/* Quick links */}
       <div className="mt-6 grid grid-cols-2 gap-3">
-        <a
-          href="/library"
-          className="flex items-center gap-2.5 rounded-2xl bg-card p-4 chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
-        >
+        <a href="/library" className="flex items-center gap-2.5 rounded-2xl bg-card p-4 chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
           <BookOpen className="h-5 w-5 text-primary" strokeWidth={2.5} />
           <span className="font-bold text-sm">My Library</span>
         </a>
-        <a
-          href="/create"
-          className="flex items-center gap-2.5 rounded-2xl bg-primary p-4 chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
-        >
+        <a href="/create" className="flex items-center gap-2.5 rounded-2xl bg-primary p-4 chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
           <BookOpen className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
           <span className="font-bold text-sm text-primary-foreground">New Story</span>
         </a>
@@ -203,10 +455,7 @@ export default function AccountPage() {
 
       {/* Sign out */}
       <div className="mt-8 border-t-[2px] border-foreground/10 pt-6">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2.5 rounded-2xl bg-card px-5 py-3 text-sm font-bold text-destructive chunky-border hover:bg-destructive/10 transition-colors"
-        >
+        <button onClick={handleLogout} className="flex items-center gap-2.5 rounded-2xl bg-card px-5 py-3 text-sm font-bold text-destructive chunky-border hover:bg-destructive/10 transition-colors">
           <LogOut className="h-4 w-4" strokeWidth={2.5} />
           Sign out
         </button>

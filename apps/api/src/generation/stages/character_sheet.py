@@ -23,7 +23,7 @@ class GeneratedCharacterSheet:
 
 
 class CharacterSheetStage:
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash-image") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-3-pro-image") -> None:
         self._client = genai.Client(api_key=api_key)
         self._model = model
         self._sem = asyncio.Semaphore(2)
@@ -70,12 +70,25 @@ class CharacterSheetStage:
                         if part.inline_data and part.inline_data.data:
                             raw = part.inline_data.data
                             image_bytes = base64.b64decode(raw) if isinstance(raw, str) else raw
+                            from src.generation.events import log_event
+                            log_event("image", self._model, image_count=1)
                             return GeneratedCharacterSheet(
                                 character_id=str(character.id),
                                 image_data=image_bytes,
                                 mime_type=part.inline_data.mime_type or "image/png",
                             )
-                    raise ValueError(f"No image in response for character {character.name}")
+                    finish_reason = ""
+                    if not response.candidates:
+                        finish_reason = "SAFETY"
+                    else:
+                        finish_reason = str(getattr(response.candidates[0], "finish_reason", ""))
+                    if "SAFETY" in finish_reason.upper():
+                        raise ValueError(
+                            f"SAFETY_BLOCK: The description for character '{character.name}' was flagged "
+                            "by the content safety filter. Try simplifying the visual description or "
+                            "removing references to real people or trademarked characters."
+                        )
+                    raise ValueError(f"No image returned for character '{character.name}' — try editing their description")
                 except Exception as exc:
                     last_exc = exc
                     if attempt < max_retries - 1:
@@ -85,6 +98,7 @@ class CharacterSheetStage:
                             attempt + 1, max_retries, character.name, exc, wait,
                         )
                         await asyncio.sleep(wait)
+            root_cause = str(last_exc) if last_exc else "unknown error"
             raise RuntimeError(
-                f"Character sheet generation failed for {character.name} after {max_retries} attempts"
+                f"Character sheet generation failed for '{character.name}' after {max_retries} attempts: {root_cause}"
             ) from last_exc

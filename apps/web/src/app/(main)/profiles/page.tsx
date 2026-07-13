@@ -186,8 +186,13 @@ function ProfileForm({
     try {
       const { url } = await api.profiles.generateAvatar(token, aiPrompt.trim());
       setForm((f) => ({ ...f, avatar_emoji: url }));
-    } catch {
-      toast.error("Avatar generation failed — try a different description.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (!msg || msg === "Failed to fetch" || msg === "NetworkError when attempting to fetch resource.") {
+        toast.error("Avatar generation timed out — the AI took too long to respond. Please try again.");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setGeneratingAvatar(false);
     }
@@ -514,8 +519,8 @@ export default function ProfilesPage() {
       setProfiles((prev) => [...prev, p]);
       setShowNew(false);
       toast.success(`${p.name}'s profile created!`);
-    } catch {
-      toast.error("Failed to create profile.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create profile — please try again.");
     } finally {
       setSaving(false);
     }
@@ -529,8 +534,8 @@ export default function ProfilesPage() {
       setProfiles((prev) => prev.map((x) => (x.id === id ? p : x)));
       setEditingId(null);
       toast.success("Profile updated!");
-    } catch {
-      toast.error("Failed to update profile.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile — please try again.");
     } finally {
       setSaving(false);
     }
@@ -542,8 +547,8 @@ export default function ProfilesPage() {
       await api.profiles.delete(token, id);
       setProfiles((prev) => prev.filter((x) => x.id !== id));
       toast.success("Profile deleted.");
-    } catch {
-      toast.error("Failed to delete profile.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete profile — please try again.");
     }
   }
 

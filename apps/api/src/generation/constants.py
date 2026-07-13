@@ -28,6 +28,7 @@ PAGE_COUNT_OPTIONS: Final[list[int]] = [6, 8, 10, 12, 15, 20, 24, 30, 40]
 # Pro:   richer creative writing — better for character & page text generation
 GEMINI_FLASH: Final[str] = "gemini-3.5-flash"
 GEMINI_PRO: Final[str] = "gemini-3.1-pro-preview"
+GEMINI_IMAGE: Final[str] = "gemini-3-pro-image"
 
 # ── Generation temperatures ───────────────────────────────────────────────────
 TEMP_ENHANCE: Final[float] = 0.85      # creative brief expansion

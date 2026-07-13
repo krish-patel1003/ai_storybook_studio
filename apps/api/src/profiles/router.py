@@ -37,6 +37,9 @@ async def generate_avatar(
     data: GenerateAvatarIn,
     user: User = Depends(current_user),
 ) -> GenerateAvatarOut:
+    from src.billing.guards import require_feature
+    require_feature(user, "avatars")
+
     from google import genai
     from google.genai import types as gtypes
     from src.config import settings
@@ -49,14 +52,49 @@ async def generate_avatar(
         "No text, no watermarks."
     )
 
+    import asyncio
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    response = await client.aio.models.generate_content(
-        model="gemini-3-pro-image",
-        contents=full_prompt,
-        config=gtypes.GenerateContentConfig(
-            response_modalities=["IMAGE"],
-        ),
+    try:
+        response = await asyncio.wait_for(
+            client.aio.models.generate_content(
+                model="gemini-3-pro-image",
+                contents=full_prompt,
+                config=gtypes.GenerateContentConfig(
+                    response_modalities=["IMAGE"],
+                ),
+            ),
+            timeout=90,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Avatar generation timed out — the AI took too long to respond. Please try again.",
+        )
+    except Exception as exc:
+        err_str = str(exc).lower()
+        if "429" in err_str or "quota" in err_str or "rate" in err_str:
+            raise HTTPException(
+                status_code=429,
+                detail="Image generation quota exceeded — please wait a minute and try again.",
+            )
+        raise HTTPException(
+            status_code=503,
+            detail="AI image service is temporarily unavailable — please try again in a moment.",
+        )
+
+    # Check for prompt-level or candidate-level safety blocks
+    _SAFETY_DETAIL = (
+        "Your description was blocked by the content safety filter. "
+        "Avoid using names of real people, celebrities, or trademarked characters "
+        "(e.g. Disney, Pixar, Marvel). Instead describe the character's appearance — "
+        "for example: 'a small girl with curly red hair and a green dress'."
     )
+    if not response.candidates:
+        raise HTTPException(status_code=422, detail=_SAFETY_DETAIL)
+
+    finish_reason = str(getattr(response.candidates[0], "finish_reason", ""))
+    if "SAFETY" in finish_reason.upper():
+        raise HTTPException(status_code=422, detail=_SAFETY_DETAIL)
 
     image_bytes: bytes | None = None
     mime_type = "image/png"
@@ -68,11 +106,18 @@ async def generate_avatar(
             break
 
     if not image_bytes:
-        raise HTTPException(status_code=500, detail="Image generation failed")
+        raise HTTPException(
+            status_code=422,
+            detail="The AI couldn't generate an image for that description — try adding more visual detail or using a different style.",
+        )
 
     ext = "jpg" if "jpeg" in mime_type else "png"
     filename = f"{uuid.uuid4()}.{ext}"
     key = mc.upload_avatar(str(user.id), filename, image_bytes, mime_type)
+
+    from src.generation.events import log_event, set_context
+    set_context(user.id)
+    log_event("avatar", "gemini-3-pro-image", image_count=1)
 
     url = f"{settings.API_URL}/profiles/avatar-image?key={key}"
     return GenerateAvatarOut(url=url)

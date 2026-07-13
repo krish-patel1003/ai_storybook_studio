@@ -83,6 +83,35 @@ def _api_key() -> str:
     return key
 
 
+def _elevenlabs_error(status_code: int, response_text: str) -> str:
+    """Parse an ElevenLabs error response into a user-friendly message."""
+    import json
+    try:
+        body = json.loads(response_text)
+        detail = body.get("detail", {})
+        raw_msg = (detail.get("message", "") if isinstance(detail, dict) else str(detail)).lower()
+    except Exception:
+        raw_msg = response_text.lower()
+
+    if status_code == 400:
+        if any(w in raw_msg for w in ["duration", "short", "30 second", "minimum"]):
+            return "Recording is too short — please record at least 30 seconds for best quality."
+        if any(w in raw_msg for w in ["format", "codec", "unsupported", "invalid file"]):
+            return "Unsupported audio format — please use WAV, MP3, or WebM."
+        if any(w in raw_msg for w in ["size", "large", "limit", "bytes"]):
+            return "Audio file is too large — please keep recordings under 10 MB."
+        return "Invalid audio sample — check your recording quality and try again."
+    if status_code == 422:
+        return "Audio sample couldn't be processed — please re-record in a quiet environment."
+    if status_code == 429:
+        return "Voice cloning service is busy — please wait a minute and try again."
+    if status_code in (500, 503):
+        return "ElevenLabs voice service is temporarily unavailable — please try again later."
+    if status_code == 401:
+        return "Voice service authentication failed — please contact support."
+    return f"Voice service error (HTTP {status_code}) — please try again."
+
+
 def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = _PCM_SAMPLE_RATE) -> bytes:
     """Wrap raw signed-16-bit PCM bytes in a WAV container (no external libs needed)."""
     buf = io.BytesIO()
@@ -171,7 +200,7 @@ async def clone_voice(name: str, audio_bytes: bytes, mime_type: str = "audio/web
 
     if response.status_code != 200:
         logger.error("ElevenLabs clone_voice failed: status=%d body=%s", response.status_code, response.text[:500])
-        raise RuntimeError(f"Voice cloning failed (HTTP {response.status_code}): {response.text[:200]}")
+        raise RuntimeError(_elevenlabs_error(response.status_code, response.text))
 
     voice_id: str = response.json()["voice_id"]
     logger.info("ElevenLabs: cloned voice '%s' → voice_id=%s", name, voice_id)
@@ -214,10 +243,12 @@ async def synthesize(text: str, voice_id: str, age_range: str = "6-8") -> bytes:
 
     if response.status_code != 200:
         logger.error("ElevenLabs synthesize failed: status=%d body=%s", response.status_code, response.text[:500])
-        raise RuntimeError(f"ElevenLabs TTS failed (HTTP {response.status_code}): {response.text[:200]}")
+        raise RuntimeError(_elevenlabs_error(response.status_code, response.text))
 
     pcm_bytes = response.content
     logger.info("ElevenLabs TTS: voice_id=%s  pcm_size=%d bytes  annotated=%r", voice_id, len(pcm_bytes), annotated_text[:80])
+    from src.generation.events import log_event
+    log_event("tts_elevenlabs", _TTS_MODEL, char_count=len(annotated_text))
     return _pcm_to_wav(pcm_bytes)
 
 

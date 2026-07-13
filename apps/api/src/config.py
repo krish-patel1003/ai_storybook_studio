@@ -51,5 +51,14 @@ class Config(BaseSettings):
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
 
+    # Stripe billing
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    # Price IDs — set after creating products in Stripe dashboard
+    STRIPE_PRICE_STARTER: str = ""
+    STRIPE_PRICE_FAMILY: str = ""
+    STRIPE_PRICE_CREATOR: str = ""
+
 
 settings = Config()

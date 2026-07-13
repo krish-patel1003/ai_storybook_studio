@@ -93,4 +93,7 @@ def _synthesize_sync(text: str, api_key: str, voice_name: str = DEFAULT_VOICE, s
 async def synthesize(text: str, voice_name: str = DEFAULT_VOICE, debug_raw_key: str | None = None) -> bytes:
     """Generate WAV audio for *text* using Gemini TTS. Returns WAV bytes."""
     from src.config import settings
-    return await asyncio.to_thread(_synthesize_sync, text, settings.GEMINI_API_KEY, voice_name, debug_raw_key)
+    wav = await asyncio.to_thread(_synthesize_sync, text, settings.GEMINI_API_KEY, voice_name, debug_raw_key)
+    from src.generation.events import log_event
+    log_event("tts_gemini", _MODEL, char_count=len(text))
+    return wav

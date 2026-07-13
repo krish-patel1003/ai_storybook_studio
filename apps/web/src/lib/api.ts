@@ -715,7 +715,7 @@ export const api = {
     generateAvatar: (token: string, prompt: string) =>
       request<{ url: string }>("/profiles/generate-avatar", {
         method: "POST",
-        headers: authed(token),
+        headers: { ...authed(token), "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       }),
   },

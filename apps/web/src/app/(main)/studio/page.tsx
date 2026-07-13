@@ -731,7 +731,7 @@ function useAudioPreview(bookId: string, pageId: string, token: string | null) {
       audio.onended = () => setPlaying(false);
       await audio.play();
       setPlaying(true);
-    } catch { toast.error("Could not load audio"); }
+    } catch { toast.error("Could not load audio — the narration may not have been generated yet"); }
     finally { setLoading(false); }
   }
 
@@ -1286,16 +1286,16 @@ function StudioInner() {
               setBook(withImage as unknown as BookOut);
               toast.success(`Page ${page.order + 1} illustrated!`);
               return;
-            } catch {
+            } catch (err) {
               if (attempt < 2) await new Promise(r => setTimeout(r, 4000));
-              else toast.error("Auto-illustration failed — click Illustrate to retry");
+              else toast.error(err instanceof Error ? err.message : "Auto-illustration failed — click Illustrate to retry");
             }
           }
         })().finally(() => setReIllLoading(false));
       } else {
         toast.success(`Page ${page.order} split — new page ${page.order + 1} added`);
       }
-    } catch { toast.error("Split failed"); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Split failed — please try again"); }
     finally { setSplitting(false); }
   }
 
@@ -1310,7 +1310,7 @@ function StudioInner() {
       const updated = await api.books.illustrateBackCover(token, book.id);
       setBook(updated as unknown as BookOut);
       toast.success("Back cover illustrated!");
-    } catch { toast.error("Back cover illustration failed"); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Back cover illustration failed — please try again"); }
     finally { setBackCoverLoading(false); }
   }
 
@@ -1325,7 +1325,7 @@ function StudioInner() {
       bustAuthImageCache(pageImageUrl(book.id, page.id));
       setBook(updated as unknown as BookOut);
       toast.success("Re-illustrated!");
-    } catch { toast.error("Illustration failed"); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Illustration failed — please try again"); }
     finally { setReIllLoading(false); }
   }
 
@@ -1339,7 +1339,7 @@ function StudioInner() {
       const updated = await api.books.narratePage(token, book.id, page.id);
       setBook(updated as unknown as BookOut);
       toast.success("Narrated!");
-    } catch { toast.error("Narration failed"); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Narration failed — please try again"); }
     finally { setNarratingPage(false); }
   }
 

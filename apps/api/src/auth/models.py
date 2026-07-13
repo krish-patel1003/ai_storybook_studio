@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,15 @@ class User(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
+    # ── Subscription / billing ────────────────────────────────────────────────
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    subscription_tier: Mapped[str] = mapped_column(String(32), nullable=False, default="free", server_default="free")
+    subscription_status: Mapped[str | None] = mapped_column(String(32), nullable=True)  # active | trialing | past_due | canceled
+    subscription_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    page_pool_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    page_pool_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

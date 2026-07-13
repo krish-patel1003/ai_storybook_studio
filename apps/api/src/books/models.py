@@ -68,6 +68,7 @@ class Book(Base):
 
     # Visibility
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")
+    is_sample: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false", index=True)
 
     # Author attribution — resolved at creation from parent user or chosen child profile
     author_name: Mapped[str | None] = mapped_column(String(100), nullable=True)

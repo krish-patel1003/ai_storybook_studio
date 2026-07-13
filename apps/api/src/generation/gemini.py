@@ -50,7 +50,19 @@ class GeminiClient(LLMClient):
                 if not response.text:
                     raise LLMError("Gemini returned an empty response")
 
-                return schema.model_validate_json(response.text)
+                result = schema.model_validate_json(response.text)
+
+                usage = getattr(response, "usage_metadata", None)
+                if usage is not None:
+                    from src.generation.events import log_event
+                    log_event(
+                        "llm_text",
+                        model,
+                        input_tokens=getattr(usage, "prompt_token_count", None),
+                        output_tokens=getattr(usage, "candidates_token_count", None),
+                    )
+
+                return result
 
             except LLMError:
                 raise

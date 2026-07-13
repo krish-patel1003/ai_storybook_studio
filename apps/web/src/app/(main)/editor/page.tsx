@@ -414,7 +414,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true); setTimeout(() => setCopied(false), 2500);
       toast.success("Link copied!");
-    } catch { toast.error("Failed to copy link"); } finally { setMakingPublic(false); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to copy link — try again"); } finally { setMakingPublic(false); }
   }
 
   async function handlePdf() {
@@ -428,7 +428,7 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
       a.download = `${(book.brief?.title ?? book.title).replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf`;
       a.click(); URL.revokeObjectURL(url);
       toast.success("PDF downloaded!");
-    } catch { toast.error("PDF export failed"); } finally { setDownloadingPdf(false); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "PDF export failed — please try again"); } finally { setDownloadingPdf(false); }
   }
 
   return (
@@ -551,7 +551,7 @@ export default function EditorPage() {
         setNarrateProgress((p) => p ? { ...p, done: p.done + 1 } : null);
       }
       if (!narrateCancelledRef.current) toast.success("Narration complete!");
-    } catch { if (!narrateCancelledRef.current) toast.error("Narration failed."); }
+    } catch (err) { if (!narrateCancelledRef.current) toast.error(err instanceof Error ? err.message : "Narration failed — please try again."); }
     finally { setNarratingBook(false); setNarrateProgress(null); }
   }
 
@@ -566,9 +566,9 @@ export default function EditorPage() {
       );
       updateBook(updated);
       setPageNarrateStatuses((s) => ({ ...s, [page.id]: "done" }));
-    } catch {
+    } catch (err) {
       setPageNarrateStatuses((s) => ({ ...s, [page.id]: "error" }));
-      toast.error("Narration failed for this page.");
+      toast.error(err instanceof Error ? err.message : "Narration failed for this page — please try again.");
     }
   }
 

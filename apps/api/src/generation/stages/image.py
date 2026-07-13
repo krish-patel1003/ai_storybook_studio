@@ -33,7 +33,7 @@ class GeneratedImage:
 
 
 class ImageStage:
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash-image") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-3-pro-image") -> None:
         self._client = genai.Client(api_key=api_key)
         self._model = model
         self._sem = _global_sem  # shared, not per-instance
@@ -110,12 +110,26 @@ class ImageStage:
                         if part.inline_data and part.inline_data.data:
                             raw = part.inline_data.data
                             image_bytes = base64.b64decode(raw) if isinstance(raw, str) else raw
+                            from src.generation.events import log_event
+                            log_event("image", self._model, image_count=1)
                             return GeneratedImage(
                                 order=page.order,
                                 image_data=image_bytes,
                                 mime_type=part.inline_data.mime_type or "image/png",
                             )
-                    raise ValueError(f"No image data in Gemini response for page {page.order}")
+                    # Distinguish safety block from generic empty response
+                    finish_reason = ""
+                    if not response.candidates:
+                        finish_reason = "SAFETY"
+                    else:
+                        finish_reason = str(getattr(response.candidates[0], "finish_reason", ""))
+                    if "SAFETY" in finish_reason.upper():
+                        raise ValueError(
+                            "SAFETY_BLOCK: The illustration prompt for this scene was flagged by the "
+                            "content safety filter. Try softening the scene description or removing "
+                            "specific character names."
+                        )
+                    raise ValueError(f"No image returned for page {page.order} — try a different prompt or art style")
                 except Exception as exc:
                     last_exc = exc
                     if attempt < max_retries - 1:
@@ -125,6 +139,7 @@ class ImageStage:
                             attempt + 1, max_retries, page.order, exc, wait,
                         )
                         await asyncio.sleep(wait)
+            root_cause = str(last_exc) if last_exc else "unknown error"
             raise RuntimeError(
-                f"Image generation failed for page {page.order} after {max_retries} attempts"
+                f"Image generation failed for page {page.order} after {max_retries} attempts: {root_cause}"
             ) from last_exc

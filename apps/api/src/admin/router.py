@@ -17,6 +17,7 @@ from src.auth.models import User
 from src.books.models import Book, Page
 from src.config import settings
 from src.database import get_db
+from src.generation.event_models import GenerationEvent
 
 router = APIRouter()
 security = HTTPBasic()
@@ -31,7 +32,7 @@ _LLM_PER_BOOK: dict[str, float] = {
     "gemini-3.1-pro-preview":         0.140,
 }
 _DEFAULT_LLM_COST:      float = 0.010
-_ILLUSTRATION_PER_PAGE: float = 0.040   # Imagen 3 per image
+_ILLUSTRATION_PER_PAGE: float = 0.070   # gemini-3-pro-image per image
 _AUDIO_PER_PAGE:        float = 0.100   # ElevenLabs ~500 chars @ $0.0002/char
 
 
@@ -278,7 +279,7 @@ async def list_users(
     _: AdminDep,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
-    """All users with book counts and estimated spend."""
+    """All users with book counts and real spend from generation_events."""
     user_rows = (await db.execute(
         select(
             User.id, User.email, User.username, User.created_at,
@@ -293,23 +294,50 @@ async def list_users(
         .order_by(User.created_at.desc())
     )).all()
 
-    # Per-user, per-model book count → LLM cost
+    # Real costs from generation_events, per user per type
+    event_rows = (await db.execute(
+        select(
+            GenerationEvent.user_id,
+            GenerationEvent.event_type,
+            func.sum(GenerationEvent.cost_usd).label("cost"),
+        )
+        .group_by(GenerationEvent.user_id, GenerationEvent.event_type)
+    )).all()
+
+    user_event_costs: dict[str, dict[str, float]] = {}
+    for r in event_rows:
+        uid = str(r.user_id)
+        if uid not in user_event_costs:
+            user_event_costs[uid] = {}
+        user_event_costs[uid][r.event_type] = float(r.cost or 0)
+
+    # Fallback estimated LLM (for users with no events yet)
     model_rows = (await db.execute(
         select(Book.user_id, Book.model_name, func.count(Book.id).label("n"))
         .group_by(Book.user_id, Book.model_name)
     )).all()
-
-    user_llm: dict[str, float] = {}
+    user_llm_est: dict[str, float] = {}
     for r in model_rows:
         uid = str(r.user_id)
-        user_llm[uid] = user_llm.get(uid, 0.0) + _llm_cost(r.model_name) * r.n
+        user_llm_est[uid] = user_llm_est.get(uid, 0.0) + _llm_cost(r.model_name) * r.n
 
     users = []
     for r in user_rows:
-        uid  = str(r.id)
-        llm  = round(user_llm.get(uid, 0.0), 4)
-        ilus = round(r.illustrated * _ILLUSTRATION_PER_PAGE, 4)
-        aud  = round(r.narrated   * _AUDIO_PER_PAGE,         4)
+        uid   = str(r.id)
+        evts  = user_event_costs.get(uid, {})
+        has_events = bool(evts)
+
+        real_llm   = round(evts.get("llm_text", 0.0), 4)
+        real_ilus  = round(evts.get("image", 0.0), 4)
+        real_aud   = round(evts.get("tts_gemini", 0.0) + evts.get("tts_elevenlabs", 0.0), 4)
+        real_avatar= round(evts.get("avatar", 0.0), 4)
+        real_total = round(sum(evts.values()), 4)
+
+        # Estimated costs (old method) kept for comparison
+        est_llm  = round(user_llm_est.get(uid, 0.0), 4)
+        est_ilus = round(r.illustrated * _ILLUSTRATION_PER_PAGE, 4)
+        est_aud  = round(r.narrated   * _AUDIO_PER_PAGE,         4)
+
         users.append({
             "id":                uid,
             "email":             r.email,
@@ -322,10 +350,12 @@ async def list_users(
             "illustrated_pages": r.illustrated,
             "narrated_pages":    r.narrated,
             "cost": {
-                "llm":           llm,
-                "illustrations": ilus,
-                "audio":         aud,
-                "total":         round(llm + ilus + aud, 4),
+                "llm":           real_llm   if has_events else est_llm,
+                "illustrations": real_ilus  if has_events else est_ilus,
+                "audio":         real_aud   if has_events else est_aud,
+                "avatar":        real_avatar,
+                "total":         real_total if has_events else round(est_llm + est_ilus + est_aud, 4),
+                "from_events":   has_events,
             },
         })
 
@@ -356,19 +386,83 @@ async def get_user(
         .order_by(Book.created_at.desc())
     )).all()
 
-    books      = []
+    # Real costs from generation_events per book, per event type
+    book_event_rows = (await db.execute(
+        select(
+            GenerationEvent.book_id,
+            GenerationEvent.event_type,
+            func.count(GenerationEvent.id).label("calls"),
+            func.sum(GenerationEvent.cost_usd).label("cost"),
+            func.sum(GenerationEvent.input_tokens).label("input_tokens"),
+            func.sum(GenerationEvent.output_tokens).label("output_tokens"),
+            func.sum(GenerationEvent.image_count).label("images"),
+            func.sum(GenerationEvent.char_count).label("chars"),
+        )
+        .where(GenerationEvent.user_id == user_id)
+        .group_by(GenerationEvent.book_id, GenerationEvent.event_type)
+    )).all()
+
+    book_real: dict[str, dict] = {}
+    for r in book_event_rows:
+        bid = str(r.book_id) if r.book_id else "__none__"
+        if bid not in book_real:
+            book_real[bid] = {}
+        book_real[bid][r.event_type] = {
+            "calls": r.calls,
+            "cost":  round(float(r.cost or 0), 4),
+            "input_tokens":  r.input_tokens,
+            "output_tokens": r.output_tokens,
+            "images": r.images,
+            "chars":  r.chars,
+        }
+
+    # User-level event summary (includes avatar, unlinked events)
+    user_event_rows = (await db.execute(
+        select(
+            GenerationEvent.event_type,
+            GenerationEvent.model,
+            func.count(GenerationEvent.id).label("calls"),
+            func.sum(GenerationEvent.cost_usd).label("cost"),
+            func.sum(GenerationEvent.input_tokens).label("input_tokens"),
+            func.sum(GenerationEvent.output_tokens).label("output_tokens"),
+            func.sum(GenerationEvent.image_count).label("images"),
+        )
+        .where(GenerationEvent.user_id == user_id)
+        .group_by(GenerationEvent.event_type, GenerationEvent.model)
+        .order_by(func.sum(GenerationEvent.cost_usd).desc())
+    )).all()
+
+    event_summary = [
+        {
+            "event_type":    r.event_type,
+            "model":         r.model,
+            "calls":         r.calls,
+            "cost":          round(float(r.cost or 0), 4),
+            "input_tokens":  r.input_tokens,
+            "output_tokens": r.output_tokens,
+            "images":        r.images,
+        }
+        for r in user_event_rows
+    ]
+    real_total_cost = round(sum(e["cost"] for e in event_summary), 4)
+    has_events = bool(event_summary)
+
+    books = []
     total_llm  = 0.0
     total_ilus = 0.0
     total_aud  = 0.0
 
     for r in book_rows:
-        cost = _compute_cost(r.model_name, r.illustrated, r.narrated)
-        total_llm  += cost["llm"]
-        total_ilus += cost["illustrations"]
-        total_aud  += cost["audio"]
+        est = _compute_cost(r.model_name, r.illustrated, r.narrated)
+        total_llm  += est["llm"]
+        total_ilus += est["illustrations"]
+        total_aud  += est["audio"]
         prompt = r.raw_prompt
+        bid = str(r.id)
+        real = book_real.get(bid, {})
+        real_book_total = round(sum(v["cost"] for v in real.values()), 4)
         books.append({
-            "id":          str(r.id),
+            "id":          bid,
             "title":       r.title,
             "prompt":      prompt[:60] + ("…" if len(prompt) > 60 else ""),
             "model":       r.model_name,
@@ -379,10 +473,12 @@ async def get_user(
             "created":     r.created_at.isoformat(),
             "illustrated": r.illustrated,
             "narrated":    r.narrated,
-            "cost":        cost,
+            "cost":        est,
+            "real_cost":   real_book_total if real else None,
+            "events":      real,
         })
 
-    grand = round(total_llm + total_ilus + total_aud, 4)
+    grand_est = round(total_llm + total_ilus + total_aud, 4)
 
     return {
         "user": {
@@ -396,6 +492,7 @@ async def get_user(
             "active":    user.is_active,
         },
         "books": books,
+        "event_summary": event_summary,
         "totals": {
             "books":             len(books),
             "illustrated_pages": sum(b["illustrated"] for b in books),
@@ -403,6 +500,130 @@ async def get_user(
             "llm_cost":          round(total_llm,  4),
             "illustration_cost": round(total_ilus, 4),
             "audio_cost":        round(total_aud,  4),
-            "total_cost":        grand,
+            "total_cost":        grand_est,
+            "real_total_cost":   real_total_cost if has_events else None,
         },
     }
+
+
+@router.get("/events")
+async def list_events(
+    _: AdminDep,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Aggregated generation event stats — real spend by type, model, and day."""
+
+    # By event type
+    by_type = (await db.execute(
+        select(
+            GenerationEvent.event_type,
+            func.count(GenerationEvent.id).label("calls"),
+            func.sum(GenerationEvent.cost_usd).label("cost"),
+            func.sum(GenerationEvent.input_tokens).label("input_tokens"),
+            func.sum(GenerationEvent.output_tokens).label("output_tokens"),
+            func.sum(GenerationEvent.image_count).label("images"),
+            func.sum(GenerationEvent.char_count).label("chars"),
+        )
+        .group_by(GenerationEvent.event_type)
+        .order_by(func.sum(GenerationEvent.cost_usd).desc())
+    )).all()
+
+    # By model
+    by_model = (await db.execute(
+        select(
+            GenerationEvent.model,
+            GenerationEvent.event_type,
+            func.count(GenerationEvent.id).label("calls"),
+            func.sum(GenerationEvent.cost_usd).label("cost"),
+        )
+        .group_by(GenerationEvent.model, GenerationEvent.event_type)
+        .order_by(func.sum(GenerationEvent.cost_usd).desc())
+    )).all()
+
+    # Daily spend (last 30 days)
+    daily = (await db.execute(
+        select(
+            cast(GenerationEvent.created_at, Date).label("day"),
+            GenerationEvent.event_type,
+            func.sum(GenerationEvent.cost_usd).label("cost"),
+            func.count(GenerationEvent.id).label("calls"),
+        )
+        .where(GenerationEvent.created_at >= _since(30))
+        .group_by(cast(GenerationEvent.created_at, Date), GenerationEvent.event_type)
+        .order_by(cast(GenerationEvent.created_at, Date).desc())
+    )).all()
+
+    # Top spenders
+    top_users = (await db.execute(
+        select(
+            GenerationEvent.user_id,
+            User.email,
+            func.sum(GenerationEvent.cost_usd).label("total_cost"),
+            func.count(GenerationEvent.id).label("events"),
+        )
+        .join(User, User.id == GenerationEvent.user_id)
+        .group_by(GenerationEvent.user_id, User.email)
+        .order_by(func.sum(GenerationEvent.cost_usd).desc())
+        .limit(20)
+    )).all()
+
+    total_cost = round(sum(float(r.cost or 0) for r in by_type), 4)
+
+    return {
+        "total_cost": total_cost,
+        "by_type": [
+            {
+                "event_type":    r.event_type,
+                "calls":         r.calls,
+                "cost":          round(float(r.cost or 0), 4),
+                "input_tokens":  r.input_tokens,
+                "output_tokens": r.output_tokens,
+                "images":        r.images,
+                "chars":         r.chars,
+            }
+            for r in by_type
+        ],
+        "by_model": [
+            {
+                "model":      r.model,
+                "event_type": r.event_type,
+                "calls":      r.calls,
+                "cost":       round(float(r.cost or 0), 4),
+            }
+            for r in by_model
+        ],
+        "daily": [
+            {
+                "day":        r.day.isoformat(),
+                "event_type": r.event_type,
+                "cost":       round(float(r.cost or 0), 4),
+                "calls":      r.calls,
+            }
+            for r in daily
+        ],
+        "top_users": [
+            {
+                "user_id":    str(r.user_id),
+                "email":      r.email,
+                "total_cost": round(float(r.total_cost or 0), 4),
+                "events":     r.events,
+            }
+            for r in top_users
+        ],
+    }
+
+
+@router.patch("/books/{book_id}/sample", dependencies=[Depends(require_admin)])
+async def toggle_sample_book(
+    book_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Mark or unmark a book as a featured sample (shown on landing page)."""
+    book = await db.get(Book, book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    book.is_sample = not book.is_sample
+    if book.is_sample:
+        book.visibility = "public"
+    await db.commit()
+    return {"book_id": str(book_id), "is_sample": book.is_sample, "visibility": book.visibility}
