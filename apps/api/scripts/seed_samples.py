@@ -101,13 +101,16 @@ async def run() -> None:
     log.info("Connecting to DB: %s", str(settings.DATABASE_URL)[:60])
 
     async with async_session_factory() as db:
-        # Find or create the seed user (use the admin account email)
-        seed_email = os.environ.get("SEED_USER_EMAIL", "aarsh.sharma2803@gmail.com")
-        result = await db.execute(select(User).where(User.email == seed_email))
+        # Pick the seed user: env override → first user in DB
+        seed_email = os.environ.get("SEED_USER_EMAIL")
+        if seed_email:
+            result = await db.execute(select(User).where(User.email == seed_email))
+        else:
+            result = await db.execute(select(User).order_by(User.created_at).limit(1))
         user = result.scalar_one_or_none()
 
         if not user:
-            log.error("No user found with email %s — set SEED_USER_EMAIL env var", seed_email)
+            log.error("No users found in DB — create at least one account first")
             sys.exit(1)
 
         log.info("Seeding as user: %s (%s)", user.username, user.email)
