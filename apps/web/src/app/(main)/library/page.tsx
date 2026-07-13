@@ -82,8 +82,7 @@ function relativeTime(iso: string) {
 // Smart route: where to take the user based on book state
 function continueRoute(book: BookSummaryOut): string {
   if (book.stage === "pending") return "/create";
-  if (book.stage === "complete" && book.illustrated_page_count > 0) return "/editor";
-  return "/outline";
+  return "/editor";
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────

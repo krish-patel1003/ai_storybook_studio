@@ -107,7 +107,9 @@ async function startIllJob(
 
   async function runPage(page: (typeof pages)[number]): Promise<boolean> {
     try {
-      const updated = await api.books.illustratePage(token, bookId, page.id);
+      const updated = page.is_back_cover
+        ? await api.books.illustrateBackCover(token, bookId)
+        : await api.books.illustratePage(token, bookId, page.id);
       bustAuthImageCache(pageImageUrl(bookId, page.id));
       if (_job?.bookId === bookId) {
         _job.pageStatuses[page.id] = "done";
