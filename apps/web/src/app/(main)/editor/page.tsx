@@ -27,7 +27,7 @@ import { useBook } from "@/lib/book-store";
 import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
-import { useAuthImage } from "@/lib/use-auth-image";
+import { useAuthImage, bustAuthImageCache } from "@/lib/use-auth-image";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 
@@ -108,6 +108,7 @@ async function startIllJob(
   async function runPage(page: (typeof pages)[number]): Promise<boolean> {
     try {
       const updated = await api.books.illustratePage(token, bookId, page.id);
+      bustAuthImageCache(pageImageUrl(bookId, page.id));
       if (_job?.bookId === bookId) {
         _job.pageStatuses[page.id] = "done";
         _onPageDone?.(updated);
@@ -527,6 +528,7 @@ export default function EditorPage() {
     startPageTimer(page.id);
     try {
       const updated = await api.books.illustratePage(token, book.id, page.id);
+      bustAuthImageCache(pageImageUrl(book.id, page.id));
       updateBook(updated);
     } catch (e: any) { toast.error(`Page ${page.order} failed: ${e.message ?? "Unknown error"}`); }
     finally { stopPageTimer(page.id); }
