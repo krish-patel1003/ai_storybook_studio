@@ -92,7 +92,7 @@ async def run() -> None:
     # Import here so env vars are loaded first
     from sqlalchemy import select
     from src.config import settings
-    from src.database import engine, async_session_factory
+    from src.database import engine, async_session_maker as async_session_factory
     from src.auth.models import User
     from src.books.models import Book, Page
     from src.books.schemas import CreateBookIn
