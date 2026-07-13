@@ -613,6 +613,22 @@ async def list_events(
     }
 
 
+@router.patch("/users/{user_id}/bypass-limits", dependencies=[Depends(require_admin)])
+async def toggle_bypass_limits(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Grant or revoke unlimited platform access for a user."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.bypass_limits = not user.bypass_limits
+    if user.bypass_limits:
+        user.subscription_tier = "creator"
+    await db.commit()
+    return {"user_id": str(user_id), "email": user.email, "bypass_limits": user.bypass_limits}
+
+
 @router.patch("/books/{book_id}/sample", dependencies=[Depends(require_admin)])
 async def toggle_sample_book(
     book_id: UUID,
