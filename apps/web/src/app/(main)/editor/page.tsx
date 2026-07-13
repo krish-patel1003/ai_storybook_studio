@@ -265,9 +265,9 @@ function PagePreviewModal({ page, blobUrl, onClose }: { page: PageOut; blobUrl: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="relative w-full max-w-sm rounded-2xl overflow-hidden chunky-border chunky-shadow bg-muted" style={{ aspectRatio: "148/210" }} onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-full max-w-sm rounded-2xl overflow-hidden chunky-border chunky-shadow" style={{ aspectRatio: "148/210" }} onClick={(e) => e.stopPropagation()}>
         {blobUrl ? (
-          <img src={blobUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-contain" />
+          <img src={blobUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-muted">
             <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
@@ -354,7 +354,7 @@ function PageCard({
                   <><ImageIcon className="h-10 w-10 opacity-30" strokeWidth={1.5} /><span className="text-xs font-bold opacity-50">{status === "error" ? "Failed" : "Not illustrated"}</span></>
                 ) : null}
               </div>
-              {blobUrl && <img src={blobUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-contain transition-opacity duration-500" />}
+              {blobUrl && <img src={blobUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500" />}
             </>
           )}
 
