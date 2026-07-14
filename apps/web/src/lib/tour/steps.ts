@@ -52,14 +52,23 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "4. Art style",
         description:
-          "Pick how your illustrations look — watercolor, crayon, flat, or papercut. You can scroll for more and change page count below.",
+          "Pick how your illustrations look — watercolor, crayon, flat, or papercut. Scroll for more options.",
+        side: "left",
+      },
+    },
+    {
+      element: '[data-tour="create-pagecount"]',
+      popover: {
+        title: "5. Page count",
+        description:
+          "Choose how long the book is — pick a preset or enter a custom number. Shorter books are quicker to generate; longer ones tell a fuller story.",
         side: "left",
       },
     },
     {
       element: '[data-tour="create-enhance"]',
       popover: {
-        title: "5. Generate your story",
+        title: "6. Generate your story",
         description:
           "When you're happy, click here. We'll expand your idea into a title, characters, and a page-by-page outline you can review before illustrating.",
         side: "top",

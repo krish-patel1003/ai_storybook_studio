@@ -293,7 +293,7 @@ function OptionsPanel({
       </div>
 
       {/* Page count */}
-      <div>
+      <div data-tour="create-pagecount">
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Page count</p>
         <div className="flex flex-wrap gap-1.5">
           {PAGE_COUNT_OPTIONS.map((n) => (
