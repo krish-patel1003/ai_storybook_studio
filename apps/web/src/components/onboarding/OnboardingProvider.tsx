@@ -60,7 +60,16 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     // the tour highlights real elements instead of showing centered boxes.
     const firstAnchor = steps.find((s) => s.element)?.element as string | undefined;
 
+    // While waiting for the input page, show a hint on the profile picker so
+    // the tour is never silent when it lands on "Who's creating today?".
+    let hint: Driver | null = null;
+    const clearHint = () => {
+      hint?.destroy();
+      hint = null;
+    };
+
     const launch = () => {
+      clearHint();
       driverRef.current?.destroy();
       const d = driver({
         showProgress: true,
@@ -80,13 +89,32 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     };
 
     let attempts = 0;
-    const MAX_ATTEMPTS = 80; // ~40s at 500ms
+    const MAX_ATTEMPTS = 120; // ~60s at 500ms
     const waitThenLaunch = () => {
       if (firstAnchor && !document.querySelector(firstAnchor)) {
+        // Guide the user through the profile picker while we wait for the form.
+        if (!hint && document.querySelector('[data-tour="create-profile"]')) {
+          hint = driver({
+            allowClose: true,
+            steps: [
+              {
+                element: '[data-tour="create-profile"]',
+                popover: {
+                  title: "Pick who's creating",
+                  description:
+                    "Choose a profile (or “Just me”) to start your story — the tour continues on the next screen.",
+                },
+              },
+            ],
+          });
+          hint.drive();
+        }
         if (attempts++ < MAX_ATTEMPTS) {
           setTimeout(waitThenLaunch, 500);
+        } else {
+          clearHint();
         }
-        return; // give up quietly if it never appears
+        return;
       }
       launch();
     };
@@ -137,7 +165,12 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     <OnboardingContext.Provider value={{ openWelcome, startTour, openChecklist }}>
       {children}
       {welcomeOpen && <WelcomeModal onStart={handleStart} onSkip={handleSkip} />}
-      {checklistOpen && <GettingStartedChecklist onClose={() => setChecklistOpen(false)} onReplayTour={startTour} />}
+      {checklistOpen && (
+        <GettingStartedChecklist
+          onClose={() => setChecklistOpen(false)}
+          onReplayTour={() => { setChecklistOpen(false); startTour(); }}
+        />
+      )}
     </OnboardingContext.Provider>
   );
 }

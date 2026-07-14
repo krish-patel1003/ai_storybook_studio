@@ -1014,7 +1014,7 @@ export default function CreatePage() {
                     className="flex flex-col items-center justify-center min-h-full px-6 py-16">
                     <h1 className="font-display text-4xl font-black md:text-5xl text-center">Who&apos;s creating today?</h1>
                     <p className="mt-3 text-muted-foreground text-center">Pick a profile — we&apos;ll personalise the story for them.</p>
-                    <div className="mt-10 flex flex-wrap justify-center gap-6 max-w-2xl">
+                    <div className="mt-10 flex flex-wrap justify-center gap-6 max-w-2xl" data-tour="create-profile">
                       {/* Parent card — always shown */}
                       <button
                         onClick={() => { setSelectedProfileId(null); setFlowState("input"); }}
