@@ -1068,7 +1068,7 @@ export default function CreatePage() {
                     <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
                     <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
 
-                    <div className="relative mt-6">
+                    <div className="relative mt-6" data-tour="create-prompt">
                       <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
                         placeholder="A brave little fox who learns to share…"
                         className="w-full resize-none rounded-2xl bg-card p-5 pb-10 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30" />
@@ -1119,7 +1119,7 @@ export default function CreatePage() {
                       </AnimatePresence>
                     </div>
 
-                    <div className="mt-6">
+                    <div className="mt-6" data-tour="create-enhance">
                       <button onClick={handleExpandPrompt} disabled={prompt.trim().length < 3}
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
                         <Wand2 className="h-5 w-5" strokeWidth={2.5} /> Enhance my story →
@@ -1442,7 +1442,7 @@ export default function CreatePage() {
                   style={style}
                 />
               ) : flowState === "input" ? (
-                <OptionsPanel {...optionsProps} />
+                <div data-tour="create-options"><OptionsPanel {...optionsProps} /></div>
               ) : (
                 <LockedSettingsSummary
                   age={age} tone={tone} style={style} pageCount={pageCount}

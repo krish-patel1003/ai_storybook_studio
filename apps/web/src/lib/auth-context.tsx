@@ -64,6 +64,7 @@ interface AuthContextValue {
   googleLogin: (accessToken: string) => Promise<void>;
   logout: () => void;
   updateUser: (data: { username?: string; author_name?: string }) => Promise<void>;
+  completeOnboarding: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -183,6 +184,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(USER_KEY, JSON.stringify(updated));
   }, [token]);
 
+  // Mark the onboarding tutorial as completed for this account.
+  // Optimistic: flip local state immediately so the tour never re-triggers,
+  // then persist. In mock mode there's no backend, so just update locally.
+  const completeOnboarding = useCallback(async () => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, onboarding_completed: true };
+      localStorage.setItem(USER_KEY, JSON.stringify(next));
+      return next;
+    });
+    if (token && !isMock) {
+      try { await api.auth.updateMe(token, { onboarding_completed: true }); } catch { /* non-fatal */ }
+    }
+  }, [token, isMock]);
+
   const logout = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     const refreshToken = localStorage.getItem(REFRESH_KEY);
@@ -198,7 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isMock]);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, isMock, login, register, googleLogin, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, token, isLoading, isMock, login, register, googleLogin, logout, updateUser, completeOnboarding }}>
       {children}
     </AuthContext.Provider>
   );

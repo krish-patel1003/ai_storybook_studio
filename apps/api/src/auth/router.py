@@ -118,6 +118,7 @@ async def me(user: Annotated[User, Depends(current_user)]) -> UserResponse:
         username=user.username,
         author_name=user.author_name,
         avatar_url=user.avatar_url,
+        onboarding_completed=user.onboarding_completed,
     )
 
 
@@ -135,6 +136,8 @@ async def update_me(
         user.username = data.username
     if data.author_name is not None:
         user.author_name = data.author_name
+    if data.onboarding_completed is not None:
+        user.onboarding_completed = data.onboarding_completed
     await db.commit()
     return UserResponse(
         id=user.id,
@@ -142,4 +145,5 @@ async def update_me(
         username=user.username,
         author_name=user.author_name,
         avatar_url=user.avatar_url,
+        onboarding_completed=user.onboarding_completed,
     )

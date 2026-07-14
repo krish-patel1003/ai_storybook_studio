@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby } from "lucide-react";
+import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby, HelpCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useOnboarding } from "@/components/onboarding/OnboardingProvider";
 import { useState, useRef, useEffect } from "react";
 
 // Full nav for signed-in users.
@@ -27,6 +28,7 @@ export function BookHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, isLoading } = useAuth();
+  const onboarding = useOnboarding();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -87,6 +89,16 @@ export function BookHeader() {
             <div className="h-9 w-24 animate-pulse rounded-full bg-muted" />
           ) : user ? (
             <>
+              {onboarding && (
+                <button
+                  onClick={onboarding.openChecklist}
+                  aria-label="Help & tour"
+                  title="Help & tour"
+                  className="grid h-9 w-9 place-items-center rounded-full bg-card chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"
+                >
+                  <HelpCircle className="h-5 w-5" strokeWidth={2.5} />
+                </button>
+              )}
               <Link
                 href="/create"
                 className="hidden items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 md:inline-flex"

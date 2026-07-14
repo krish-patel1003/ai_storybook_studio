@@ -693,7 +693,7 @@ export default function EditorPage() {
       )}
 
       {/* Illustrate CTA */}
-      <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card p-4 chunky-border">
+      <div data-tour="editor-illustrate" className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card p-4 chunky-border">
         <div className="flex-1 min-w-0">
           {job?.sheetsGenerating ? (
             <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Generating character sheets for consistency…</p></div>
@@ -724,7 +724,7 @@ export default function EditorPage() {
 
       {/* Narration */}
       {allPages.some((p) => p.text) && (
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
+        <div data-tour="editor-narrate" className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 chunky-border"><Volume2 className="h-4 w-4 text-primary" strokeWidth={2.5} /></div>
             <div>

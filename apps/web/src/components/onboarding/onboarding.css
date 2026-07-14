@@ -1,0 +1,46 @@
+/* Theme driver.js popovers to match the app's chunky style. */
+.driver-popover.storybook-tour,
+.driver-popover {
+  background: var(--card, #fff);
+  color: var(--foreground);
+  border: 2.5px solid var(--foreground);
+  border-radius: 1rem;
+  box-shadow: 6px 6px 0 0 var(--foreground);
+  font-family: inherit;
+}
+
+.driver-popover .driver-popover-title {
+  font-weight: 900;
+  font-size: 1.05rem;
+}
+
+.driver-popover .driver-popover-description {
+  color: var(--muted-foreground, #555);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.driver-popover .driver-popover-progress-text {
+  color: var(--muted-foreground, #777);
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.driver-popover .driver-popover-navigation-btns button {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 2px solid var(--foreground);
+  border-radius: 999px;
+  font-weight: 800;
+  padding: 4px 14px;
+  text-shadow: none;
+}
+
+.driver-popover .driver-popover-navigation-btns button.driver-popover-prev-btn {
+  background: var(--background, #f5f5f5);
+  color: var(--foreground);
+}
+
+.driver-popover .driver-popover-close-btn {
+  color: var(--foreground);
+}

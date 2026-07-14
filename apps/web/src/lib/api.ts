@@ -8,6 +8,7 @@ export interface User {
   username: string;
   author_name?: string | null;
   avatar_url?: string;
+  onboarding_completed?: boolean;
 }
 
 export interface AuthTokens {
@@ -397,7 +398,7 @@ export const api = {
         body: JSON.stringify({ username, email, password }),
       }),
 
-    updateMe: (token: string, data: { username?: string; author_name?: string }) =>
+    updateMe: (token: string, data: { username?: string; author_name?: string; onboarding_completed?: boolean }) =>
       request<User>("/auth/me", {
         method: "PATCH",
         headers: authed(token),

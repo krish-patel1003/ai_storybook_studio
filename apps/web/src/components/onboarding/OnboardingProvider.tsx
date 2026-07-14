@@ -1,0 +1,125 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { driver, type Driver } from "driver.js";
+import "driver.js/dist/driver.css";
+import "./onboarding.css";
+import { useAuth } from "@/lib/auth-context";
+import { TOUR_STEPS } from "@/lib/tour/steps";
+import { WelcomeModal } from "./WelcomeModal";
+import { GettingStartedChecklist } from "./GettingStartedChecklist";
+
+// A tour "session" flag lives in sessionStorage so the chained tour keeps
+// running as the user navigates from /create → /editor → /reader.
+const TOUR_ACTIVE_KEY = "sb_tour_active";
+const TOURED_ROUTES_KEY = "sb_toured_routes";
+
+interface OnboardingContextValue {
+  /** Open the welcome modal (e.g. from the navbar "?" button). */
+  openWelcome: () => void;
+  /** Start the guided tour session on the current page. */
+  startTour: () => void;
+  /** Show the Getting-Started checklist. */
+  openChecklist: () => void;
+}
+
+const OnboardingContext = createContext<OnboardingContextValue | null>(null);
+
+function getTouredRoutes(): Set<string> {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(TOURED_ROUTES_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+export function OnboardingProvider({ children }: { children: React.ReactNode }) {
+  const { user, isLoading, completeOnboarding } = useAuth();
+  const pathname = usePathname();
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const driverRef = useRef<Driver | null>(null);
+
+  // Show the welcome modal once, on first authenticated visit.
+  useEffect(() => {
+    if (isLoading || !user) return;
+    if (user.onboarding_completed) return;
+    // Don't interrupt the auth pages themselves.
+    if (pathname.startsWith("/auth")) return;
+    setWelcomeOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, user?.id, user?.onboarding_completed]);
+
+  const runTourForRoute = useCallback((route: string) => {
+    const steps = TOUR_STEPS[route];
+    if (!steps || steps.length === 0) return;
+    driverRef.current?.destroy();
+    const d = driver({
+      showProgress: true,
+      allowClose: true,
+      nextBtnText: "Next",
+      prevBtnText: "Back",
+      doneBtnText: "Got it",
+      steps,
+      onDestroyed: () => {
+        // Mark this route as toured for the session so it doesn't repeat.
+        const toured = getTouredRoutes();
+        toured.add(route);
+        sessionStorage.setItem(TOURED_ROUTES_KEY, JSON.stringify([...toured]));
+      },
+    });
+    driverRef.current = d;
+    d.drive();
+  }, []);
+
+  const startTour = useCallback(() => {
+    sessionStorage.setItem(TOUR_ACTIVE_KEY, "1");
+    sessionStorage.setItem(TOURED_ROUTES_KEY, "[]");
+    // Small delay so any just-opened page has painted its anchors.
+    setTimeout(() => runTourForRoute(pathname), 150);
+  }, [pathname, runTourForRoute]);
+
+  // Chained tour: while a session is active, auto-run each page's steps the
+  // first time the user lands there.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (sessionStorage.getItem(TOUR_ACTIVE_KEY) !== "1") return;
+    if (!TOUR_STEPS[pathname]) return;
+    if (getTouredRoutes().has(pathname)) return;
+    const t = setTimeout(() => runTourForRoute(pathname), 400);
+    return () => clearTimeout(t);
+  }, [pathname, runTourForRoute]);
+
+  useEffect(() => () => driverRef.current?.destroy(), []);
+
+  const openWelcome = useCallback(() => setWelcomeOpen(true), []);
+  const openChecklist = useCallback(() => setChecklistOpen(true), []);
+
+  const handleStart = useCallback(() => {
+    setWelcomeOpen(false);
+    completeOnboarding();
+    setChecklistOpen(true);
+    startTour();
+  }, [completeOnboarding, startTour]);
+
+  const handleSkip = useCallback(() => {
+    setWelcomeOpen(false);
+    sessionStorage.removeItem(TOUR_ACTIVE_KEY);
+    completeOnboarding();
+  }, [completeOnboarding]);
+
+  return (
+    <OnboardingContext.Provider value={{ openWelcome, startTour, openChecklist }}>
+      {children}
+      {welcomeOpen && <WelcomeModal onStart={handleStart} onSkip={handleSkip} />}
+      {checklistOpen && <GettingStartedChecklist onClose={() => setChecklistOpen(false)} onReplayTour={startTour} />}
+    </OnboardingContext.Provider>
+  );
+}
+
+/** Returns the onboarding controls, or null when rendered outside the provider
+ *  (e.g. the public layout). Callers should null-check. */
+export function useOnboarding(): OnboardingContextValue | null {
+  return useContext(OnboardingContext);
+}
