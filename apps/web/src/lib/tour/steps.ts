@@ -12,34 +12,57 @@ import type { DriveStep } from "driver.js";
 export const TOUR_STEPS: Record<string, DriveStep[]> = {
   "/create": [
     {
-      popover: {
-        title: "Let's make your first book ✦",
-        description:
-          "I'll walk you through it. You describe an idea, we turn it into a story, then illustrate and narrate it. Click Next.",
-      },
-    },
-    {
       element: '[data-tour="create-prompt"]',
       popover: {
         title: "1. Describe your story",
         description:
-          "Type any idea — a character, a lesson, a silly scene. A sentence or two is plenty. Stuck? Use Brainstorm for ideas.",
+          "Type any idea here — a character, a lesson, or a silly scene. One sentence is plenty; we'll build out the rest.",
+        side: "bottom",
       },
     },
     {
-      element: '[data-tour="create-options"]',
+      element: '[data-tour="create-brainstorm"]',
       popover: {
-        title: "2. Set the details",
+        title: "Need ideas?",
         description:
-          "Pick the reading age, a few themes, an art style, and how many pages. The safety toggle keeps content kid-friendly.",
+          "Not sure what to write? Click Brainstorm and we'll suggest a few story hooks you can drop straight into the box.",
+        side: "bottom",
+      },
+    },
+    {
+      element: '[data-tour="create-reading-level"]',
+      popover: {
+        title: "2. Reading level",
+        description:
+          "Choose the age group — it tunes the vocabulary, sentence length, and story complexity for your reader.",
+        side: "left",
+      },
+    },
+    {
+      element: '[data-tour="create-themes"]',
+      popover: {
+        title: "3. Themes & tone",
+        description:
+          "Tap any themes that fit — funny, cozy, adventurous, and more. Add your own with the Custom field. Optional, but it shapes the mood.",
+        side: "left",
+      },
+    },
+    {
+      element: '[data-tour="create-artstyle"]',
+      popover: {
+        title: "4. Art style",
+        description:
+          "Pick how your illustrations look — watercolor, crayon, flat, or papercut. You can scroll for more and change page count below.",
+        side: "left",
       },
     },
     {
       element: '[data-tour="create-enhance"]',
       popover: {
-        title: "3. Generate the story",
+        title: "5. Generate your story",
         description:
-          "This writes a title, characters, and a page-by-page outline you can review and tweak before illustrating.",
+          "When you're happy, click here. We'll expand your idea into a title, characters, and a page-by-page outline you can review before illustrating.",
+        side: "top",
       },
     },
   ],

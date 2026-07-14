@@ -231,7 +231,7 @@ function OptionsPanel({
       )}
 
       {/* Age range */}
-      <div>
+      <div data-tour="create-reading-level">
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Reading level</p>
         <div className="grid grid-cols-3 gap-2">
           {["3-5", "6-8", "9-11"].map((a) => (
@@ -241,7 +241,7 @@ function OptionsPanel({
       </div>
 
       {/* Themes */}
-      <div>
+      <div data-tour="create-themes">
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes &amp; Tone</p>
         <div className="flex flex-wrap gap-1.5">
           {[...TONES_PRESET, ...customTones].map((t) => {
@@ -273,7 +273,7 @@ function OptionsPanel({
       </div>
 
       {/* Art style */}
-      <div>
+      <div data-tour="create-artstyle">
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Art style</p>
         <div className="grid grid-cols-2 gap-2">
           {STYLES.map((s) => {
@@ -1081,7 +1081,7 @@ export default function CreatePage() {
                     </div>
 
                     {/* ── Brainstorm panel ────────────────────────────── */}
-                    <div className="mt-5">
+                    <div className="mt-5" data-tour="create-brainstorm">
                       <button
                         onClick={() => brainstormSeeds.length > 0 ? setBrainstormOpen((o) => !o) : handleBrainstorm()}
                         disabled={brainstormLoading}

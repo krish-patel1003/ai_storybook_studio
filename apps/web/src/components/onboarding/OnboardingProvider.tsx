@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { driver, type Driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import "./onboarding.css";
@@ -37,6 +37,7 @@ function getTouredRoutes(): Set<string> {
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading, completeOnboarding } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
   const driverRef = useRef<Driver | null>(null);
@@ -54,31 +55,54 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const runTourForRoute = useCallback((route: string) => {
     const steps = TOUR_STEPS[route];
     if (!steps || steps.length === 0) return;
-    driverRef.current?.destroy();
-    const d = driver({
-      showProgress: true,
-      allowClose: true,
-      nextBtnText: "Next",
-      prevBtnText: "Back",
-      doneBtnText: "Got it",
-      steps,
-      onDestroyed: () => {
-        // Mark this route as toured for the session so it doesn't repeat.
-        const toured = getTouredRoutes();
-        toured.add(route);
-        sessionStorage.setItem(TOURED_ROUTES_KEY, JSON.stringify([...toured]));
-      },
-    });
-    driverRef.current = d;
-    d.drive();
+    // The first anchored step's target may not exist yet (e.g. the create page
+    // shows a profile picker before the prompt/settings render). Wait for it so
+    // the tour highlights real elements instead of showing centered boxes.
+    const firstAnchor = steps.find((s) => s.element)?.element as string | undefined;
+
+    const launch = () => {
+      driverRef.current?.destroy();
+      const d = driver({
+        showProgress: true,
+        allowClose: true,
+        nextBtnText: "Next",
+        prevBtnText: "Back",
+        doneBtnText: "Got it",
+        steps,
+        onDestroyed: () => {
+          const toured = getTouredRoutes();
+          toured.add(route);
+          sessionStorage.setItem(TOURED_ROUTES_KEY, JSON.stringify([...toured]));
+        },
+      });
+      driverRef.current = d;
+      d.drive();
+    };
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 80; // ~40s at 500ms
+    const waitThenLaunch = () => {
+      if (firstAnchor && !document.querySelector(firstAnchor)) {
+        if (attempts++ < MAX_ATTEMPTS) {
+          setTimeout(waitThenLaunch, 500);
+        }
+        return; // give up quietly if it never appears
+      }
+      launch();
+    };
+    waitThenLaunch();
   }, []);
 
   const startTour = useCallback(() => {
     sessionStorage.setItem(TOUR_ACTIVE_KEY, "1");
     sessionStorage.setItem(TOURED_ROUTES_KEY, "[]");
-    // Small delay so any just-opened page has painted its anchors.
-    setTimeout(() => runTourForRoute(pathname), 150);
-  }, [pathname, runTourForRoute]);
+    if (pathname === "/create") {
+      setTimeout(() => runTourForRoute("/create"), 150);
+    } else {
+      // Send the user to where the tour begins; the auto-run effect picks it up.
+      router.push("/create");
+    }
+  }, [pathname, runTourForRoute, router]);
 
   // Chained tour: while a session is active, auto-run each page's steps the
   // first time the user lands there.
