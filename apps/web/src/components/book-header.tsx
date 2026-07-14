@@ -91,7 +91,7 @@ export function BookHeader() {
             <>
               {onboarding && (
                 <button
-                  onClick={onboarding.openChecklist}
+                  onClick={onboarding.openWelcome}
                   aria-label="Help & tour"
                   title="Help & tour"
                   className="grid h-9 w-9 place-items-center rounded-full bg-card chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"

@@ -8,7 +8,6 @@ import "./onboarding.css";
 import { useAuth } from "@/lib/auth-context";
 import { TOUR_STEPS } from "@/lib/tour/steps";
 import { WelcomeModal } from "./WelcomeModal";
-import { GettingStartedChecklist } from "./GettingStartedChecklist";
 
 // A tour "session" flag lives in sessionStorage so the chained tour keeps
 // running as the user navigates from /create → /editor → /reader.
@@ -20,8 +19,6 @@ interface OnboardingContextValue {
   openWelcome: () => void;
   /** Start the guided tour session on the current page. */
   startTour: () => void;
-  /** Show the Getting-Started checklist. */
-  openChecklist: () => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
@@ -39,7 +36,6 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const pathname = usePathname();
   const router = useRouter();
   const [welcomeOpen, setWelcomeOpen] = useState(false);
-  const [checklistOpen, setChecklistOpen] = useState(false);
   const driverRef = useRef<Driver | null>(null);
 
   // Show the welcome modal once, on first authenticated visit.
@@ -146,12 +142,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => () => driverRef.current?.destroy(), []);
 
   const openWelcome = useCallback(() => setWelcomeOpen(true), []);
-  const openChecklist = useCallback(() => setChecklistOpen(true), []);
 
   const handleStart = useCallback(() => {
     setWelcomeOpen(false);
     completeOnboarding();
-    setChecklistOpen(true);
     startTour();
   }, [completeOnboarding, startTour]);
 
@@ -162,15 +156,9 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   }, [completeOnboarding]);
 
   return (
-    <OnboardingContext.Provider value={{ openWelcome, startTour, openChecklist }}>
+    <OnboardingContext.Provider value={{ openWelcome, startTour }}>
       {children}
       {welcomeOpen && <WelcomeModal onStart={handleStart} onSkip={handleSkip} />}
-      {checklistOpen && (
-        <GettingStartedChecklist
-          onClose={() => setChecklistOpen(false)}
-          onReplayTour={() => { setChecklistOpen(false); startTour(); }}
-        />
-      )}
     </OnboardingContext.Provider>
   );
 }
