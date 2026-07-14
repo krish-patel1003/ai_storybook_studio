@@ -51,12 +51,20 @@ const BookPage = forwardRef<
       {/* Illustration — top 68% */}
       <div className="absolute inset-x-0 top-0 overflow-hidden bg-muted" style={{ height: "68%" }}>
         {page.has_image ? (
-          <img
-            src={publicPageImageUrl(bookId, page.id)}
-            alt={page.is_cover ? "Cover" : `Page ${page.order}`}
-            className="h-full w-full object-cover"
-            draggable={false}
-          />
+          page.is_cover ? (
+            <>
+              {/* Blurred, zoomed copy fills behind the full uncropped cover */}
+              <img src={publicPageImageUrl(bookId, page.id)} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover scale-110 blur-2xl" draggable={false} />
+              <img src={publicPageImageUrl(bookId, page.id)} alt="Cover" className="absolute inset-0 h-full w-full object-contain" draggable={false} />
+            </>
+          ) : (
+            <img
+              src={publicPageImageUrl(bookId, page.id)}
+              alt={`Page ${page.order}`}
+              className="h-full w-full object-cover"
+              draggable={false}
+            />
+          )
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">
             <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
