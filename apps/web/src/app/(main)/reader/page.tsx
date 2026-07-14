@@ -87,23 +87,12 @@ const CoverPage = forwardRef<
         <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
       </div>
       {imgUrl && (
-        <>
-          {/* Blurred, zoomed copy fills the page behind the full image */}
-          <img
-            src={imgUrl}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover scale-110 blur-2xl"
-            draggable={false}
-          />
-          {/* Full uncropped cover art on top */}
-          <img
-            src={imgUrl}
-            alt="Cover"
-            className="absolute inset-0 h-full w-full object-contain transition-opacity duration-500"
-            draggable={false}
-          />
-        </>
+        <img
+          src={imgUrl}
+          alt="Cover"
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
+          draggable={false}
+        />
       )}
 
       {/* Bottom gradient overlay */}
@@ -409,23 +398,12 @@ const BackCoverPage = forwardRef<
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#1a1a2e" }}>
       {imgUrl && (
-        <>
-          {/* Blurred, zoomed copy fills the page behind the full image */}
-          <img
-            src={imgUrl}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover scale-110 blur-2xl"
-            draggable={false}
-          />
-          {/* Full uncropped back-cover art on top */}
-          <img
-            src={imgUrl}
-            alt="Back cover"
-            className="absolute inset-0 h-full w-full object-contain"
-            draggable={false}
-          />
-        </>
+        <img
+          src={imgUrl}
+          alt="Back cover"
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
       )}
       {/* Dark overlay so text is legible over any illustration */}
       <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(10,10,20,0.88) 0%, rgba(10,10,20,0.45) 50%, transparent 100%)" }} />
