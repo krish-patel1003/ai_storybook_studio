@@ -59,14 +59,9 @@ function SampleBooksSection() {
   return (
     <section id="samples" className="scroll-mt-20 bg-card border-t-[2.5px] border-foreground">
       <div className="mx-auto max-w-7xl px-4 py-20">
-        <div className="flex items-end justify-between mb-10">
-          <div>
-            <h2 className="font-display text-4xl font-black md:text-5xl">Stories made with our studio</h2>
-            <p className="mt-2 text-muted-foreground">Click to read one — it takes 30 seconds.</p>
-          </div>
-          <Link href="/library" className="hidden text-sm font-extrabold underline-offset-4 hover:underline md:inline">
-            Browse more →
-          </Link>
+        <div className="mb-10">
+          <h2 className="font-display text-4xl font-black md:text-5xl">Stories made with our studio</h2>
+          <p className="mt-2 text-muted-foreground">Click to read one — it takes 30 seconds.</p>
         </div>
 
         {loading ? (

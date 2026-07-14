@@ -182,16 +182,10 @@ export default function PublicReaderPage() {
   function goPrev() { bookRef.current?.pageFlip().flipPrev(); }
 
   return (
-    <main className="flex h-screen flex-col bg-background overflow-hidden">
-      {/* Title bar */}
-      <div className="flex shrink-0 items-center justify-between border-b-[2px] border-foreground/20 px-5 py-2.5">
+    <main className="flex h-[calc(100vh-4rem)] flex-col bg-background overflow-hidden">
+      {/* Book title strip */}
+      <div className="flex shrink-0 items-center justify-center border-b-[2px] border-foreground/20 px-5 py-2">
         <span className="font-display text-base font-black md:text-lg">{title}</span>
-        <Link
-          href="/"
-          className="text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
-        >
-          View on AI Storybook Studio →
-        </Link>
       </div>
 
       {/* Flip book */}
