@@ -202,148 +202,6 @@ const BRIEF_MSGS = [
   "Adding just the right amount of heart…",
 ];
 
-// ── One-click overlay ─────────────────────────────────────────────────────────
-
-const ONE_CLICK_HINTS: Record<string, string[]> = {
-  writing: [
-    "Crafting your story arc…",
-    "Picking the perfect words…",
-    "Weaving in the plot twists…",
-    "Giving each page its own moment…",
-    "Making sure the ending earns it…",
-    "Adding a surprise nobody saw coming…",
-    "Checking every sentence sounds right…",
-    "Setting the scene just so…",
-  ],
-  characters: [
-    "Sketching character traits…",
-    "Deciding who's the hero…",
-    "Giving everyone a backstory…",
-    "Making the sidekick lovable…",
-    "Figuring out who causes the trouble…",
-    "Giving each character a distinct voice…",
-    "Deciding what the protagonist wants most…",
-  ],
-  illustrating: [
-    "Painting the scenes…",
-    "Adding colour and detail…",
-    "Bringing characters to life…",
-    "Mixing the right colours…",
-    "Painting the background first…",
-    "Getting the lighting just right…",
-    "Drawing tiny details only kids will find…",
-    "Adding texture and depth…",
-    "One last brush stroke…",
-  ],
-  narrating: [
-    "Finding the perfect voice…",
-    "Adding emotion to each line…",
-    "Breathing life into the words…",
-    "Making sure the pauses land right…",
-    "Reading it like bedtime…",
-  ],
-};
-
-// ── Animated loading character ────────────────────────────────────────────────
-
-
-type OneClickStage = "writing" | "characters" | "illustrating" | "narrating" | "done";
-
-const ONE_CLICK_STAGES: { id: OneClickStage; icon: React.ReactNode; label: string }[] = [
-  { id: "writing",      icon: <Sparkles className="h-4 w-4" />,  label: "Writing"      },
-  { id: "characters",   icon: <Users className="h-4 w-4" />,     label: "Characters"   },
-  { id: "illustrating", icon: <ImageIcon className="h-4 w-4" />, label: "Illustrating" },
-  { id: "narrating",    icon: <Mic className="h-4 w-4" />,       label: "Narrating"    },
-];
-
-function OneClickOverlay({ stage, progress, book, onView }: {
-  stage: OneClickStage;
-  progress: { done: number; total: number };
-  book: BookOut | null;
-  onView: () => void;
-}) {
-  const [hintIdx, setHintIdx] = useState(0);
-  const timer = useElapsedTimer(stage !== "done");
-  useEffect(() => { setHintIdx(0); }, [stage]);
-  useEffect(() => {
-    if (stage === "done") return;
-    const t = setInterval(() => setHintIdx((h) => h + 1), 3000);
-    return () => clearInterval(t);
-  }, [stage]);
-
-  const stageIdx = ONE_CLICK_STAGES.findIndex((s) => s.id === stage);
-  const isDone = stage === "done";
-  const overallPct = isDone ? 100
-    : stageIdx === 0 ? 10 : stageIdx === 1 ? 25
-    : stageIdx === 2 ? 40 + (progress.total > 0 ? (progress.done / progress.total) * 30 : 0)
-    : 70 + (progress.total > 0 ? (progress.done / progress.total) * 27 : 0);
-  const stageLabel =
-    stage === "writing" ? "Writing your story…"
-    : stage === "characters" ? "Designing character sheets…"
-    : stage === "illustrating" ? `Illustrating pages…${progress.total > 0 ? ` (${progress.done}/${progress.total})` : ""}`
-    : stage === "narrating" ? `Adding narration…${progress.total > 0 ? ` (${progress.done}/${progress.total})` : ""}`
-    : "Your book is ready!";
-  const hints = ONE_CLICK_HINTS[stage] ?? [];
-  const hint = hints[hintIdx % hints.length];
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur px-6">
-      <AnimatePresence mode="wait">
-        {isDone ? (
-          <motion.div key="done" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6 text-center">
-            <div className="grid h-28 w-28 place-items-center rounded-3xl bg-primary chunky-border chunky-shadow">
-              <BookOpen className="h-12 w-12 text-primary-foreground" strokeWidth={1.5} />
-            </div>
-            <div>
-              <h2 className="font-display text-4xl font-black">Your book is ready!</h2>
-              {book && <p className="mt-2 text-lg font-bold text-muted-foreground">{book.brief?.title ?? book.title}</p>}
-              <p className="mt-1 text-sm text-muted-foreground">Completed in {timer} ✦</p>
-            </div>
-            <button onClick={onView} className="inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3.5 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-              <BookOpen className="h-5 w-5" strokeWidth={2.5} /> Read your book
-            </button>
-          </motion.div>
-        ) : (
-          <motion.div key="progress" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
-            <LgSpinner />
-            <div>
-              <h2 className="font-display text-3xl font-black">Making your book…</h2>
-              <AnimatePresence mode="wait">
-                <motion.p key={stageLabel} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="mt-1 text-sm font-extrabold text-foreground/80">{stageLabel}</motion.p>
-              </AnimatePresence>
-              <AnimatePresence mode="wait">
-                <motion.p key={hint} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-1 text-xs text-muted-foreground">{hint}</motion.p>
-              </AnimatePresence>
-            </div>
-            <div className="w-full">
-              <div className="mb-1.5 flex justify-between text-xs font-bold text-muted-foreground">
-                <span>{Math.round(overallPct)}% complete</span>
-                <span className="font-mono tabular-nums">{timer}</span>
-              </div>
-              <div className="h-3 overflow-hidden rounded-full bg-muted chunky-border">
-                <motion.div className="h-full rounded-full bg-primary" animate={{ width: `${overallPct}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {ONE_CLICK_STAGES.map((s, i) => {
-                const done = i < stageIdx; const active = i === stageIdx;
-                return (
-                  <div key={s.id} className="flex flex-col items-center gap-1.5">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-full chunky-border transition-all ${done ? "bg-primary text-primary-foreground" : active ? "bg-primary text-primary-foreground scale-110 chunky-shadow" : "bg-muted text-muted-foreground"}`}>
-                      {done ? <Check className="h-4 w-4" strokeWidth={3} /> : s.icon}
-                    </div>
-                    <span className={`text-xs font-bold ${active ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 // ── Options panel ─────────────────────────────────────────────────────────────
 
 function OptionsPanel({
@@ -351,7 +209,7 @@ function OptionsPanel({
   customToneInput, setCustomToneInput, style, setStyle,
   pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
   customPageCountInput, setCustomPageCountInput, safety, setSafety,
-  prompt, onOneClick, locked,
+  locked,
 }: {
   age: string; setAge: (v: string) => void;
   tone: string[]; setTone: (v: string[]) => void;
@@ -362,7 +220,7 @@ function OptionsPanel({
   isCustomPageCount: boolean; setIsCustomPageCount: (v: boolean) => void;
   customPageCountInput: string; setCustomPageCountInput: (v: string) => void;
   safety: boolean; setSafety: (v: boolean) => void;
-  prompt: string; onOneClick: () => void; locked?: boolean;
+  locked?: boolean;
 }) {
   return (
     <div className={`space-y-5 ${locked ? "opacity-60 pointer-events-none select-none" : ""}`}>
@@ -464,25 +322,6 @@ function OptionsPanel({
           <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-foreground transition-all ${safety ? "left-6" : "left-0.5"}`} />
         </span>
       </button>
-
-      {/* One-click */}
-      {!locked && (
-        <div className="rounded-2xl bg-primary/5 p-4 chunky-border">
-          <div className="flex items-start gap-3 mb-3">
-            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary chunky-border">
-              <Wand2 className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={2.5} />
-            </div>
-            <div>
-              <p className="text-sm font-extrabold">Make it for me</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Writes, illustrates &amp; narrates your book automatically.</p>
-            </div>
-          </div>
-          <button onClick={onOneClick} disabled={prompt.trim().length < 10}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
-            <Wand2 className="h-4 w-4" strokeWidth={2.5} /> Fully automatic
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -956,12 +795,6 @@ export default function CreatePage() {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const selectedProfile = profiles.find((p) => p.id === selectedProfileId) ?? null;
 
-  // One-click
-  const [oneClickRunning, setOneClickRunning] = useState(false);
-  const [oneClickStage, setOneClickStage] = useState<OneClickStage>("writing");
-  const [oneClickProgress, setOneClickProgress] = useState({ done: 0, total: 0 });
-  const [oneClickBook, setOneClickBook] = useState<BookOut | null>(null);
-
   useEffect(() => {
     if (!token) return;
     api.profiles.list(token)
@@ -1109,51 +942,11 @@ export default function CreatePage() {
     router.push("/editor");
   }
 
-  // ── One-click ──────────────────────────────────────────────────────────────
-
-  async function handleOneClick() {
-    if (!token) { toast.error("Please sign in first"); return; }
-    if (prompt.trim().length < 10) { toast.error("Tell us a bit more about your story"); return; }
-    setOneClickRunning(true); setOneClickStage("writing"); setOneClickProgress({ done: 0, total: 0 });
-    try {
-      const resolvedAuthorOneClick = selectedProfile
-        ? (selectedProfile.author_name || selectedProfile.name)
-        : (user?.author_name || user?.username || "");
-      const savedDraft = await api.books.createDraft(token, { raw_prompt: prompt, age_range: age, tone: tone.length > 0 ? tone : ["Whimsical"], safety_mode: safety, page_count: pageCount, model_provider: modelProvider, model_name: modelName, ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}), author_name: resolvedAuthorOneClick || undefined });
-      setBook(savedDraft);
-      const generated = await api.books.generate(token, savedDraft.id, style);
-      setBook(generated);
-      setOneClickStage("characters"); setOneClickProgress({ done: 0, total: 0 });
-      const withChars = await api.books.generateCharacterSheets(token, generated.id);
-      setBook(withChars);
-      setOneClickStage("illustrating");
-      const pages = [...withChars.pages].sort((a, b) => a.order - b.order);
-      setOneClickProgress({ done: 0, total: pages.length });
-      let cur = withChars;
-      for (let i = 0; i < pages.length; i++) {
-        const u = await api.books.illustratePage(token, withChars.id, pages[i].id);
-        setBook(u); cur = u; setOneClickProgress({ done: i + 1, total: pages.length });
-      }
-      setOneClickStage("narrating");
-      const textPages = [...cur.pages].sort((a, b) => a.order - b.order).filter((p) => p.text);
-      setOneClickProgress({ done: 0, total: textPages.length });
-      for (let i = 0; i < textPages.length; i++) {
-        const u = await api.books.narratePage(token, cur.id, textPages[i].id);
-        setBook(u); cur = u; setOneClickProgress({ done: i + 1, total: textPages.length });
-      }
-      setOneClickStage("done"); setOneClickBook(cur);
-    } catch (err: any) {
-      toast.error(err.message ?? "Something went wrong. Please try again.");
-      setOneClickRunning(false);
-    }
-  }
-
   const optionsProps = {
     age, setAge, tone, setTone, customTones, setCustomTones,
     customToneInput, setCustomToneInput, style, setStyle,
     pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
     customPageCountInput, setCustomPageCountInput, safety, setSafety,
-    prompt, onOneClick: handleOneClick,
   };
 
   const writingMessage = useWritingMessages(activeBrief);
@@ -1167,10 +960,6 @@ export default function CreatePage() {
 
   return (
     <>
-      {oneClickRunning && (
-        <OneClickOverlay stage={oneClickStage} progress={oneClickProgress} book={oneClickBook} onView={() => router.push("/reader")} />
-      )}
-
       <main className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
 
         {/* ── Top bar ─────────────────────────────────────────────────────── */}
