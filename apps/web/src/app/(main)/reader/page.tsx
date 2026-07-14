@@ -80,50 +80,57 @@ const CoverPage = forwardRef<
 >(({ page, bookId, token, author, fontStack }, ref) => {
   const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
 
+  // Stacked layout — image top 72%, title + author bottom 28% — same as story
+  // pages so the cover art crops as little as the interior illustrations.
+  const BG = "#faf8f3";
   return (
-    <div ref={ref} className="relative overflow-hidden select-none bg-foreground" style={{ height: "100%" }}>
-      {/* Full-bleed illustration */}
-      <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
-        <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
+    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: BG }}>
+      {/* Image — top 72% */}
+      <div style={{ position: "absolute", top: 0, bottom: "28%", left: 0, right: 0, overflow: "hidden" }}>
+        {imgUrl ? (
+          <img
+            src={imgUrl}
+            alt="Cover"
+            className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
+            style={{ objectPosition: "center top" }}
+            draggable={false}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+            <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
+          </div>
+        )}
+        {/* Gradient blend into the title area */}
+        <div style={{
+          position: "absolute", left: 0, right: 0, bottom: 0, height: "45%",
+          background: `linear-gradient(to bottom, transparent, ${BG})`,
+        }} />
       </div>
-      {imgUrl && (
-        <img
-          src={imgUrl}
-          alt="Cover"
-          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
-          draggable={false}
-        />
-      )}
 
-      {/* Bottom gradient overlay */}
-      <div
-        className="absolute inset-x-0 bottom-0"
-        style={{
-          height: "55%",
-          background: "linear-gradient(to bottom, transparent 0%, rgba(10,10,20,0.55) 40%, rgba(10,10,20,0.88) 100%)",
-        }}
-      />
-
-      {/* Title + author */}
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-8 px-6 text-center">
+      {/* Title + author — bottom 28% on solid background */}
+      <div style={{
+        position: "absolute", top: "72%", bottom: 0, left: 0, right: 0, background: BG,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        padding: "8px 24px", textAlign: "center", overflow: "hidden",
+      }}>
         <h1
-          className="text-white leading-tight drop-shadow-lg"
+          className="leading-tight"
           style={{
             fontFamily: 'var(--font-kranky), serif',
             fontWeight: 400,
-            fontSize: "clamp(1.5rem, 5vw, 2.4rem)",
-            textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+            fontSize: "clamp(1.4rem, 5vw, 2.2rem)",
+            color: "var(--foreground)",
           }}
         >
           {page.text ?? ""}
         </h1>
         {author && (
           <p
-            className="mt-2 text-white/75 drop-shadow"
+            className="mt-1.5"
             style={{
               fontFamily: fontStack,
               fontSize: "clamp(0.75rem, 2vw, 0.95rem)",
-              textShadow: "0 1px 6px rgba(0,0,0,0.5)",
+              color: "rgba(60,50,40,0.6)",
             }}
           >
             by {author}
@@ -395,24 +402,43 @@ const BackCoverPage = forwardRef<
   { page: PageOut; bookId: string; token: string | null; title: string }
 >(({ page, bookId, token, title }, ref) => {
   const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  // Stacked layout — image top 72%, "The End" + title bottom 28% — same as story
+  // pages so the back-cover art crops as little as the interior illustrations.
+  const BG = "#faf8f3";
   return (
-    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#1a1a2e" }}>
-      {imgUrl && (
-        <img
-          src={imgUrl}
-          alt="Back cover"
-          className="absolute inset-0 h-full w-full object-cover"
-          draggable={false}
-        />
-      )}
-      {/* Dark overlay so text is legible over any illustration */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(10,10,20,0.88) 0%, rgba(10,10,20,0.45) 50%, transparent 100%)" }} />
-      {/* "The End" text */}
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 pb-10 text-center">
-        <p className="font-display text-2xl font-black text-white tracking-wide" style={{ textShadow: "0 2px 12px rgba(0,0,0,0.7)" }}>The End</p>
-        <p className="text-xs font-bold text-white/60 max-w-[160px] leading-relaxed" style={{ textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>{title}</p>
+    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: BG }}>
+      {/* Image — top 72% */}
+      <div style={{ position: "absolute", top: 0, bottom: "28%", left: 0, right: 0, overflow: "hidden" }}>
+        {imgUrl ? (
+          <img
+            src={imgUrl}
+            alt="Back cover"
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: "center top" }}
+            draggable={false}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+            <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
+          </div>
+        )}
+        {/* Gradient blend into the text area */}
+        <div style={{
+          position: "absolute", left: 0, right: 0, bottom: 0, height: "45%",
+          background: `linear-gradient(to bottom, transparent, ${BG})`,
+        }} />
       </div>
-      <p className="absolute bottom-2 right-3 text-[10px] font-bold text-white/20 tracking-widest uppercase select-none">AI Storybook Studio</p>
+
+      {/* "The End" + title — bottom 28% on solid background */}
+      <div style={{
+        position: "absolute", top: "72%", bottom: 0, left: 0, right: 0, background: BG,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 6, padding: "8px 24px", textAlign: "center", overflow: "hidden",
+      }}>
+        <p className="font-display text-2xl font-black tracking-wide" style={{ color: "var(--foreground)" }}>The End</p>
+        <p className="text-xs font-bold max-w-[180px] leading-relaxed" style={{ color: "rgba(60,50,40,0.6)" }}>{title}</p>
+      </div>
+      <p className="absolute bottom-2 right-3 text-[10px] font-bold tracking-widest uppercase select-none" style={{ color: "rgba(60,50,40,0.25)" }}>AI Storybook Studio</p>
     </div>
   );
 });
