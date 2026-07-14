@@ -220,7 +220,9 @@ async def _issue_tokens(user: User, db: AsyncSession) -> AuthTokens:
             id=user.id,
             email=user.email,
             username=user.username,
+            author_name=user.author_name,
             avatar_url=user.avatar_url,
+            onboarding_completed=user.onboarding_completed,
         ),
     )
 
