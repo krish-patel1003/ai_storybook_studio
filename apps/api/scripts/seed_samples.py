@@ -74,6 +74,8 @@ async def run() -> None:
     from src.books.schemas import CreateBookIn
     from src.books import service
 
+    from src.books.models import Book
+
     async with async_session_maker() as db:
         user = await db.scalar(select(User).where(User.email == SEED_USER_EMAIL))
         if not user:
@@ -83,34 +85,53 @@ async def run() -> None:
         for i, (prompt, age, pages, style, tone) in enumerate(BOOKS, 1):
             log.info("=== Book %d/5 — %d pages — ages %s — %s ===", i, pages, age, style)
 
-            data = CreateBookIn(
-                raw_prompt=prompt,
-                age_range=age,
-                tone=tone,
-                art_style=style,
-                page_count=pages,
-                safety_mode=True,
+            # Idempotent: reuse an existing book with the same prompt (resume a
+            # partial run) instead of creating a duplicate.
+            existing = await db.scalar(
+                select(Book).where(Book.user_id == user.id, Book.raw_prompt == prompt)
             )
+            if existing:
+                book = await service.get_book(db, existing.id, user.id)
+                log.info("  Reusing existing: %s (%s)", book.title, book.id)
+            else:
+                data = CreateBookIn(
+                    raw_prompt=prompt, age_range=age, tone=tone,
+                    art_style=style, page_count=pages, safety_mode=True,
+                )
+                book = await service.create_and_generate(db, user.id, data)
+                log.info("  Created: %s (%s)", book.title, book.id)
 
-            # 1. Text pipeline (brief + characters + pages)
-            book = await service.create_and_generate(db, user.id, data)
-            log.info("  Created: %s (%s)", book.title, book.id)
-
-            # 2. Illustrate every page (includes the front cover)
-            for page in sorted(book.pages, key=lambda p: p.order):
+            # Ensure a back-cover page exists before illustrating.
+            if not any(p.is_back_cover for p in book.pages):
                 try:
-                    await service.illustrate_page(db, book.id, page.id, user.id)
+                    await service.create_back_cover_page(db, book.id, user.id)
+                    book = await service.get_book(db, book.id, user.id)
                 except Exception as exc:
-                    log.warning("  page %s failed: %s", page.order, exc)
+                    log.warning("  create back cover failed: %s", exc)
 
-            # 3. Create + illustrate the back cover
-            try:
-                await service.create_back_cover_page(db, book.id, user.id)
-                await service.illustrate_back_cover(db, book.id, user.id)
-            except Exception as exc:
-                log.warning("  back cover failed: %s", exc)
+            # Illustrate any page still missing an image (covers included).
+            for page in sorted(book.pages, key=lambda p: p.order):
+                if page.image_key:
+                    continue
+                try:
+                    if page.is_back_cover:
+                        await service.illustrate_back_cover(db, book.id, user.id)
+                    else:
+                        await service.illustrate_page(db, book.id, page.id, user.id)
+                except Exception as exc:
+                    log.warning("  illustrate page %s failed: %s", page.order, exc)
 
-            # 4. Publish as a landing-page sample
+            # Narrate any text page still missing audio.
+            book = await service.get_book(db, book.id, user.id)
+            for page in sorted(book.pages, key=lambda p: p.order):
+                if page.audio_key or not page.text or page.is_cover or page.is_back_cover:
+                    continue
+                try:
+                    await service.narrate_page(db, book.id, page.id, user.id)
+                except Exception as exc:
+                    log.warning("  narrate page %s failed: %s", page.order, exc)
+
+            # Publish as a landing-page sample.
             book = await service.get_book(db, book.id, user.id)
             book.is_sample = True
             book.visibility = "public"
