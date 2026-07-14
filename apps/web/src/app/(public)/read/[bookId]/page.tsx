@@ -14,24 +14,26 @@ const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
   { ssr: false }
 ) as React.ForwardRefExoticComponent<HTMLFlipBookProps & React.RefAttributes<HTMLFlipBookRef>>;
 
-// ── Single book page (must use forwardRef for react-pageflip) ────────────────
+const BG = "#faf8f3";
+
+// ── Single book page — immersive style, mirrors the signed-in reader ─────────
 
 const BookPage = forwardRef<
   HTMLDivElement,
-  { page: PageOut; bookId: string }
->(({ page, bookId }, ref) => {
+  { page: PageOut; bookId: string; author: string; title: string }
+>(({ page, bookId, author, title }, ref) => {
   const textRef = useRef<HTMLParagraphElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
+  const imgUrl = page.has_image ? publicPageImageUrl(bookId, page.id) : null;
 
   useEffect(() => {
     const el = textRef.current;
     const zone = zoneRef.current;
     if (!el || !zone || !page.text) return;
-
     const fit = () => {
       if (zone.clientHeight === 0) return;
-      el.style.fontSize = "";          // reset to CSS default (text-sm = 14px)
-      let px = 14;
+      el.style.fontSize = "";
+      let px = 15;
       const minPx = 9;
       while (el.scrollHeight > zone.clientHeight && px > minPx) {
         px -= 0.5;
@@ -39,83 +41,81 @@ const BookPage = forwardRef<
       }
       el.style.overflow = el.scrollHeight > zone.clientHeight ? "hidden" : "";
     };
-
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(zone);
     return () => ro.disconnect();
   }, [page.text]);
 
-  return (
-    <div ref={ref} className="relative overflow-hidden bg-card select-none" style={{ height: "100%" }}>
-      {/* Illustration — top 68% */}
-      <div className="absolute inset-x-0 top-0 overflow-hidden bg-muted" style={{ height: "68%" }}>
-        {page.has_image ? (
-          <img
-            src={publicPageImageUrl(bookId, page.id)}
-            alt={page.is_cover ? "Cover" : `Page ${page.order}`}
-            className="h-full w-full object-cover"
-            draggable={false}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            <ImageIcon className="h-12 w-12 opacity-20" strokeWidth={1.5} />
-          </div>
-        )}
+  // ── Front cover — full-bleed image + title/author overlay ──
+  if (page.is_cover) {
+    return (
+      <div ref={ref} className="relative overflow-hidden select-none bg-foreground" style={{ height: "100%" }}>
+        <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+          <ImageIcon className="h-16 w-16 opacity-20 text-white" strokeWidth={1.5} />
+        </div>
+        {imgUrl && <img src={imgUrl} alt="Cover" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
+        <div className="absolute inset-x-0 bottom-0" style={{ height: "55%", background: "linear-gradient(to bottom, transparent 0%, rgba(10,10,20,0.55) 40%, rgba(10,10,20,0.88) 100%)" }} />
+        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-8 px-6 text-center">
+          <h1 className="text-white leading-tight" style={{ fontFamily: "var(--font-kranky), serif", fontWeight: 400, fontSize: "clamp(1.4rem, 5vw, 2.2rem)", textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}>{page.text ?? ""}</h1>
+          {author && <p className="mt-2 text-white/75" style={{ fontSize: "clamp(0.75rem, 2vw, 0.95rem)", textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>by {author}</p>}
+        </div>
       </div>
+    );
+  }
 
-      {/* Text zone — position depends on page.text_position */}
-      {(() => {
-        const pos = page.text_position ?? "bottom";
-        const posStyle: React.CSSProperties =
-          pos === "top"    ? { top: 0, bottom: "auto" } :
-          pos === "center" ? { top: "34%", bottom: "34%" } :
-          { bottom: 0, top: "auto" };
-        const textAlign = (page.text_align ?? "center") as React.CSSProperties["textAlign"];
-        return (
-          <div
-            ref={zoneRef}
-            className="absolute inset-x-0 overflow-hidden border-[2.5px] border-foreground bg-card px-4 py-3"
-            style={{ height: "32%", ...posStyle }}
-          >
-            {page.is_cover ? (
-              <h2 className="text-center font-display text-lg font-black leading-tight overflow-hidden">
-                {page.text ?? ""}
-              </h2>
-            ) : (
-              <p ref={textRef} className="font-display text-sm leading-relaxed" style={{ textAlign }}>
-                {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
-              </p>
-            )}
-          </div>
-        );
-      })()}
+  // ── Back cover — full-bleed image + "The End" overlay ──
+  if (page.is_back_cover) {
+    return (
+      <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#1a1a2e" }}>
+        {imgUrl && <img src={imgUrl} alt="Back cover" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(10,10,20,0.88) 0%, rgba(10,10,20,0.45) 50%, transparent 100%)" }} />
+        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 pb-10 text-center">
+          <p className="font-display text-2xl font-black text-white tracking-wide" style={{ textShadow: "0 2px 12px rgba(0,0,0,0.7)" }}>The End</p>
+          <p className="text-xs font-bold text-white/60 max-w-[160px] leading-relaxed" style={{ textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>{title}</p>
+        </div>
+        <p className="absolute bottom-2 right-3 text-[10px] font-bold text-white/20 tracking-widest uppercase select-none">AI Storybook Studio</p>
+      </div>
+    );
+  }
+
+  // ── Story page — image top 72% + gradient fade + text bottom 28% ──
+  const isTextBottom = (page.text_position ?? "bottom") !== "top";
+  const textAlign = (page.text_align ?? "center") as React.CSSProperties["textAlign"];
+  const TEXT_PCT = "28%";
+  return (
+    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: BG }}>
+      <div style={{ position: "absolute", top: isTextBottom ? 0 : TEXT_PCT, bottom: isTextBottom ? TEXT_PCT : 0, left: 0, right: 0, overflow: "hidden" }}>
+        {imgUrl ? (
+          <img src={imgUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "center top" }} draggable={false} />
+        ) : (
+          <div className="absolute inset-0 bg-muted flex items-center justify-center"><ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} /></div>
+        )}
+        <div style={{ position: "absolute", left: 0, right: 0, height: "45%", [isTextBottom ? "bottom" : "top"]: 0, background: isTextBottom ? `linear-gradient(to bottom, transparent, ${BG})` : `linear-gradient(to top, transparent, ${BG})` }} />
+      </div>
+      <div ref={zoneRef} style={{ position: "absolute", top: isTextBottom ? "72%" : 0, bottom: isTextBottom ? 0 : "72%", left: 0, right: 0, background: BG, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 22px", overflow: "hidden" }}>
+        <p ref={textRef} className="font-display leading-relaxed" style={{ textAlign, fontSize: "15px", color: "var(--foreground)" }}>
+          {page.text ?? <span className="italic text-muted-foreground">No text yet</span>}
+        </p>
+      </div>
     </div>
   );
 });
 BookPage.displayName = "BookPage";
 
-// ── Back cover ───────────────────────────────────────────────────────────────
+// ── Fallback back cover (only when the book has no back-cover page) ───────────
 
-const BackCover = forwardRef<HTMLDivElement, { title: string }>(({ title }, ref) => (
+const BackCoverFallback = forwardRef<HTMLDivElement, { title: string }>(({ title }, ref) => (
   <div ref={ref} className="flex flex-col items-center justify-between overflow-hidden bg-primary select-none p-8">
     <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center">
-      <div className="font-display text-6xl font-black text-primary-foreground/20 leading-none">
-        ✦
-      </div>
-      <p className="font-display text-2xl font-black text-primary-foreground tracking-wide">
-        The End
-      </p>
-      <p className="text-sm font-bold text-primary-foreground/60 max-w-[180px] leading-relaxed">
-        {title}
-      </p>
+      <div className="font-display text-6xl font-black text-primary-foreground/20 leading-none">✦</div>
+      <p className="font-display text-2xl font-black text-primary-foreground tracking-wide">The End</p>
+      <p className="text-sm font-bold text-primary-foreground/60 max-w-[180px] leading-relaxed">{title}</p>
     </div>
-    <p className="text-xs font-bold text-primary-foreground/30 tracking-widest uppercase">
-      AI Storybook Studio
-    </p>
+    <p className="text-xs font-bold text-primary-foreground/30 tracking-widest uppercase">AI Storybook Studio</p>
   </div>
 ));
-BackCover.displayName = "BackCover";
+BackCoverFallback.displayName = "BackCoverFallback";
 
 // ── Not found state ───────────────────────────────────────────────────────────
 
@@ -173,8 +173,10 @@ export default function PublicReaderPage() {
   }
 
   const pages = [...book.pages].sort((a, b) => a.order - b.order);
-  const totalPages = pages.length + 1; // +1 for back cover
+  const hasBackCover = pages.some((p) => p.is_back_cover);
+  const totalPages = pages.length + (hasBackCover ? 0 : 1); // +1 only if no back-cover page
   const title = book.brief?.title ?? book.title;
+  const author = book.author_name ?? "";
 
   function goNext() { bookRef.current?.pageFlip().flipNext(); }
   function goPrev() { bookRef.current?.pageFlip().flipPrev(); }
@@ -213,9 +215,9 @@ export default function PublicReaderPage() {
           onFlip={(e: { data: number }) => setCurrentPage(e.data)}
         >
           {pages.map((page) => (
-            <BookPage key={page.id} page={page} bookId={bookId} />
+            <BookPage key={page.id} page={page} bookId={bookId} author={author} title={title} />
           ))}
-          <BackCover title={title} />
+          {!hasBackCover && <BackCoverFallback title={title} />}
         </HTMLFlipBook>
       </div>
 
