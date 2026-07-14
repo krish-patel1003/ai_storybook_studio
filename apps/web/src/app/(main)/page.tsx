@@ -57,7 +57,7 @@ function SampleBooksSection() {
   const { books, loading } = useSampleBooks();
 
   return (
-    <section className="bg-card border-t-[2.5px] border-foreground">
+    <section id="samples" className="scroll-mt-20 bg-card border-t-[2.5px] border-foreground">
       <div className="mx-auto max-w-7xl px-4 py-20">
         <div className="flex items-end justify-between mb-10">
           <div>
@@ -165,12 +165,12 @@ export default function HomePage() {
               >
                 Create My First Book <ArrowRight className="h-5 w-5" strokeWidth={3} />
               </Link>
-              <Link
-                href="/read/sample"
+              <a
+                href="#samples"
                 className="inline-flex items-center gap-2 rounded-full bg-card px-6 py-3.5 text-base font-extrabold text-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-1"
               >
-                <BookOpen className="h-4 w-4" strokeWidth={2.5} /> View Sample Book
-              </Link>
+                <BookOpen className="h-4 w-4" strokeWidth={2.5} /> View Sample Books
+              </a>
             </div>
 
             <p className="mt-4 text-xs text-muted-foreground">
@@ -377,12 +377,12 @@ export default function HomePage() {
           >
             <Sparkles className="h-5 w-5" strokeWidth={2.5} /> Create My First Book — Free
           </Link>
-          <Link
-            href="/library"
+          <a
+            href="#samples"
             className="inline-flex items-center gap-2 rounded-full bg-card px-6 py-4 text-base font-extrabold chunky-border chunky-shadow-sm transition-transform hover:-translate-y-1"
           >
             <BookOpen className="h-4 w-4" strokeWidth={2.5} /> View Sample Books
-          </Link>
+          </a>
         </div>
       </section>
 

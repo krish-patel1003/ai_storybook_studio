@@ -214,10 +214,12 @@ export default function PublicReaderPage() {
           className="book-shadow"
           onFlip={(e: { data: number }) => setCurrentPage(e.data)}
         >
-          {pages.map((page) => (
-            <BookPage key={page.id} page={page} bookId={bookId} author={author} title={title} />
-          ))}
-          {!hasBackCover && <BackCoverFallback title={title} />}
+          {[
+            ...pages.map((page) => (
+              <BookPage key={page.id} page={page} bookId={bookId} author={author} title={title} />
+            )),
+            ...(hasBackCover ? [] : [<BackCoverFallback key="__backcover" title={title} />]),
+          ]}
         </HTMLFlipBook>
       </div>
 
