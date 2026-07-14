@@ -583,14 +583,10 @@ function usePageAudio(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, currentPageData?.id, cacheVersion]);
 
-  // Cover page has no right-page partner (showCover renders it alone).
-  // If cover has no audio the onEnded chain never fires — flip after a short pause.
-  useEffect(() => {
-    if (currentPage !== 0 || currentPageData?.has_audio) return;
-    const t = setTimeout(() => bookRef.current?.pageFlip().flipNext(), 1800);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, currentPageData?.has_audio]);
+  // NOTE: the cover never auto-advances. The reader turns the page from the
+  // cover themselves; narration (if any) then begins on page 1. Previously the
+  // cover auto-flipped after 1.8s, which felt like an unwanted auto-turn even
+  // when no narration was playing.
 
   // Single stable "ended" listener — handles left→right→flip sequence.
   useEffect(() => {
