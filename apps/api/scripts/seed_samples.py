@@ -1,184 +1,115 @@
 """
-Seed script — generates 5 sample books end-to-end and marks them public+is_sample.
+Seed script — generate 5 sample books end-to-end using the normal code paths
+(same service functions the API uses), then mark them public + is_sample so they
+show on the landing page.
+
+Run as a Cloud Run job against the production DB:
+  gcloud run jobs execute storybook-seed-samples --region=us-central1
 
 Run locally:
   cd apps/api
-  DATABASE_URL=<your-url> GEMINI_API_KEY=<key> python -m scripts.seed_samples
-
-Run as Cloud Run job (seeds against production DB):
-  gcloud run jobs execute storybook-seed-samples --region=us-central1 --wait
+  DATABASE_URL=... GEMINI_API_KEY=... python -m scripts.seed_samples
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import sys
-import uuid
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("seed_samples")
 
-# ── 5 sample book specs ───────────────────────────────────────────────────────
-# age_range must be one of: "3-5", "6-8", "9-11"
-SAMPLE_BOOKS = [
-    {
-        "raw_prompt": (
-            "A little bear named Benny wants to keep all his honey to himself, "
-            "but when his forest friends come hungry one cold morning he discovers "
-            "that sharing makes the honey taste even sweeter."
-        ),
-        "age_range": "3-5",
-        "tone": ["warm", "gentle", "funny"],
-        "art_style": "watercolor",
-        "page_count": 10,
-    },
-    {
-        "raw_prompt": (
-            "Zara, a curious seven-year-old, finds a tiny green dragon no bigger than "
-            "her hand living inside a flower pot in her grandmother's garden. "
-            "Together they must keep the dragon hidden from nosy neighbours while "
-            "helping it find its way back to its family in the hills."
-        ),
-        "age_range": "6-8",
-        "tone": ["adventurous", "funny", "heartwarming"],
-        "art_style": "crayon",
-        "page_count": 20,
-    },
-    {
-        "raw_prompt": (
-            "Four best friends — a bookworm, a tinkerer, a runner, and an artist — "
-            "discover their town's beloved library is being demolished in one week. "
-            "Using every skill they have, they race to save it and uncover a hidden "
-            "room inside that holds a century-old secret."
-        ),
-        "age_range": "9-11",
-        "tone": ["exciting", "inspiring", "funny"],
-        "art_style": "flat",
-        "page_count": 30,
-    },
-    {
-        "raw_prompt": (
-            "Twelve-year-old Kai finds an old hand-drawn map tucked inside a library "
-            "book that leads to a forgotten island not on any chart. Sailing there on "
-            "a patched-up boat with his clever younger sister, Kai discovers an island "
-            "where every animal can speak and an ancient balance between land and sea "
-            "has been broken — and only two kids from the outside world can fix it."
-        ),
-        "age_range": "9-11",
-        "tone": ["adventurous", "mysterious", "heartwarming"],
-        "art_style": "watercolor",
-        "page_count": 40,
-    },
-    {
-        "raw_prompt": (
-            "Thirteen-year-old Maya has always built things out of scraps — radios, "
-            "kites, solar cookers. When she accidentally launches herself skyward in "
-            "a contraption built for the school science fair, she breaks through the "
-            "clouds and discovers a vast floating city that has been hidden above the "
-            "weather for three hundred years. The city's young engineer guild needs "
-            "her knowledge of the world below — and Maya needs their help to get home "
-            "before her parents call the fire brigade."
-        ),
-        "age_range": "9-11",
-        "tone": ["exciting", "funny", "inspiring"],
-        "art_style": "papercut",
-        "page_count": 50,
-    },
+SEED_USER_EMAIL = "patel.krish1003@gmail.com"
+
+# 5 unique books: (prompt, age_range, page_count, art_style, tone)
+BOOKS = [
+    (
+        "Pip the penguin is scared of the water and won't take his first swim. "
+        "With a little courage and a lot of cheering from his friends, he finally "
+        "takes the leap and discovers how much fun the ocean can be.",
+        "3-5", 10, "watercolor", ["warm", "gentle", "funny"],
+    ),
+    (
+        "Nina builds a cardboard rocket in her backyard and, one starry night, it "
+        "actually lifts off. She travels to a friendly little moon where the craters "
+        "are made of cheese and makes a new alien friend before flying home for breakfast.",
+        "6-8", 20, "crayon", ["adventurous", "funny", "heartwarming"],
+    ),
+    (
+        "When the old clock tower in Marlow town stops ticking, twelve-year-old Theo "
+        "and his friends discover a hidden mechanism inside that keeps the whole town's "
+        "luck running. To fix it before the harvest festival, they must solve three "
+        "riddles left behind by the tower's long-forgotten builder.",
+        "9-11", 30, "flat", ["exciting", "mysterious", "inspiring"],
+    ),
+    (
+        "Amara finds a cracked compass at a flea market that points not north, but "
+        "toward whoever needs help most. Following its needle across her city, she and "
+        "her dog Biscuit help a lost baby owl, a stranded street musician, and an old "
+        "lighthouse keeper — and learn that the compass was really guiding her home.",
+        "9-11", 40, "watercolor", ["adventurous", "heartwarming", "gentle"],
+    ),
+    (
+        "Leo lives in a valley where it has rained for a hundred years, and everyone "
+        "has forgotten what the sun looks like. Armed with his grandfather's journals "
+        "and a homemade glider, Leo climbs above the endless clouds to find the sun — "
+        "and brings back proof that the sky can be blue again.",
+        "9-11", 50, "papercut", ["exciting", "inspiring", "hopeful"],
+    ),
 ]
 
 
 async def run() -> None:
-    # Import here so env vars are loaded first
     from sqlalchemy import select
-    from src.config import settings
-    from src.database import engine, async_session_maker as async_session_factory
+
+    from src.database import async_session_maker
     from src.auth.models import User
-    from src.books.models import Book, Page
     from src.books.schemas import CreateBookIn
-    from src.books import service as book_service
+    from src.books import service
 
-    log.info("Connecting to DB: %s", str(settings.DATABASE_URL)[:60])
-
-    async with async_session_factory() as db:
-        # Always use the designated test user (bypass_limits=true, no pool restrictions)
-        seed_email = "patel.krish1003@gmail.com"
-        result = await db.execute(select(User).where(User.email == seed_email))
-        user = result.scalar_one_or_none()
-
+    async with async_session_maker() as db:
+        user = await db.scalar(select(User).where(User.email == SEED_USER_EMAIL))
         if not user:
-            log.error("Test user %s not found — run migrations first", seed_email)
-            sys.exit(1)
+            raise SystemExit(f"Test user {SEED_USER_EMAIL} not found")
+        log.info("Seeding as %s (bypass_limits=%s)", user.email, user.bypass_limits)
 
-        log.info("Seeding as user: %s (%s) bypass_limits=%s", user.username, user.email, user.bypass_limits)
+        for i, (prompt, age, pages, style, tone) in enumerate(BOOKS, 1):
+            log.info("=== Book %d/5 — %d pages — ages %s — %s ===", i, pages, age, style)
 
-        try:
-            for i, spec in enumerate(SAMPLE_BOOKS, 1):
-                log.info(
-                    "═══ Book %d/%d — %d pages — Ages %s — %s ═══",
-                    i, len(SAMPLE_BOOKS), spec["page_count"], spec["age_range"], spec["art_style"],
-                )
+            data = CreateBookIn(
+                raw_prompt=prompt,
+                age_range=age,
+                tone=tone,
+                art_style=style,
+                page_count=pages,
+                safety_mode=True,
+            )
 
-                # Check if we already seeded this (avoid duplicates on re-run)
-                existing = await db.execute(
-                    select(Book).where(
-                        Book.user_id == user.id,
-                        Book.is_sample.is_(True),
-                        Book.page_count == spec["page_count"],
-                        Book.age_range == spec["age_range"],
-                    )
-                )
-                if existing.scalar_one_or_none():
-                    log.info("  Already seeded — skipping")
-                    continue
+            # 1. Text pipeline (brief + characters + pages)
+            book = await service.create_and_generate(db, user.id, data)
+            log.info("  Created: %s (%s)", book.title, book.id)
 
-                data = CreateBookIn(
-                    raw_prompt=spec["raw_prompt"],
-                    age_range=spec["age_range"],
-                    tone=spec["tone"],
-                    art_style=spec["art_style"],
-                    page_count=spec["page_count"],
-                    safety_mode=True,
-                )
-
-                log.info("  Generating text pipeline (brief + characters + pages)…")
+            # 2. Illustrate every page (includes the front cover)
+            for page in sorted(book.pages, key=lambda p: p.order):
                 try:
-                    book = await book_service.create_and_generate(db, user.id, data)
+                    await service.illustrate_page(db, book.id, page.id, user.id)
                 except Exception as exc:
-                    log.error("  Text generation failed: %s", exc)
-                    continue
+                    log.warning("  page %s failed: %s", page.order, exc)
 
-                log.info("  Created book: %s (%s)", book.title, book.id)
+            # 3. Create + illustrate the back cover
+            try:
+                await service.create_back_cover_page(db, book.id, user.id)
+                await service.illustrate_back_cover(db, book.id, user.id)
+            except Exception as exc:
+                log.warning("  back cover failed: %s", exc)
 
-                # Illustrate all pages
-                pages_result = await db.execute(
-                    select(Page).where(Page.book_id == book.id).order_by(Page.order)
-                )
-                pages = pages_result.scalars().all()
-                log.info("  Illustrating %d pages…", len(pages))
+            # 4. Publish as a landing-page sample
+            book = await service.get_book(db, book.id, user.id)
+            book.is_sample = True
+            book.visibility = "public"
+            await db.commit()
+            log.info("  done → /read/%s", book.id)
 
-                for j, page in enumerate(pages, 1):
-                    log.info("    Page %d/%d…", j, len(pages))
-                    try:
-                        await book_service.illustrate_page(db, book.id, page.id, user.id)
-                    except Exception as exc:
-                        log.warning("    Page %d illustration failed: %s", j, exc)
-
-                # Illustrate back cover
-                log.info("  Illustrating back cover…")
-                try:
-                    await book_service.illustrate_back_cover(db, book.id, user.id)
-                except Exception as exc:
-                    log.warning("  Back cover failed: %s", exc)
-
-                # Mark as sample and public
-                await db.refresh(book)
-                book.is_sample = True
-                book.visibility = "public"
-                await db.commit()
-                log.info("  ✓ Book %d complete: %s → /read/%s", i, book.title, book.id)
-
-    log.info("All sample books seeded.")
+    log.info("All 5 sample books seeded.")
 
 
 if __name__ == "__main__":
