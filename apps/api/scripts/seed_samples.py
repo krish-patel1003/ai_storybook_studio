@@ -61,6 +61,14 @@ BOOKS = [
 async def run() -> None:
     from sqlalchemy import select
 
+    # Register every table in the metadata before any flush — the Book FK graph
+    # (e.g. child_profile) needs these imported, same as the API does at startup.
+    import src.auth.models  # noqa: F401
+    import src.books.models  # noqa: F401
+    import src.profiles.models  # noqa: F401
+    import src.voices.models  # noqa: F401
+    import src.generation.event_models  # noqa: F401
+
     from src.database import async_session_maker
     from src.auth.models import User
     from src.books.schemas import CreateBookIn
