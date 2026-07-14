@@ -63,7 +63,8 @@ function useIllJob(bookId: string | undefined): IllJob | null {
     _subs.add(tick);
     return () => { _subs.delete(tick); };
   }, []);
-  return _job?.bookId === bookId ? _job : null;
+  // An aborted job reads as "no job" so the UI reverts to idle immediately.
+  return _job && _job.bookId === bookId && !_job.aborted ? _job : null;
 }
 
 async function startIllJob(
@@ -71,13 +72,16 @@ async function startIllJob(
   book: BookOut,
   onPageDone: (page: PageOut) => void,
   reconcile: () => void,
-): Promise<number> {
+): Promise<{ failedCount: number; aborted: boolean }> {
   const bookId = book.id;
-  if (_job?.bookId === bookId && _job.done < _job.total) return 0;
+  // A live (non-aborted) job for this book is already running — don't double-start.
+  if (_job?.bookId === bookId && !_job.aborted && _job.done < _job.total) {
+    return { failedCount: 0, aborted: false };
+  }
 
   const pages = [...book.pages].sort((a, b) => a.order - b.order);
 
-  _job = {
+  const myJob: IllJob = {
     bookId,
     total: pages.length,
     done: 0,
@@ -86,6 +90,7 @@ async function startIllJob(
     pageStatuses: Object.fromEntries(pages.map((p) => [p.id, "idle" as PageIllStatus])),
     aborted: false,
   };
+  _job = myJob;
   _onPageDone = onPageDone;
   _notifyJob();
 
@@ -94,10 +99,10 @@ async function startIllJob(
     book.characters.every((c) => !c.has_reference_image);
 
   if (needsSheets) {
-    _job.sheetsGenerating = true;
+    myJob.sheetsGenerating = true;
     _notifyJob();
     try { await api.books.generateCharacterSheets(token, bookId); } catch { /* non-fatal */ }
-    if (_job?.bookId === bookId) { _job.sheetsGenerating = false; _notifyJob(); }
+    if (_job === myJob) { myJob.sheetsGenerating = false; _notifyJob(); }
   }
 
   // Gemini image generation has a real-world rate limit. Firing every page's
@@ -114,8 +119,8 @@ async function startIllJob(
         ? await api.books.illustrateBackCover(token, bookId)
         : await api.books.illustratePage(token, bookId, page.id);
       bustAuthImageCache(pageImageUrl(bookId, page.id));
-      if (_job?.bookId === bookId) {
-        _job.pageStatuses[page.id] = "done";
+      if (_job === myJob) {
+        myJob.pageStatuses[page.id] = "done";
         // Only trust this response for the page it was actually for — merge that
         // single page, never the whole (possibly stale) book snapshot.
         const freshPage = updated.pages.find((p) => p.id === page.id);
@@ -124,8 +129,8 @@ async function startIllJob(
       }
       return true;
     } catch {
-      if (_job?.bookId === bookId) {
-        _job.pageStatuses[page.id] = "error";
+      if (_job === myJob) {
+        myJob.pageStatuses[page.id] = "error";
         _notifyJob();
       }
       return false;
@@ -137,19 +142,18 @@ async function startIllJob(
     await Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, targets.length) }, async () => {
         while (i < targets.length) {
-          if (_job?.aborted) break;
+          // Stop if this run was aborted or superseded by a newer job.
+          if (_job !== myJob || myJob.aborted) break;
           const page = targets[i++];
           const ok = await runPage(page);
-          if (_job?.bookId === bookId) { _job.done++; _notifyJob(); }
+          if (_job === myJob) { myJob.done++; _notifyJob(); }
           void ok;
         }
       }),
     );
   }
 
-  for (const p of pages) {
-    if (_job?.bookId === bookId) _job.pageStatuses[p.id] = "generating";
-  }
+  for (const p of pages) myJob.pageStatuses[p.id] = "generating";
   _notifyJob();
 
   await runPool(pages);
@@ -157,27 +161,33 @@ async function startIllJob(
   // Auto-retry pages that failed (transient rate-limit/API errors) once more
   // before giving up, instead of forcing the user to re-click the button.
   for (let retry = 0; retry < 2; retry++) {
-    if (_job?.aborted) break;
-    const failed = pages.filter((p) => _job?.pageStatuses[p.id] === "error");
-    if (failed.length === 0 || _job?.bookId !== bookId) break;
-    if (_job) { _job.done -= failed.length; }
-    for (const p of failed) { if (_job) _job.pageStatuses[p.id] = "generating"; }
+    if (_job !== myJob || myJob.aborted) break;
+    const failed = pages.filter((p) => myJob.pageStatuses[p.id] === "error");
+    if (failed.length === 0) break;
+    myJob.done -= failed.length;
+    for (const p of failed) myJob.pageStatuses[p.id] = "generating";
     _notifyJob();
     await new Promise(r => setTimeout(r, 4000));
     await runPool(failed);
   }
 
-  const failedCount = pages.filter((p) => _job?.pageStatuses[p.id] === "error").length;
+  const failedCount = pages.filter((p) => myJob.pageStatuses[p.id] === "error").length;
+
+  // Stopped by the user (or superseded) — clear our job, skip reconcile/success toast.
+  if (myJob.aborted || _job !== myJob) {
+    if (_job === myJob) { _job = null; _notifyJob(); }
+    return { failedCount, aborted: true };
+  }
 
   // Reconcile once against ground truth so the final state is always authoritative,
   // regardless of the order concurrent per-page responses arrived in.
-  if (!_job?.aborted) reconcile();
+  reconcile();
 
   setTimeout(() => {
-    if (_job?.bookId === bookId) { _job = null; _notifyJob(); }
+    if (_job === myJob) { _job = null; _notifyJob(); }
   }, 5000);
 
-  return failedCount;
+  return { failedCount, aborted: false };
 }
 
 // ── Timer ─────────────────────────────────────────────────────────────────────
@@ -488,7 +498,9 @@ export default function EditorPage() {
   const timer = useTimer();
 
   const job = useIllJob(book?.id);
-  const isRunning = !!job && job.done < job.total;
+  // Treat an aborted job as no-longer-running so the UI returns to idle the
+  // instant Stop is clicked, even while the last in-flight requests settle.
+  const isRunning = !!job && !job.aborted && job.done < job.total;
 
   const pageStatuses: Record<string, PageIllStatus> = {};
   if (job) { for (const [id, s] of Object.entries(job.pageStatuses)) { pageStatuses[id] = s; } }
@@ -536,14 +548,16 @@ export default function EditorPage() {
   async function handleIllustrate() {
     if (!token || !book || isRunning) return;
     timer.start();
-    const failedCount = await startIllJob(
+    const { failedCount, aborted } = await startIllJob(
       token,
       book,
       (page) => mergePages([page]),
       reconcileBook,
     );
     timer.stop();
-    if (failedCount > 0) {
+    if (aborted) {
+      toast("Stopped illustrating.");
+    } else if (failedCount > 0) {
       toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to illustrate — click Illustrate all to retry`);
     } else {
       toast.success("All illustrations complete!");
