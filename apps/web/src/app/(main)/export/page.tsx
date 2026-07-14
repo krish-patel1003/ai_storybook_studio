@@ -285,7 +285,10 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function ExportPage() {
+  useRequireAuth();
   const [book, setBook] = useState<BookOut | null>(null);
 
   if (!book) {

@@ -1857,7 +1857,10 @@ function StudioInner() {
   );
 }
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function StudioPage() {
+  useRequireAuth();
   return (
     <Suspense>
       <StudioInner />

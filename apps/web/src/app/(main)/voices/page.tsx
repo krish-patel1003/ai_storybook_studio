@@ -294,7 +294,10 @@ function VoiceCard({ profile, onDelete }: { profile: VoiceProfile; onDelete: (id
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function VoicesPage() {
+  useRequireAuth();
   const { token } = useAuth();
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [loading, setLoading] = useState(true);

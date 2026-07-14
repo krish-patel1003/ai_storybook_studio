@@ -214,7 +214,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function CanvasPage() {
+  useRequireAuth();
   const router = useRouter();
   const { token }      = useAuth();
   const { book, setBook } = useBook();

@@ -283,7 +283,10 @@ function EmptyState() {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function LibraryPage() {
+  useRequireAuth();
   const router = useRouter();
   const { token } = useAuth();
   const { setBook } = useBook();

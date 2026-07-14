@@ -498,7 +498,10 @@ function ProfileCard({
   );
 }
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function ProfilesPage() {
+  useRequireAuth();
   const { token } = useAuth();
   const [profiles, setProfiles] = useState<ChildProfile[]>([]);
   const [loading, setLoading] = useState(true);

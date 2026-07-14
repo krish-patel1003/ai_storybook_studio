@@ -488,7 +488,10 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function EditorPage() {
+  useRequireAuth();
   const { token } = useAuth();
   const { book, mergePages, setBook } = useBook();
   const lastSaved = useRelativeTime(book?.updated_at);

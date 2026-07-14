@@ -6,13 +6,20 @@ import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby } from "lu
 import { useAuth } from "@/lib/auth-context";
 import { useState, useRef, useEffect } from "react";
 
-const navItems = [
+// Full nav for signed-in users.
+const authedNavItems = [
   { href: "/create",   label: "Create"       },
   { href: "/library",  label: "Library"      },
   { href: "/studio",   label: "Studio"       },
   { href: "/reader",   label: "Reader"       },
   { href: "/voices",   label: "Voice Studio" },
   { href: "/kdp",      label: "Publish"      },
+  { href: "/pricing",  label: "Pricing"      },
+] as const;
+
+// Signed-out visitors can only reach the public sample books and pricing.
+const publicNavItems = [
+  { href: "/#samples", label: "Sample Books" },
   { href: "/pricing",  label: "Pricing"      },
 ] as const;
 
@@ -56,7 +63,7 @@ export function BookHeader() {
 
         {/* Nav */}
         <nav className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => {
+          {(user ? authedNavItems : publicNavItems).map((item) => {
             const active = pathname === item.href;
             return (
               <Link

@@ -901,7 +901,10 @@ function ReaderInner() {
   );
 }
 
+import { useRequireAuth } from "@/lib/use-require-auth";
+
 export default function ReaderPage() {
+  useRequireAuth();
   return (
     <Suspense>
       <ReaderInner />

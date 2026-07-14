@@ -750,8 +750,15 @@ function StepBar({ current }: { current: FlowState }) {
 
 export default function CreatePage() {
   const router = useRouter();
-  const { token, user } = useAuth();
+  const { token, user, isLoading: authLoading } = useAuth();
   const { setBook } = useBook();
+
+  // Creating requires an account — send anonymous visitors to sign in.
+  useEffect(() => {
+    if (!authLoading && !token) {
+      router.replace("/auth/signin?next=/create");
+    }
+  }, [authLoading, token, router]);
 
   // Prompt + settings
   const [prompt, setPrompt] = useState("");
@@ -957,6 +964,16 @@ export default function CreatePage() {
   const sortedPages = currentBook
     ? [...currentBook.pages].sort((a, b) => a.order - b.order)
     : [];
+
+  // Signed-out visitors are redirected to sign-in (effect above) — render a
+  // placeholder meanwhile so the page is never interactive without an account.
+  if (authLoading || !token) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <LgSpinner />
+      </div>
+    );
+  }
 
   return (
     <>
