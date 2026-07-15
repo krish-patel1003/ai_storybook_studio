@@ -1,7 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_ROUTES = ["/auth/signin", "/auth/signup"];
-const PUBLIC_ROUTES = ["/auth/forgot-password", "/auth/check-email", "/auth/verify-email", "/terms", "/privacy", "/admin"];
+// Routes a signed-out visitor may view: marketing landing, pricing, public
+// sample books, plus auth-support and legal/admin pages.
+const PUBLIC_PREFIXES = [
+  "/auth/forgot-password", "/auth/check-email", "/auth/verify-email",
+  "/terms", "/privacy", "/admin", "/pricing", "/read",
+];
+// Exact-match public routes (a startsWith("/") check would match everything).
+const PUBLIC_EXACT = ["/"];
 
 function isTokenValid(request: NextRequest): boolean {
   const token = request.cookies.get("sb_token")?.value;
@@ -19,7 +26,8 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAuthenticated = isTokenValid(request);
   const isAuthRoute = AUTH_ROUTES.some((r) => pathname.startsWith(r));
-  const isPublicRoute = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+  const isPublicRoute =
+    PUBLIC_EXACT.includes(pathname) || PUBLIC_PREFIXES.some((r) => pathname.startsWith(r));
 
   // Signed-in user hitting auth pages → send to app
   if (isAuthenticated && isAuthRoute) {
