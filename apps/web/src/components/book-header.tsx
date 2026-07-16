@@ -10,13 +10,13 @@ import { useState, useRef, useEffect } from "react";
 // Same nav for everyone; signed-out visitors clicking a protected link are
 // redirected to sign-in by the middleware.
 const navItems = [
-  { href: "/create",   label: "✨ Make Story"  },
-  { href: "/library",  label: "📚 My Books"    },
-  { href: "/studio",   label: "🎨 Studio"      },
-  { href: "/reader",   label: "🎧 Read Aloud"  },
-  { href: "/voices",   label: "🎙️ Voice Studio" },
-  { href: "/kdp",      label: "📖 Publish"     },
-  { href: "/pricing",  label: "🏷️ Pricing"     },
+  { href: "/create",   label: "Make Story"   },
+  { href: "/library",  label: "My Books"     },
+  { href: "/studio",   label: "Studio"       },
+  { href: "/reader",   label: "Read Aloud"   },
+  { href: "/voices",   label: "Voice Studio" },
+  { href: "/kdp",      label: "Publish"      },
+  { href: "/pricing",  label: "Pricing"      },
 ] as const;
 
 export function BookHeader() {
@@ -59,14 +59,14 @@ export function BookHeader() {
         </Link>
 
         {/* Nav */}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-0.5 md:flex">
           {navItems.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-full px-4 py-1.5 text-sm font-bold transition-all ${
+                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold transition-all ${
                   active
                     ? "bg-foreground text-background"
                     : "text-foreground hover:bg-highlight"
