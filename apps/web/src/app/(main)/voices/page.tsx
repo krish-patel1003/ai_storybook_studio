@@ -26,8 +26,18 @@ function RecordModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const { token } = useAuth();
   const [step, setStep] = useState<ModalStep>("record");
   const [blob, setBlob] = useState<Blob | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Keep a playable object URL for the recorded blob so the user can hear it
+  // before creating the voice.
+  useEffect(() => {
+    if (!blob) { setBlobUrl(null); return; }
+    const url = URL.createObjectURL(blob);
+    setBlobUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [blob]);
 
   function handleRecordingComplete(b: Blob) {
     setBlob(b);
@@ -96,9 +106,16 @@ function RecordModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         {/* Step: name */}
         {step === "name" && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-background p-3 chunky-border flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-400">
-              <Check className="h-4 w-4 shrink-0" strokeWidth={3} />
-              Recording saved — ready to clone
+            <div className="rounded-2xl bg-background p-3 chunky-border space-y-2.5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-400">
+                <Check className="h-4 w-4 shrink-0" strokeWidth={3} />
+                Recording captured — play it back before you clone
+              </div>
+              {blobUrl && (
+                <audio controls src={blobUrl} className="w-full h-10">
+                  Your browser doesn&apos;t support audio playback.
+                </audio>
+              )}
             </div>
 
             <div>

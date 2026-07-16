@@ -13,6 +13,9 @@ import { WelcomeModal } from "./WelcomeModal";
 // running as the user navigates from /create → /editor → /reader.
 const TOUR_ACTIVE_KEY = "sb_tour_active";
 const TOURED_ROUTES_KEY = "sb_toured_routes";
+// Per-device "don't ask again" flag — a belt-and-suspenders gate so the welcome
+// modal never re-nags even if the backend onboarding flag fails to persist.
+const WELCOME_DISMISSED_KEY = "sb_welcome_dismissed";
 
 interface OnboardingContextValue {
   /** Open the welcome modal (e.g. from the navbar "?" button). */
@@ -42,6 +45,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (isLoading || !user) return;
     if (user.onboarding_completed) return;
+    // Respect a prior dismissal on this device even if the server flag lags.
+    if (typeof window !== "undefined" && localStorage.getItem(WELCOME_DISMISSED_KEY) === "1") return;
     // Don't interrupt the auth pages themselves.
     if (pathname.startsWith("/auth")) return;
     setWelcomeOpen(true);
@@ -145,12 +150,14 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   const handleStart = useCallback(() => {
     setWelcomeOpen(false);
+    localStorage.setItem(WELCOME_DISMISSED_KEY, "1");
     completeOnboarding();
     startTour();
   }, [completeOnboarding, startTour]);
 
   const handleSkip = useCallback(() => {
     setWelcomeOpen(false);
+    localStorage.setItem(WELCOME_DISMISSED_KEY, "1");
     sessionStorage.removeItem(TOUR_ACTIVE_KEY);
     completeOnboarding();
   }, [completeOnboarding]);

@@ -58,7 +58,7 @@ export function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip:
             onClick={onSkip}
             className="rounded-full bg-background px-6 py-3 text-base font-extrabold chunky-border transition-transform hover:-translate-y-0.5"
           >
-            Skip for now
+            Don&apos;t show again
           </button>
         </div>
       </div>
