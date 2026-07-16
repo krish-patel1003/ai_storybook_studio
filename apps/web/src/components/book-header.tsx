@@ -10,13 +10,13 @@ import { useState, useRef, useEffect } from "react";
 // Same nav for everyone; signed-out visitors clicking a protected link are
 // redirected to sign-in by the middleware.
 const navItems = [
-  { href: "/create",   label: "Create"       },
-  { href: "/library",  label: "Library"      },
-  { href: "/studio",   label: "Studio"       },
-  { href: "/reader",   label: "Reader"       },
-  { href: "/voices",   label: "Voice Studio" },
-  { href: "/kdp",      label: "Publish"      },
-  { href: "/pricing",  label: "Pricing"      },
+  { href: "/create",   label: "✨ Make Story"  },
+  { href: "/library",  label: "📚 My Books"    },
+  { href: "/studio",   label: "🎨 Studio"      },
+  { href: "/reader",   label: "🎧 Read Aloud"  },
+  { href: "/voices",   label: "🎙️ Voice Studio" },
+  { href: "/kdp",      label: "📖 Publish"     },
+  { href: "/pricing",  label: "🏷️ Pricing"     },
 ] as const;
 
 export function BookHeader() {
