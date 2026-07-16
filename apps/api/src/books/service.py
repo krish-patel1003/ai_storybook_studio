@@ -808,9 +808,12 @@ async def narrate_page(
         if profile is None or profile.user_id != user_id:
             raise NotFoundError("Voice profile not found")
         wav = await el_synthesize(page.text, profile.elevenlabs_voice_id, age_range=book.age_range)
+        voice_label = profile.name
     else:
         raw_key = f"audio/{book_id}/{page_id}.raw.pcm"
-        wav = await synthesize(page.text, voice_name=voice_name or DEFAULT_VOICE, debug_raw_key=raw_key)
+        used_voice = voice_name or DEFAULT_VOICE
+        wav = await synthesize(page.text, voice_name=used_voice, debug_raw_key=raw_key)
+        voice_label = used_voice
 
     if page.audio_key:
         try:
@@ -819,6 +822,7 @@ async def narrate_page(
             pass
     key = minio_client.upload_audio(str(book_id), str(page_id), wav)
     page.audio_key = key
+    page.narration_voice = voice_label
     await db.commit()
     return await get_book(db, book_id, user_id)
 

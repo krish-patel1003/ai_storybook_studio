@@ -730,6 +730,11 @@ export default function EditorPage() {
             <div>
               <p className="text-sm font-extrabold">Audio narration</p>
               <p className="text-xs text-muted-foreground">{allPages.filter((p) => p.has_audio).length} of {allPages.filter((p) => p.text).length} pages narrated</p>
+              {(() => {
+                const voices = [...new Set(allPages.filter((p) => p.has_audio && p.narration_voice).map((p) => p.narration_voice))];
+                if (voices.length === 0) return null;
+                return <p className="text-xs font-bold text-primary/80 mt-0.5">🎙️ Voice: {voices.length === 1 ? voices[0] : "Multiple voices"}</p>;
+              })()}
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">

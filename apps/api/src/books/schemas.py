@@ -131,6 +131,7 @@ class PageOut(BaseModel):
     has_image: bool = False
     audio_key: str | None = Field(default=None, exclude=True)
     has_audio: bool = False
+    narration_voice: str | None = None
     text_align: str = "center"
     text_position: str = "bottom"
     canvas_overlay: dict | None = None

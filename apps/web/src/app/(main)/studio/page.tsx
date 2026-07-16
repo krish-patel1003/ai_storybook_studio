@@ -1488,6 +1488,9 @@ function StudioInner() {
                 </button>
               </div>
             )}
+            {page?.has_audio && page?.narration_voice && (
+              <p className="text-xs font-bold text-primary/80">🎙️ Narrated with {page.narration_voice}</p>
+            )}
 
             {/* Page text — shown for all pages except back cover */}
             {!page?.is_back_cover && settings.mode !== 3 && (

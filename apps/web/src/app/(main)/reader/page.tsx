@@ -719,6 +719,8 @@ function ReaderInner() {
     usePageAudio(pages, currentPage, book?.id ?? "", token, bookRef);
 
   const bookHasAnyAudio = pages.some((p) => p.has_audio);
+  const narrationVoices = [...new Set(pages.filter((p) => p.has_audio && p.narration_voice).map((p) => p.narration_voice))];
+  const narrationVoiceLabel = narrationVoices.length === 1 ? narrationVoices[0] : narrationVoices.length > 1 ? "Multiple voices" : null;
   const activeFont = FONTS.find((f) => f.id === font) ?? FONTS[0];
   const fontStack  = activeFont.stack;
   const fontWeight = activeFont.weight;
@@ -788,6 +790,14 @@ function ReaderInner() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {bookHasAnyAudio && narrationVoiceLabel && (
+            <span
+              title="Narration voice"
+              className="hidden sm:inline-flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-xs font-bold chunky-border"
+            >
+              🎙️ {narrationVoiceLabel}
+            </span>
+          )}
           {bookHasAnyAudio && (
             <button
               onClick={toggleMute}

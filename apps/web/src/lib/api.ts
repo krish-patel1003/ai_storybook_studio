@@ -85,6 +85,7 @@ export interface PageOut {
   illustration_metadata: IllustrationMetadata | null;
   has_image: boolean;
   has_audio: boolean;
+  narration_voice?: string | null;
   text_align: TextAlign;
   text_position: TextPosition;
   canvas_overlay: CanvasOverlay | null;
