@@ -180,6 +180,15 @@ const StoryPage = forwardRef<
   const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const textZoneRef = useRef<HTMLDivElement>(null);
+  // Stacked-mode text band height as a % of the page. Starts at the max (28%)
+  // and shrinks to fit shorter text so the image gets the freed space.
+  const STACKED_MAX_PCT = 28;
+  const STACKED_MIN_PCT = 13;
+  const [textZonePct, setTextZonePct] = useState(STACKED_MAX_PCT);
+  // When text is longer than the max band it overflows; keep it top-anchored
+  // then (so the start isn't clipped) — otherwise anchor it to the bottom.
+  const [textOverflows, setTextOverflows] = useState(false);
 
   // Per-page style overrides saved from studio take precedence over reader-level controls.
   // "unkempt" is treated as unset — it was the old hardcoded default, not a deliberate choice.
@@ -221,6 +230,30 @@ const StoryPage = forwardRef<
     return () => ro.disconnect();
   }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize]);
 
+  // Stacked mode: size the text band to the actual text height (capped at 28%),
+  // so short pages give more room to the illustration.
+  useEffect(() => {
+    if (page.text_mode === 1) return; // stacked only (null or 2)
+    const zone = textZoneRef.current;
+    const p = textRef.current;
+    if (!zone || !p) return;
+    const VPAD = 32; // top+bottom padding of the text band
+    const measure = () => {
+      const pageH = zone.parentElement?.clientHeight ?? 0;
+      if (pageH === 0 || !page.text) return;
+      const pct = ((p.scrollHeight + VPAD) / pageH) * 100;
+      const clamped = Math.round(Math.min(STACKED_MAX_PCT, Math.max(STACKED_MIN_PCT, pct)));
+      setTextZonePct((prev) => (prev === clamped ? prev : clamped));
+      const overflows = pct > STACKED_MAX_PCT + 0.5;
+      setTextOverflows((prev) => (prev === overflows ? prev : overflows));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (zone.parentElement) ro.observe(zone.parentElement);
+    ro.observe(p);
+    return () => ro.disconnect();
+  }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize, rawFontSize]);
+
   const textZone     = "38%";
   const gradientZone = "47%";
   const tPos   = page.text_position ?? "bottom";
@@ -234,8 +267,8 @@ const StoryPage = forwardRef<
   // Text zone is 28% (not 20%) because reader pages are narrower than studio preview,
   // causing more line-wraps; 20% clips text that fits fine in studio.
   if (isStacked) {
-    const TEXT_PCT = "28%";
-    const IMG_PCT  = "72%";
+    const TEXT_PCT = `${textZonePct}%`;
+    const IMG_PCT  = `${100 - textZonePct}%`;
     const imgTop    = isTextBottom ? "0%"      : TEXT_PCT;
     const imgBottom = isTextBottom ? TEXT_PCT   : "0%";
     const txtTop    = isTextBottom ? IMG_PCT    : "0%";
@@ -266,15 +299,18 @@ const StoryPage = forwardRef<
           }} />
         </div>
 
-        {/* Text — bottom 28% of the page */}
-        <div style={{
+        {/* Text — dynamic-height band, anchored to the bottom of the page */}
+        <div ref={textZoneRef} style={{
           position: "absolute", top: txtTop, bottom: txtBottom, left: 0, right: 0,
           background: effectiveBgColor,
-          display: "flex", alignItems: "flex-start", justifyContent: "center",
+          display: "flex",
+          alignItems: isTextBottom ? (textOverflows ? "flex-start" : "flex-end") : "flex-start",
+          justifyContent: "center",
           padding: "16px 20px", overflow: "hidden",
         }}>
           {page.text ? (
             <WordHighlight
+              ref={textRef}
               text={page.text}
               narrationTime={narrationTime}
               style={{
