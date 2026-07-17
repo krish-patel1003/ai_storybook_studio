@@ -373,17 +373,39 @@ function Mode2Preview({
   onOverflow?: (overflows: boolean) => void;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
-  useEffect(() => {
-    const el = textRef.current;
-    if (!el || !onOverflow) return;
-    onOverflow(el.scrollHeight > el.parentElement!.clientHeight);
-  });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const MAX_PCT = 28, MIN_PCT = 13;
+  // Dynamic text-band height — matches the reader: fits the text, capped at 28%.
+  const [textZonePct, setTextZonePct] = useState(MAX_PCT);
+  const [overflows, setOverflows] = useState(false);
 
   const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
   const isTextBottom = position !== "top";
 
+  useEffect(() => {
+    const el = textRef.current;
+    const container = containerRef.current;
+    if (!el || !container) return;
+    const VPAD = 32;
+    const measure = () => {
+      const h = container.clientHeight;
+      if (!h) return;
+      const pct = ((el.scrollHeight + VPAD) / h) * 100;
+      const clamped = Math.round(Math.min(MAX_PCT, Math.max(MIN_PCT, pct)));
+      setTextZonePct(prev => prev === clamped ? prev : clamped);
+      const ov = pct > MAX_PCT + 0.5;
+      setOverflows(prev => prev === ov ? prev : ov);
+      onOverflow?.(ov);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, settings.fontSize, settings.fontFamily, onOverflow]);
+
   const imgBlock = (
-    <div className="relative" style={{ flex: "18 0 0px", minHeight: 0, overflow: "hidden" }}>
+    <div className="relative" style={{ flex: "1 1 0px", minHeight: 0, overflow: "hidden" }}>
       {blobUrl ? (
         <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: "center top" }} draggable={false} />
@@ -406,8 +428,10 @@ function Mode2Preview({
 
   const textBlock = (
     <div style={{
-      flex: "7 0 0px", minHeight: 0, background: settings.bgColor,
-      display: "flex", alignItems: "flex-start", justifyContent: "center",
+      flex: `0 0 ${textZonePct}%`, minHeight: 0, background: settings.bgColor,
+      display: "flex",
+      alignItems: isTextBottom ? (overflows ? "flex-start" : "flex-end") : "flex-start",
+      justifyContent: "center",
       padding: "16px 20px", overflow: "hidden",
     }}>
       <p ref={textRef} style={{
@@ -425,7 +449,7 @@ function Mode2Preview({
   );
 
   return (
-    <div className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
+    <div ref={containerRef} className="relative overflow-hidden rounded-2xl chunky-border chunky-shadow"
       style={{ ...PREVIEW_STYLE, display: "flex", flexDirection: isTextBottom ? "column" : "column-reverse" }}>
       {imgBlock}
       {textBlock}
