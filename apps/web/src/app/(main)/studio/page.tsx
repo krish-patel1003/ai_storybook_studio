@@ -414,11 +414,11 @@ function Mode2Preview({
           <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
         </div>
       )}
-      {/* Gradient blend: transparent on the image side → solid on the text-area side */}
+      {/* Gradient blend: a tight, well-blended seam between image and text area */}
       <div style={{
         position: "absolute",
         [isTextBottom ? "bottom" : "top"]: 0,
-        left: 0, right: 0, height: "45%",
+        left: 0, right: 0, height: "20%",
         background: isTextBottom
           ? `linear-gradient(to bottom, transparent, ${settings.bgColor})`
           : `linear-gradient(to top, transparent, ${settings.bgColor})`,

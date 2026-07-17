@@ -289,9 +289,9 @@ const StoryPage = forwardRef<
               <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
             </div>
           )}
-          {/* Gradient blending into the text area */}
+          {/* Gradient blending into the text area — a tight, well-blended seam */}
           <div style={{
-            position: "absolute", left: 0, right: 0, height: "45%",
+            position: "absolute", left: 0, right: 0, height: "20%",
             [isTextBottom ? "bottom" : "top"]: 0,
             background: isTextBottom
               ? `linear-gradient(to bottom, transparent, ${effectiveBgColor})`
