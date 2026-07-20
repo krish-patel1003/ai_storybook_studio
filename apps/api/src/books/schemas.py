@@ -136,7 +136,7 @@ class PageOut(BaseModel):
     narration_voice: str | None = None
     text_align: str = "center"
     text_position: str = "bottom"
-    text_valign: str = "bottom"
+    text_valign: str = "center"
     canvas_overlay: dict | None = None
     font_size: float | None = None
     font_family: str | None = None

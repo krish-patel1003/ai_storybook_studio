@@ -373,7 +373,7 @@ function Mode1Preview({
 // ── Center: Mode 2 preview (stacked) ──────────────────────────────────────────
 
 function Mode2Preview({
-  blobUrl, text, settings, align, position, valign = "bottom", onOverflow,
+  blobUrl, text, settings, align, position, valign = "center", onOverflow,
 }: {
   blobUrl: string | null;
   text: string;
@@ -947,7 +947,7 @@ function StudioInner() {
   const [activeBoxIdx, setActiveBoxIdx] = useState(0);
   const [pagePosition, setPagePosition] = useState<TextPosition>("bottom");
   const [pageAlign,    setPageAlign]    = useState<TextAlign>("center");
-  const [pageVAlign,   setPageVAlign]   = useState<TextPosition>("bottom");
+  const [pageVAlign,   setPageVAlign]   = useState<TextPosition>("center");
   const [saving,        setSaving]       = useState(false);
   const [dirty,         setDirty]        = useState(false);
   // Undo/redo history (text snapshots only; settings/position changes are lightweight)
@@ -1002,7 +1002,7 @@ function StudioInner() {
     setText((page.text ?? "").replace(/\n{2,}/g, "\n"));
     setPagePosition((page.text_position as TextPosition) ?? (page.is_cover ? "bottom" : "bottom"));
     setPageAlign((page.text_align as TextAlign) ?? "center");
-    setPageVAlign((page.text_valign as TextPosition) ?? "bottom");
+    setPageVAlign((page.text_valign as TextPosition) ?? "center");
     // Cover page: show its own style (Kranky/32/white by default, or saved per-page values).
     // Content pages: always restore the true book-level settings from the ref, so that visiting
     // the cover and coming back never corrupts the content-page font/size/color.

@@ -306,7 +306,7 @@ const StoryPage = forwardRef<
           display: "flex",
           // Vertical alignment chosen in studio; fall back to top when overflowing so the start isn't clipped.
           alignItems: textOverflows ? "flex-start"
-            : (page.text_valign === "top" ? "flex-start" : page.text_valign === "center" ? "center" : "flex-end"),
+            : (page.text_valign === "top" ? "flex-start" : page.text_valign === "bottom" ? "flex-end" : "center"),
           justifyContent: "center",
           padding: "16px 20px", overflow: "hidden",
         }}>
