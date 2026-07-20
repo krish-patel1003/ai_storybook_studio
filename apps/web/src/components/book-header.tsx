@@ -2,21 +2,25 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby, HelpCircle } from "lucide-react";
+import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby, HelpCircle, Palette, Mic, BookMarked, Tag } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useOnboarding } from "@/components/onboarding/OnboardingProvider";
 import { useState, useRef, useEffect } from "react";
 
 // Same nav for everyone; signed-out visitors clicking a protected link are
 // redirected to sign-in by the middleware.
-const navItems = [
-  { href: "/create",   label: "Make Story"   },
-  { href: "/library",  label: "My Books"     },
-  { href: "/studio",   label: "Studio"       },
-  { href: "/reader",   label: "Read Aloud"   },
-  { href: "/voices",   label: "Voice Studio" },
-  { href: "/kdp",      label: "Publish"      },
-  { href: "/pricing",  label: "Pricing"      },
+const primaryNav = [
+  { href: "/create",  label: "Make Story" },
+  { href: "/library", label: "My Books"   },
+  { href: "/reader",  label: "Read Aloud" },
+] as const;
+
+// Secondary items live in the "More" dropdown with a one-line description.
+const moreNav = [
+  { href: "/studio",  label: "Studio",       icon: Palette,    desc: "Design page layouts, fonts & colors" },
+  { href: "/voices",  label: "Voice Studio", icon: Mic,        desc: "Record or clone a narration voice" },
+  { href: "/kdp",     label: "Publish",      icon: BookMarked, desc: "Export a print-ready PDF for Amazon KDP" },
+  { href: "/pricing", label: "Pricing",      icon: Tag,        desc: "Plans, page limits & upgrades" },
 ] as const;
 
 export function BookHeader() {
@@ -25,13 +29,18 @@ export function BookHeader() {
   const { user, logout, isLoading } = useAuth();
   const onboarding = useOnboarding();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+      }
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -60,7 +69,7 @@ export function BookHeader() {
 
         {/* Nav */}
         <nav className="hidden items-center gap-0.5 md:flex">
-          {navItems.map((item) => {
+          {primaryNav.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -76,6 +85,47 @@ export function BookHeader() {
               </Link>
             );
           })}
+
+          {/* More dropdown */}
+          <div className="relative" ref={moreRef}>
+            <button
+              onClick={() => setMoreOpen((o) => !o)}
+              className={`flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold transition-all ${
+                moreNav.some((m) => m.href === pathname)
+                  ? "bg-foreground text-background"
+                  : "text-foreground hover:bg-highlight"
+              }`}
+            >
+              More
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${moreOpen ? "rotate-180" : ""}`} strokeWidth={3} />
+            </button>
+
+            {moreOpen && (
+              <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl bg-card p-1.5 chunky-border chunky-shadow z-50">
+                {moreNav.map((item) => {
+                  const active = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMoreOpen(false)}
+                      className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+                        active ? "bg-highlight" : "hover:bg-highlight"
+                      }`}
+                    >
+                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border">
+                        <item.icon className="h-4 w-4" strokeWidth={2.5} />
+                      </span>
+                      <span>
+                        <span className="block text-sm font-extrabold leading-tight">{item.label}</span>
+                        <span className="block text-xs text-muted-foreground leading-snug">{item.desc}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Right side */}
