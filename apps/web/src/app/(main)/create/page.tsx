@@ -57,6 +57,9 @@ const TONES_PRESET = [
   "Animals", "Space", "Ocean", "Bedtime",
 ];
 
+// Shown first; the rest are revealed with a "+ More" toggle.
+const TONES_FAVORITES = ["Funny", "Kindness", "Adventurous", "Magical", "Bedtime"];
+
 const PAGE_COUNT_OPTIONS = [6, 8, 10, 12, 15, 20, 24, 30, 40];
 const PROMPT_MAX_WORDS = 200;
 
@@ -171,6 +174,7 @@ function useWritingMessages(brief: BriefOut | null, intervalMs = 2400) {
 // ── Spinner message pools ─────────────────────────────────────────────────────
 
 const EXPAND_MSGS = [
+  "✨ Your story is coming to life…",
   "Imagining the characters…",
   "Sketching the world…",
   "Finding the story's soul…",
@@ -222,6 +226,11 @@ function OptionsPanel({
   safety: boolean; setSafety: (v: boolean) => void;
   locked?: boolean;
 }) {
+  const [showAllThemes, setShowAllThemes] = useState(false);
+  // Favorites first; a selected non-favorite stays visible even when collapsed.
+  const visiblePresets = showAllThemes
+    ? TONES_PRESET
+    : [...new Set([...TONES_FAVORITES, ...tone.filter((t) => TONES_PRESET.includes(t))])];
   return (
     <div className={`space-y-5 ${locked ? "opacity-60 pointer-events-none select-none" : ""}`}>
       {locked && (
@@ -244,7 +253,7 @@ function OptionsPanel({
       <div data-tour="create-themes">
         <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes &amp; Tone</p>
         <div className="flex flex-wrap gap-1.5">
-          {[...TONES_PRESET, ...customTones].map((t) => {
+          {[...visiblePresets, ...customTones].map((t) => {
             const on = tone.includes(t); const isCustom = customTones.includes(t);
             return (
               <button key={t} onClick={() => setTone(on ? tone.filter((x) => x !== t) : [...tone, t])}
@@ -259,6 +268,10 @@ function OptionsPanel({
               </button>
             );
           })}
+          <button type="button" onClick={() => setShowAllThemes((v) => !v)}
+            className="rounded-full px-3 py-1.5 text-xs font-extrabold text-primary chunky-border bg-background hover:-translate-y-0.5 transition-transform">
+            {showAllThemes ? "Show less" : "+ More"}
+          </button>
           <div className="flex items-center gap-1">
             <input value={customToneInput} onChange={(e) => setCustomToneInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && customToneInput.trim()) { const v = customToneInput.trim(); if (!customTones.includes(v) && !TONES_PRESET.includes(v)) { setCustomTones([...customTones, v]); setTone([...tone, v]); } setCustomToneInput(""); } }}
@@ -711,10 +724,10 @@ function EnhancedPromptReview({
 // ── Step progress indicator ───────────────────────────────────────────────────
 
 const STEPS = [
-  { id: "input",   label: "Prompt"  },
-  { id: "concept", label: "Concept" },
-  { id: "brief",   label: "Brief"   },
-  { id: "review",  label: "Review"  },
+  { id: "input",   label: "✍️ Idea"  },
+  { id: "concept", label: "💡 Story" },
+  { id: "brief",   label: "📖 Book"  },
+  { id: "review",  label: "✅ Review" },
 ];
 
 type FlowState = "profile" | "input" | "enhancing" | "enhanced" | "brief" | "writing" | "pages";
@@ -1065,8 +1078,8 @@ export default function CreatePage() {
                 {flowState === "input" && (
                   <motion.div key="input" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}
                     className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
-                    <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">What&apos;s your story about?</h1>
-                    <p className="mt-2 text-muted-foreground">One sentence is enough — we&apos;ll build the rest.</p>
+                    <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">✨ Let&apos;s Create Your Story!</h1>
+                    <p className="mt-2 text-muted-foreground">Tell us one idea, and we&apos;ll turn it into a magical story. ✨</p>
 
                     <div className="relative mt-6" data-tour="create-prompt">
                       <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
@@ -1089,7 +1102,7 @@ export default function CreatePage() {
                       >
                         <div className="flex items-center gap-2 font-extrabold text-sm">
                           <Lightbulb className="h-4 w-4 text-amber-500" strokeWidth={2.5} />
-                          {brainstormLoading ? "Generating ideas…" : "Need inspiration? Brainstorm ideas"}
+                          {brainstormLoading ? "Generating ideas…" : "💡 Need an idea?"}
                         </div>
                         {brainstormLoading
                           ? <XsSpinner />
@@ -1122,9 +1135,9 @@ export default function CreatePage() {
                     <div className="mt-6" data-tour="create-enhance">
                       <button onClick={handleExpandPrompt} disabled={prompt.trim().length < 3}
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
-                        <Wand2 className="h-5 w-5" strokeWidth={2.5} /> Enhance my story →
+                        <Wand2 className="h-5 w-5" strokeWidth={2.5} /> ✨ Create My Story →
                       </button>
-                      <p className="mt-2 text-center text-xs text-muted-foreground">AI expands your idea into a full concept — review it, then generate the brief.</p>
+                      <p className="mt-2 text-center text-xs text-muted-foreground">We&apos;ll turn your idea into a full story concept — you can review and tweak it next.</p>
                     </div>
 
                     {/* Mobile settings */}
@@ -1152,8 +1165,14 @@ export default function CreatePage() {
                     className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
 
                     <div className="mb-2">
-                      <h1 className="font-display text-3xl font-black md:text-4xl">Your story concept</h1>
-                      <p className="mt-1 text-sm text-muted-foreground">AI expanded your idea — review it, then generate your brief.</p>
+                      <h1 className="font-display text-3xl font-black md:text-4xl">
+                        {flowState === "enhancing" ? "✨ Your story is coming to life…" : "Your story concept"}
+                      </h1>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {flowState === "enhancing"
+                          ? "Hang tight — we're turning your idea into a magical story."
+                          : "AI expanded your idea — review it, then generate your brief."}
+                      </p>
                     </div>
 
                     {/* Original prompt pill */}
@@ -1429,7 +1448,7 @@ export default function CreatePage() {
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
                 <span className="font-display text-sm font-black uppercase tracking-wide">
-                  {flowState === "input" ? "Story settings"
+                  {flowState === "input" ? "✨ Story Magic"
                     : flowState === "pages" ? "Brief & settings"
                     : "Settings locked"}
                 </span>
