@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Mic, Sparkles, RefreshCw, Play, Pause,
   Square as StopIcon, Volume2, Check, Minus, Plus, AlignLeft,
   AlignCenter, AlignRight, ChevronLeft, ChevronRight, ImageIcon,
-  Layers, Grid3X3, Paintbrush, Pipette, Trash2, Eye, Save, Undo2, Redo2, ChevronDown,
+  Layers, Grid3X3, Paintbrush, Pipette, Trash2, Eye, Save, Undo2, Redo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -939,7 +939,6 @@ function StudioInner() {
   const [pageIdx,  setPageIdx]  = useState(0);
   const [text,          setText]         = useState("");
   const [settings,     setSettings]     = useState<BookTextSettings>(DEFAULT_SETTINGS);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const bookSettingsRef = useRef<BookTextSettings>(DEFAULT_SETTINGS);
   const [boxes,        setBoxes]        = useState<CanvasBox[]>([]);
   const [activeBoxIdx, setActiveBoxIdx] = useState(0);
@@ -1548,16 +1547,22 @@ function StudioInner() {
             {!page?.is_cover && !page?.is_back_cover && (
             <div>
               <SL>Book layout</SL>
-              {/* Two primary layouts */}
+              {/* All four layouts as equal-weight buttons */}
               <div className="grid grid-cols-2 gap-1.5">
                 {([
-                  { mode: 1 as TextMode, icon: Layers,  label: "Words on Picture", desc: "Text over the image" },
-                  { mode: 2 as TextMode, icon: Grid3X3, label: "Picture & Story",  desc: "Image + text below" },
+                  { mode: 1 as TextMode, plus: false, icon: Layers,  label: "Words on Picture",  desc: "Text over the image" },
+                  { mode: 2 as TextMode, plus: false, icon: Grid3X3, label: "Picture & Story",   desc: "Image + text below" },
+                  { mode: 1 as TextMode, plus: true,  icon: Layers,  label: "Words on Picture+", desc: "Adjustable text size" },
+                  { mode: 2 as TextMode, plus: true,  icon: Grid3X3, label: "Picture & Story+",  desc: "Adjustable text size" },
                 ] as const).map(opt => {
-                  const active = settings.mode === opt.mode && !settings.plus;
+                  const active = settings.mode === opt.mode && settings.plus === opt.plus;
                   return (
-                    <button key={opt.mode}
-                      onClick={() => patchSettings({ mode: opt.mode, plus: false, textAreaPct: TEXT_AREA_DEFAULT_PCT })}
+                    <button key={`${opt.mode}-${opt.plus}`}
+                      onClick={() => patchSettings({
+                        mode: opt.mode,
+                        plus: opt.plus,
+                        textAreaPct: opt.plus ? (settings.textAreaPct || TEXT_AREA_DEFAULT_PCT) : TEXT_AREA_DEFAULT_PCT,
+                      })}
                       className={cn("flex flex-col items-center gap-0.5 rounded-xl py-2 px-1 chunky-border transition-colors",
                         active ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                       <opt.icon className="h-4 w-4" strokeWidth={2} />
@@ -1569,33 +1574,6 @@ function StudioInner() {
                   );
                 })}
               </div>
-
-              {/* Advanced: the "+" variants with a text-area-size slider */}
-              <button
-                onClick={() => setAdvancedOpen(o => !o)}
-                className="mt-2 flex w-full items-center justify-between rounded-xl bg-background px-3 py-2 text-xs font-extrabold chunky-border hover:bg-muted transition-colors"
-              >
-                <span>Advanced layouts</span>
-                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", advancedOpen && "rotate-180")} strokeWidth={2.5} />
-              </button>
-              {advancedOpen && (
-                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                  {([
-                    { mode: 1 as TextMode, label: "Words on Picture+" },
-                    { mode: 2 as TextMode, label: "Picture & Story+" },
-                  ] as const).map(opt => {
-                    const active = settings.mode === opt.mode && settings.plus;
-                    return (
-                      <button key={opt.mode}
-                        onClick={() => patchSettings({ mode: opt.mode, plus: true, textAreaPct: settings.textAreaPct || TEXT_AREA_DEFAULT_PCT })}
-                        className={cn("rounded-xl py-2 px-1 text-[10px] font-extrabold text-center leading-tight chunky-border transition-colors",
-                          active ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
 
               {/* Text Area Size slider — only for "+" variants */}
               {settings.plus && (
