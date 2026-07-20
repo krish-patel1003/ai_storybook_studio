@@ -41,6 +41,7 @@ class UpdatePageIn(BaseModel):
     text: str | None = None
     text_align: str | None = Field(default=None, pattern=r"^(left|center|right)$")
     text_position: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
+    text_valign: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
     canvas_overlay: dict | None = None
     font_size: float | None = None
     font_family: str | None = None
@@ -134,6 +135,7 @@ class PageOut(BaseModel):
     narration_voice: str | None = None
     text_align: str = "center"
     text_position: str = "bottom"
+    text_valign: str = "bottom"
     canvas_overlay: dict | None = None
     font_size: float | None = None
     font_family: str | None = None

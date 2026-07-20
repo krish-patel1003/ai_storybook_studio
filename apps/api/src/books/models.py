@@ -175,6 +175,8 @@ class Page(Base):
     # Text layout — applied in reader and PDF export
     text_align: Mapped[str] = mapped_column(String(10), nullable=False, server_default="center")
     text_position: Mapped[str] = mapped_column(String(10), nullable=False, server_default="bottom")
+    # Vertical alignment of the text within its area (stacked mode): top | center | bottom
+    text_valign: Mapped[str] = mapped_column(String(10), nullable=False, server_default="bottom")
 
     # Canvas-style text overlay — set by the canvas editor; overrides text_align/text_position when present
     # Schema: { x, y, w, fontSize, fontFamily, textColor, bgStyle, bgOpacity }

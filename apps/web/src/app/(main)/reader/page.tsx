@@ -304,7 +304,9 @@ const StoryPage = forwardRef<
           position: "absolute", top: txtTop, bottom: txtBottom, left: 0, right: 0,
           background: effectiveBgColor,
           display: "flex",
-          alignItems: isTextBottom ? (textOverflows ? "flex-start" : "flex-end") : "flex-start",
+          // Vertical alignment chosen in studio; fall back to top when overflowing so the start isn't clipped.
+          alignItems: textOverflows ? "flex-start"
+            : (page.text_valign === "top" ? "flex-start" : page.text_valign === "center" ? "center" : "flex-end"),
           justifyContent: "center",
           padding: "16px 20px", overflow: "hidden",
         }}>

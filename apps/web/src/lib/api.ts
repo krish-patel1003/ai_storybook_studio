@@ -88,6 +88,7 @@ export interface PageOut {
   narration_voice?: string | null;
   text_align: TextAlign;
   text_position: TextPosition;
+  text_valign?: TextPosition;
   canvas_overlay: CanvasOverlay | null;
   font_size: number | null;
   font_family: string | null;
@@ -278,6 +279,7 @@ export interface UpdatePageIn {
   text?: string;
   text_align?: TextAlign;
   text_position?: TextPosition;
+  text_valign?: TextPosition;
   canvas_overlay?: CanvasOverlay | null;
   font_size?: number;
   font_family?: string;

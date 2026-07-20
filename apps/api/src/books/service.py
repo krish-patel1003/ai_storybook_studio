@@ -354,6 +354,8 @@ async def update_page(
         page.text_align = data.text_align
     if data.text_position is not None:
         page.text_position = data.text_position
+    if data.text_valign is not None:
+        page.text_valign = data.text_valign
     if "canvas_overlay" in data.model_fields_set:
         page.canvas_overlay = data.canvas_overlay
     if data.font_size is not None:

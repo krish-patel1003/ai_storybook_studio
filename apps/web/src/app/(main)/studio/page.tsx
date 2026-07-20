@@ -373,13 +373,14 @@ function Mode1Preview({
 // ── Center: Mode 2 preview (stacked) ──────────────────────────────────────────
 
 function Mode2Preview({
-  blobUrl, text, settings, align, position, onOverflow,
+  blobUrl, text, settings, align, position, valign = "bottom", onOverflow,
 }: {
   blobUrl: string | null;
   text: string;
   settings: BookTextSettings;
   align: TextAlign;
   position: TextPosition;
+  valign?: TextPosition;
   onOverflow?: (overflows: boolean) => void;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -428,11 +429,13 @@ function Mode2Preview({
     </div>
   );
 
+  const valignItems = valign === "top" ? "flex-start" : valign === "center" ? "center" : "flex-end";
   const textBlock = (
     <div style={{
       flex: `0 0 ${textZonePct}%`, minHeight: 0, background: settings.bgColor,
       display: "flex",
-      alignItems: isTextBottom ? (overflows ? "flex-start" : "flex-end") : "flex-start",
+      // Chosen vertical align, but fall back to top when overflowing so the start isn't clipped.
+      alignItems: overflows ? "flex-start" : valignItems,
       justifyContent: "center",
       padding: "16px 20px", overflow: "hidden",
     }}>
@@ -944,6 +947,7 @@ function StudioInner() {
   const [activeBoxIdx, setActiveBoxIdx] = useState(0);
   const [pagePosition, setPagePosition] = useState<TextPosition>("bottom");
   const [pageAlign,    setPageAlign]    = useState<TextAlign>("center");
+  const [pageVAlign,   setPageVAlign]   = useState<TextPosition>("bottom");
   const [saving,        setSaving]       = useState(false);
   const [dirty,         setDirty]        = useState(false);
   // Undo/redo history (text snapshots only; settings/position changes are lightweight)
@@ -959,7 +963,7 @@ function StudioInner() {
 
   const canvasRef  = useRef<HTMLDivElement>(null);
   const dragRef    = useRef<{ handle: DragHandle; sx: number; sy: number; snap: {x:number;y:number;w:number;h:number}; boxIdx: number } | null>(null);
-  const latestRef  = useRef({ text, boxes, settings, pagePosition, pageAlign });
+  const latestRef  = useRef({ text, boxes, settings, pagePosition, pageAlign, pageVAlign });
   const undoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSnapshotRef = useRef<string>("");
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -998,6 +1002,7 @@ function StudioInner() {
     setText((page.text ?? "").replace(/\n{2,}/g, "\n"));
     setPagePosition((page.text_position as TextPosition) ?? (page.is_cover ? "bottom" : "bottom"));
     setPageAlign((page.text_align as TextAlign) ?? "center");
+    setPageVAlign((page.text_valign as TextPosition) ?? "bottom");
     // Cover page: show its own style (Kranky/32/white by default, or saved per-page values).
     // Content pages: always restore the true book-level settings from the ref, so that visiting
     // the cover and coming back never corrupts the content-page font/size/color.
@@ -1025,7 +1030,7 @@ function StudioInner() {
   }, [pageIdx, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep latestRef in sync
-  useEffect(() => { latestRef.current = { text, boxes, settings, pagePosition, pageAlign }; });
+  useEffect(() => { latestRef.current = { text, boxes, settings, pagePosition, pageAlign, pageVAlign }; });
 
   // Auto-start illustration if coming from outline
   useEffect(() => {
@@ -1066,7 +1071,7 @@ function StudioInner() {
 
   const save = useCallback(async () => {
     if (!token || !book || !page) return;
-    const { text: tx, boxes: bxs, settings: st, pagePosition: pos, pageAlign: align } = latestRef.current;
+    const { text: tx, boxes: bxs, settings: st, pagePosition: pos, pageAlign: align, pageVAlign: valign } = latestRef.current;
 
     // Persist canvas boxes locally
     if (st.mode === 3) persistBoxes(book.id, page.id, bxs);
@@ -1108,6 +1113,7 @@ function StudioInner() {
         text: tx,
         text_align: align,
         text_position: pos,
+        text_valign: valign,
         canvas_overlay: overlayToSave,
       };
       // Cover page saves its own font/size/color; content pages use book-level bulk save below
@@ -1621,6 +1627,22 @@ function StudioInner() {
                   </div>
                 </div>
                 <div>
+                  <SL>Vertical align</SL>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([
+                      { id: "top" as TextPosition,    label: "Top"    },
+                      { id: "center" as TextPosition, label: "Center" },
+                      { id: "bottom" as TextPosition, label: "Bottom" },
+                    ] as const).map(({ id, label }) => (
+                      <button key={id} onClick={() => { setPageVAlign(id); markDirty(); }}
+                        className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
+                          pageVAlign === id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <SL>Text area color</SL>
                   <div className="flex flex-wrap gap-2">
                     {["#faf8f3", "#ffffff", "#1a1a2e", "#141228", "#fff7ed", "#f0f9ff"].map(c => (
@@ -1677,7 +1699,7 @@ function StudioInner() {
               onOverflow={setTextOverflows} />
           ) : (
             <Mode2Preview blobUrl={blobUrl} text={text} settings={settings}
-              align={pageAlign} position={pagePosition} onOverflow={setTextOverflows} />
+              align={pageAlign} position={pagePosition} valign={pageVAlign} onOverflow={setTextOverflows} />
           )}
 
           {/* Overflow warning — shown in modes 1 & 2 when text exceeds the text zone */}
