@@ -8,7 +8,7 @@ import {
   ArrowLeft, Download, Mic, Sparkles, RefreshCw, Play, Pause,
   Square as StopIcon, Volume2, Check, Minus, Plus, AlignLeft,
   AlignCenter, AlignRight, ChevronLeft, ChevronRight, ImageIcon,
-  Layers, Grid3X3, Paintbrush, Pipette, Trash2, Eye, Save, Undo2, Redo2,
+  Layers, Grid3X3, Paintbrush, Pipette, Trash2, Eye, Save, Undo2, Redo2, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -116,8 +116,16 @@ function useIllJob(bookId: string) {
 
 type TextMode = 1 | 2 | 3;
 
+// Text-area height (% of page). Base layouts use the fixed default; the "+"
+// (plus) variants let the user pick anywhere in [MIN, MAX].
+const TEXT_AREA_DEFAULT_PCT = 25;
+const TEXT_AREA_MIN_PCT = 20;
+const TEXT_AREA_MAX_PCT = 30;
+
 interface BookTextSettings {
-  mode: TextMode;
+  mode: TextMode;        // 1 = Words on Picture (overlay), 2 = Picture & Story (stacked)
+  plus: boolean;         // "+" variant → expose the Text Area Size slider
+  textAreaPct: number;   // used when plus is true (20–30); base is fixed at 25
   fontSize: number;
   fontFamily: FontId;
   textColor: string;
@@ -130,7 +138,9 @@ interface BookTextSettings {
 }
 
 const DEFAULT_SETTINGS: BookTextSettings = {
-  mode: 2, // stacked is the default
+  mode: 2, // Picture & Story (stacked) is the default
+  plus: false,
+  textAreaPct: TEXT_AREA_DEFAULT_PCT,
   fontSize: 14,
   fontFamily: "nunito",
   textColor: "#000000",
@@ -374,35 +384,27 @@ function Mode2Preview({
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const MAX_PCT = 28, MIN_PCT = 13;
-  // Dynamic text-band height — matches the reader: fits the text, capped at 28%.
-  const [textZonePct, setTextZonePct] = useState(MAX_PCT);
   const [overflows, setOverflows] = useState(false);
 
   const font = READER_FONTS.find(f => f.id === settings.fontFamily) ?? READER_FONTS[0];
   const isTextBottom = position !== "top";
+  // Base layouts use a fixed 25% band; the "+" variant uses the slider value.
+  const textZonePct = settings.plus ? settings.textAreaPct : TEXT_AREA_DEFAULT_PCT;
 
+  // Detect whether the text fits the chosen band (drives the AI-refit hint).
   useEffect(() => {
     const el = textRef.current;
-    const container = containerRef.current;
-    if (!el || !container) return;
-    const VPAD = 32;
-    const measure = () => {
-      const h = container.clientHeight;
-      if (!h) return;
-      const pct = ((el.scrollHeight + VPAD) / h) * 100;
-      const clamped = Math.round(Math.min(MAX_PCT, Math.max(MIN_PCT, pct)));
-      setTextZonePct(prev => prev === clamped ? prev : clamped);
-      const ov = pct > MAX_PCT + 0.5;
+    if (!el) return;
+    const check = () => {
+      const ov = el.scrollHeight > el.clientHeight + 1;
       setOverflows(prev => prev === ov ? prev : ov);
       onOverflow?.(ov);
     };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(container);
+    check();
+    const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [text, settings.fontSize, settings.fontFamily, onOverflow]);
+  }, [text, settings.fontSize, settings.fontFamily, textZonePct, onOverflow]);
 
   const imgBlock = (
     <div className="relative" style={{ flex: "1 1 0px", minHeight: 0, overflow: "hidden" }}>
@@ -937,6 +939,7 @@ function StudioInner() {
   const [pageIdx,  setPageIdx]  = useState(0);
   const [text,          setText]         = useState("");
   const [settings,     setSettings]     = useState<BookTextSettings>(DEFAULT_SETTINGS);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const bookSettingsRef = useRef<BookTextSettings>(DEFAULT_SETTINGS);
   const [boxes,        setBoxes]        = useState<CanvasBox[]>([]);
   const [activeBoxIdx, setActiveBoxIdx] = useState(0);
@@ -1541,33 +1544,74 @@ function StudioInner() {
 
             {!page?.is_back_cover && !page?.is_cover && <div className="border-t-[1.5px] border-foreground/15" />}
 
-            {/* Text layout mode selector — hidden for cover and back cover */}
+            {/* Book layout selector — hidden for cover and back cover */}
             {!page?.is_cover && !page?.is_back_cover && (
             <div>
-              <SL>Text layout</SL>
-              <div className="grid grid-cols-3 gap-1.5">
+              <SL>Book layout</SL>
+              {/* Two primary layouts */}
+              <div className="grid grid-cols-2 gap-1.5">
                 {([
-                  { id: 1 as TextMode, icon: Layers,      label: "Overlay", desc: "Over image", disabled: false },
-                  { id: 2 as TextMode, icon: Grid3X3,     label: "Stacked", desc: "Split view", disabled: false },
-                  { id: 3 as TextMode, icon: Paintbrush,  label: "Canvas",  desc: "Coming soon", disabled: true },
-                ] as const).map(opt => (
-                  <button key={opt.id}
-                    onClick={() => !opt.disabled && patchSettings({ mode: opt.id })}
-                    disabled={opt.disabled}
-                    className={cn("flex flex-col items-center gap-0.5 rounded-xl py-2 px-1 chunky-border transition-colors",
-                      opt.disabled
-                        ? "bg-background opacity-40 cursor-not-allowed"
-                        : settings.mode === opt.id
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background hover:bg-muted")}>
-                    <opt.icon className="h-4 w-4" strokeWidth={2} />
-                    <span className="text-[10px] font-extrabold">{opt.label}</span>
-                    <span className={cn("text-[8px]", settings.mode === opt.id && !opt.disabled ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                      {opt.desc}
-                    </span>
-                  </button>
-                ))}
+                  { mode: 1 as TextMode, icon: Layers,  label: "Words on Picture", desc: "Text over the image" },
+                  { mode: 2 as TextMode, icon: Grid3X3, label: "Picture & Story",  desc: "Image + text below" },
+                ] as const).map(opt => {
+                  const active = settings.mode === opt.mode && !settings.plus;
+                  return (
+                    <button key={opt.mode}
+                      onClick={() => patchSettings({ mode: opt.mode, plus: false, textAreaPct: TEXT_AREA_DEFAULT_PCT })}
+                      className={cn("flex flex-col items-center gap-0.5 rounded-xl py-2 px-1 chunky-border transition-colors",
+                        active ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                      <opt.icon className="h-4 w-4" strokeWidth={2} />
+                      <span className="text-[10px] font-extrabold text-center leading-tight">{opt.label}</span>
+                      <span className={cn("text-[8px] text-center leading-tight", active ? "text-primary-foreground/70" : "text-muted-foreground")}>
+                        {opt.desc}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Advanced: the "+" variants with a text-area-size slider */}
+              <button
+                onClick={() => setAdvancedOpen(o => !o)}
+                className="mt-2 flex w-full items-center justify-between rounded-xl bg-background px-3 py-2 text-xs font-extrabold chunky-border hover:bg-muted transition-colors"
+              >
+                <span>Advanced layouts</span>
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", advancedOpen && "rotate-180")} strokeWidth={2.5} />
+              </button>
+              {advancedOpen && (
+                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                  {([
+                    { mode: 1 as TextMode, label: "Words on Picture+" },
+                    { mode: 2 as TextMode, label: "Picture & Story+" },
+                  ] as const).map(opt => {
+                    const active = settings.mode === opt.mode && settings.plus;
+                    return (
+                      <button key={opt.mode}
+                        onClick={() => patchSettings({ mode: opt.mode, plus: true, textAreaPct: settings.textAreaPct || TEXT_AREA_DEFAULT_PCT })}
+                        className={cn("rounded-xl py-2 px-1 text-[10px] font-extrabold text-center leading-tight chunky-border transition-colors",
+                          active ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Text Area Size slider — only for "+" variants */}
+              {settings.plus && (
+                <div className="mt-2 rounded-xl bg-background p-3 chunky-border">
+                  <div className="flex items-center justify-between text-[11px] font-extrabold">
+                    <span>Text area size</span>
+                    <span>{settings.textAreaPct}%</span>
+                  </div>
+                  <input
+                    type="range" min={TEXT_AREA_MIN_PCT} max={TEXT_AREA_MAX_PCT} step={1}
+                    value={settings.textAreaPct}
+                    onChange={e => patchSettings({ textAreaPct: Number(e.target.value) })}
+                    className="mt-1.5 w-full accent-primary"
+                  />
+                </div>
+              )}
             </div>
             )}
 
