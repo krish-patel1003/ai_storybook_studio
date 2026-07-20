@@ -1150,11 +1150,13 @@ function StudioInner() {
     setDirty(true);
   }
 
-  // Auto-save 2 seconds after the last change
+  // Auto-save shortly after the last change (a small debounce groups rapid
+  // keystrokes / slider drags). Navigating pages flushes this immediately, so
+  // a change can never be dropped by switching pages before it fires.
   useEffect(() => {
     if (!dirty) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => { save(); }, 2000);
+    autoSaveTimerRef.current = setTimeout(() => { save(); }, 500);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [dirty, save]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1206,6 +1208,13 @@ function StudioInner() {
   }
 
   function switchPage(idx: number) {
+    // Flush any pending edit for the current page BEFORE navigating, so switching
+    // pages can never drop an unsaved change. save() reads the current page's id
+    // and values synchronously, so firing it here (pre-navigation) is correct.
+    if (dirty) {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      save();
+    }
     setPageIdx(idx);
   }
 
