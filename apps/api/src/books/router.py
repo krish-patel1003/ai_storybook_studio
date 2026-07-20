@@ -605,18 +605,6 @@ async def illustrate_back_cover(
     return BookOut.model_validate(updated)
 
 
-@router.post("/{book_id}/pages/{page_id}/split", response_model=BookOut)
-async def split_page(
-    page_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    book: Book = Depends(owned_book),
-) -> BookOut:
-    from fastapi import HTTPException
-    try:
-        updated = await service.split_page(db, book.id, page_id, book.user_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return BookOut.model_validate(updated)
 
 
 @router.get("/{book_id}/pages/{page_id}/image")

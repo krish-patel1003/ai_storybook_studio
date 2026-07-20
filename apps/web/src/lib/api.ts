@@ -647,12 +647,6 @@ export const api = {
     pageAudioUrl: (bookId: string, pageId: string) =>
       `${API_URL}/books/${bookId}/pages/${pageId}/audio`,
 
-    splitPage: (token: string, bookId: string, pageId: string) =>
-      request<BookOut>(`/books/${bookId}/pages/${pageId}/split`, {
-        method: "POST",
-        headers: authed(token),
-      }),
-
     createBackCover: (token: string, bookId: string) =>
       request<BookOut>(`/books/${bookId}/back-cover`, {
         method: "POST",

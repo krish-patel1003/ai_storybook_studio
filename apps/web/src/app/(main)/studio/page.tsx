@@ -950,7 +950,6 @@ function StudioInner() {
   const [undoStack,     setUndoStack]    = useState<string[]>([]);
   const [redoStack,     setRedoStack]    = useState<string[]>([]);
   const [textOverflows, setTextOverflows] = useState(false);
-  const [splitting,     setSplitting]    = useState(false);
   const [backCoverLoading, setBackCoverLoading] = useState(false);
 
   const [illustrating, setIllustrating]  = useState(false);
@@ -1285,44 +1284,6 @@ function StudioInner() {
     setBoxes(prev => prev.filter((_, i) => i !== idx));
     setActiveBoxIdx(Math.max(0, idx - 1));
     markDirty();
-  }
-
-  // ── Split page ────────────────────────────────────────────────────────────
-
-  async function splitPage() {
-    if (!token || !book || !page) return;
-    setSplitting(true);
-    try {
-      const updated = await api.books.splitPage(token, book.id, page.id);
-      setBook(updated as unknown as BookOut);
-      setTextOverflows(false);
-      // Navigate to the newly inserted page so the user can see it and so
-      // the sync useEffect re-runs (same page.id means it won't fire otherwise)
-      const newIdx = pageIdx + 1;
-      setPageIdx(newIdx);
-      // Auto-illustrate the new page; fire-and-forget so split completes immediately
-      const newPageId = (updated as any).pages?.[newIdx]?.id as string | undefined;
-      if (newPageId) {
-        toast.success(`Page ${page.order} split — illustrating new page ${page.order + 1}…`);
-        setReIllLoading(true);
-        (async () => {
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              const withImage = await api.books.illustratePage(token, book.id, newPageId);
-              setBook(withImage as unknown as BookOut);
-              toast.success(`Page ${page.order + 1} illustrated!`);
-              return;
-            } catch (err) {
-              if (attempt < 2) await new Promise(r => setTimeout(r, 4000));
-              else toast.error(err instanceof Error ? err.message : "Auto-illustration failed — click Illustrate to retry");
-            }
-          }
-        })().finally(() => setReIllLoading(false));
-      } else {
-        toast.success(`Page ${page.order} split — new page ${page.order + 1} added`);
-      }
-    } catch (err) { toast.error(err instanceof Error ? err.message : "Split failed — please try again"); }
-    finally { setSplitting(false); }
   }
 
   // ── Back cover ────────────────────────────────────────────────────────────
@@ -1722,15 +1683,7 @@ function StudioInner() {
           {/* Overflow warning — shown in modes 1 & 2 when text exceeds the text zone */}
           {textOverflows && !page?.is_cover && settings.mode !== 3 && (
             <div className="flex items-center gap-2 rounded-xl border-[2px] border-amber-400 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-              <span>⚠ Text overflows the page</span>
-              <button
-                onClick={splitPage}
-                disabled={splitting}
-                className="ml-auto flex items-center gap-1 rounded-lg bg-amber-400 px-2.5 py-1 text-xs font-extrabold text-amber-900 hover:bg-amber-500 transition-colors disabled:opacity-50"
-              >
-                {splitting ? <XsSpinner /> : null}
-                {splitting ? "Splitting…" : "Split page →"}
-              </button>
+              <span>⚠ Text overflows the page — shorten the text or increase the text area.</span>
             </div>
           )}
 
