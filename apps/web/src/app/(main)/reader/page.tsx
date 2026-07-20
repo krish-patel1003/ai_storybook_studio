@@ -181,13 +181,11 @@ const StoryPage = forwardRef<
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textZoneRef = useRef<HTMLDivElement>(null);
-  // Stacked-mode text band height as a % of the page. Starts at the max (28%)
-  // and shrinks to fit shorter text so the image gets the freed space.
-  const STACKED_MAX_PCT = 28;
-  const STACKED_MIN_PCT = 13;
-  const [textZonePct, setTextZonePct] = useState(STACKED_MAX_PCT);
-  // When text is longer than the max band it overflows; keep it top-anchored
-  // then (so the start isn't clipped) — otherwise anchor it to the bottom.
+  // Stacked-mode text band: fixed 25% of the page — matches the studio's base
+  // layout (no dynamic per-page resizing, so the band is consistent everywhere).
+  const textZonePct = 25;
+  // When the text is longer than the band it overflows; keep it top-anchored
+  // then (so the start isn't clipped) — otherwise use the chosen vertical align.
   const [textOverflows, setTextOverflows] = useState(false);
 
   // Per-page style overrides saved from studio take precedence over reader-level controls.
@@ -230,26 +228,18 @@ const StoryPage = forwardRef<
     return () => ro.disconnect();
   }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize]);
 
-  // Stacked mode: size the text band to the actual text height (capped at 28%),
-  // so short pages give more room to the illustration.
+  // Stacked mode: detect whether the text overflows the fixed band (drives the
+  // vertical-align fallback so an overflowing page isn't clipped at the start).
   useEffect(() => {
     if (page.text_mode === 1) return; // stacked only (null or 2)
-    const zone = textZoneRef.current;
     const p = textRef.current;
-    if (!zone || !p) return;
-    const VPAD = 32; // top+bottom padding of the text band
-    const measure = () => {
-      const pageH = zone.parentElement?.clientHeight ?? 0;
-      if (pageH === 0 || !page.text) return;
-      const pct = ((p.scrollHeight + VPAD) / pageH) * 100;
-      const clamped = Math.round(Math.min(STACKED_MAX_PCT, Math.max(STACKED_MIN_PCT, pct)));
-      setTextZonePct((prev) => (prev === clamped ? prev : clamped));
-      const overflows = pct > STACKED_MAX_PCT + 0.5;
-      setTextOverflows((prev) => (prev === overflows ? prev : overflows));
+    if (!p) return;
+    const check = () => {
+      const ov = p.scrollHeight > p.clientHeight + 1;
+      setTextOverflows((prev) => (prev === ov ? prev : ov));
     };
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (zone.parentElement) ro.observe(zone.parentElement);
+    check();
+    const ro = new ResizeObserver(check);
     ro.observe(p);
     return () => ro.disconnect();
   }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize, rawFontSize]);
