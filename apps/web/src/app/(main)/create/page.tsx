@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
   Sparkles,
-  Shield,
   Check,
   BookOpen,
   RefreshCw,
@@ -212,7 +211,7 @@ function OptionsPanel({
   age, setAge, tone, setTone, customTones, setCustomTones,
   customToneInput, setCustomToneInput, style, setStyle,
   pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
-  customPageCountInput, setCustomPageCountInput, safety, setSafety,
+  customPageCountInput, setCustomPageCountInput,
   locked,
 }: {
   age: string; setAge: (v: string) => void;
@@ -223,7 +222,6 @@ function OptionsPanel({
   pageCount: number; setPageCount: (v: number) => void;
   isCustomPageCount: boolean; setIsCustomPageCount: (v: boolean) => void;
   customPageCountInput: string; setCustomPageCountInput: (v: string) => void;
-  safety: boolean; setSafety: (v: boolean) => void;
   locked?: boolean;
 }) {
   const [showAllThemes, setShowAllThemes] = useState(false);
@@ -321,28 +319,14 @@ function OptionsPanel({
           </div>
         )}
       </div>
-
-      {/* Safety */}
-      <button onClick={() => setSafety(!safety)} className="flex w-full items-center justify-between rounded-2xl bg-background p-3.5 chunky-border">
-        <div className="flex items-center gap-2.5">
-          <Shield className="h-4 w-4 shrink-0" strokeWidth={2.5} />
-          <div className="text-left">
-            <div className="text-sm font-extrabold">Safety filters</div>
-            <div className="text-xs text-muted-foreground">Block scary themes &amp; unkind language</div>
-          </div>
-        </div>
-        <span className={`relative h-6 w-11 rounded-full chunky-border shrink-0 ${safety ? "bg-accent" : "bg-muted"}`}>
-          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-foreground transition-all ${safety ? "left-6" : "left-0.5"}`} />
-        </span>
-      </button>
     </div>
   );
 }
 
 // ── Locked settings summary (brief + writing states) ─────────────────────────
 
-function LockedSettingsSummary({ age, tone, style, pageCount, safety, onEdit }: {
-  age: string; tone: string[]; style: string; pageCount: number; safety: boolean; onEdit: () => void;
+function LockedSettingsSummary({ age, tone, style, pageCount, onEdit }: {
+  age: string; tone: string[]; style: string; pageCount: number; onEdit: () => void;
 }) {
   const styleLabel = { watercolor: "Watercolor", crayon: "Crayon", flat: "Flat", papercut: "Papercut" }[style] ?? style;
   return (
@@ -354,7 +338,6 @@ function LockedSettingsSummary({ age, tone, style, pageCount, safety, onEdit }: 
           { label: "Reading level", value: `Ages ${age}` },
           { label: "Pages", value: `${pageCount} pages` },
           { label: "Art style", value: styleLabel },
-          { label: "Safety", value: safety ? "On" : "Off" },
         ].map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground font-semibold">{label}</span>
@@ -779,7 +762,7 @@ export default function CreatePage() {
   const [tone, setTone] = useState<string[]>(["Funny"]);
   const [customTones, setCustomTones] = useState<string[]>([]);
   const [customToneInput, setCustomToneInput] = useState("");
-  const [safety, setSafety] = useState(true);
+  const safety = true; // Safety filters are always on — no user toggle.
   const [pageCount, setPageCount] = useState(10);
   const [isCustomPageCount, setIsCustomPageCount] = useState(false);
   const [customPageCountInput, setCustomPageCountInput] = useState("");
@@ -966,7 +949,7 @@ export default function CreatePage() {
     age, setAge, tone, setTone, customTones, setCustomTones,
     customToneInput, setCustomToneInput, style, setStyle,
     pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
-    customPageCountInput, setCustomPageCountInput, safety, setSafety,
+    customPageCountInput, setCustomPageCountInput,
   };
 
   const writingMessage = useWritingMessages(activeBrief);
@@ -1199,7 +1182,7 @@ export default function CreatePage() {
                         {settingsOpen && (
                           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
                             <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
-                              <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
+                              <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
                             </div>
                           </motion.div>
                         )}
@@ -1351,7 +1334,7 @@ export default function CreatePage() {
                             {settingsOpen && (
                               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25 }} className="overflow-hidden">
                                 <div className="mt-3 rounded-2xl bg-card p-4 chunky-border">
-                                  <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} safety={safety} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
+                                  <LockedSettingsSummary age={age} tone={tone} style={style} pageCount={pageCount} onEdit={() => { setFlowState("input"); setSettingsOpen(false); }} />
                                 </div>
                               </motion.div>
                             )}
@@ -1465,7 +1448,7 @@ export default function CreatePage() {
               ) : (
                 <LockedSettingsSummary
                   age={age} tone={tone} style={style} pageCount={pageCount}
-                  safety={safety} onEdit={() => setFlowState("input")}
+                  onEdit={() => setFlowState("input")}
                 />
               )}
             </div>
