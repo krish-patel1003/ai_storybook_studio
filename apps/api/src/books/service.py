@@ -394,6 +394,8 @@ async def bulk_apply_page_style(
             page.text_mode = data.text_mode
         if data.bg_color is not None:
             page.bg_color = data.bg_color
+        if data.text_valign is not None:
+            page.text_valign = data.text_valign
         if "canvas_overlay" in data.model_fields_set:
             page.canvas_overlay = data.canvas_overlay
     await db.commit()

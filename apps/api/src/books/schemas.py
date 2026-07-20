@@ -68,6 +68,7 @@ class BulkPageStyleIn(BaseModel):
     text_mode: int | None = None
     bg_color: str | None = None
     canvas_overlay: dict | None = None
+    text_valign: str | None = Field(default=None, pattern=r"^(top|center|bottom)$")
 
 
 class RecalibrateIn(BaseModel):

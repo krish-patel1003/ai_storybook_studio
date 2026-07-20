@@ -494,6 +494,7 @@ export const api = {
     bulkPageStyle: (token: string, bookId: string, data: {
       font_family?: string; font_size?: number; text_color?: string;
       text_mode?: number; bg_color?: string; canvas_overlay?: object | null;
+      text_valign?: string;
     }) =>
       request<BookOut>(`/books/${bookId}/pages/style`, {
         method: "PATCH",

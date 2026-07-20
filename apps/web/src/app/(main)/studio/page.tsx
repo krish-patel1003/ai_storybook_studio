@@ -1134,6 +1134,7 @@ function StudioInner() {
               text_mode:      st.mode,
               bg_color:       st.bgColor,
               canvas_overlay: overlayToSave,
+              text_valign:    valign,   // vertical align applies to every page
             })
           : Promise.resolve(null),
       ]);
