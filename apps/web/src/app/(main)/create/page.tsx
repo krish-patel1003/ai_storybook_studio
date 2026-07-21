@@ -1061,7 +1061,7 @@ export default function CreatePage() {
                 {flowState === "input" && (
                   <motion.div key="input" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}
                     className="flex flex-col min-h-full px-6 py-8 md:px-10 md:py-10">
-                    <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">✨ Let&apos;s Create Your Story!</h1>
+                    <h1 className="font-display text-4xl font-black md:text-5xl leading-tight">✨ Let&apos;s Create Your Storybook!</h1>
                     <p className="mt-2 text-muted-foreground">Tell us one idea, and we&apos;ll turn it into a magical story. ✨</p>
 
                     <div className="relative mt-6" data-tour="create-prompt">
@@ -1118,7 +1118,7 @@ export default function CreatePage() {
                     <div className="mt-6" data-tour="create-enhance">
                       <button onClick={handleExpandPrompt} disabled={prompt.trim().length < 3}
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
-                        <Wand2 className="h-5 w-5" strokeWidth={2.5} /> ✨ Create My Story →
+                        <Wand2 className="h-5 w-5" strokeWidth={2.5} /> ✨ Create My Storybook →
                       </button>
                       <p className="mt-2 text-center text-xs text-muted-foreground">We&apos;ll turn your idea into a full story concept — you can review and tweak it next.</p>
                     </div>
@@ -1126,7 +1126,7 @@ export default function CreatePage() {
                     {/* Mobile settings */}
                     <div className="mt-6 lg:hidden">
                       <button onClick={() => setSettingsOpen((o) => !o)} className="flex w-full items-center justify-between rounded-2xl bg-card px-4 py-3 font-extrabold chunky-border">
-                        <div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} /> Story settings</div>
+                        <div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} /> Storybook settings</div>
                         <ChevronDown className={`h-4 w-4 transition-transform ${settingsOpen ? "rotate-180" : ""}`} strokeWidth={2.5} />
                       </button>
                       <AnimatePresence>
@@ -1431,7 +1431,7 @@ export default function CreatePage() {
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4" strokeWidth={2.5} />
                 <span className="font-display text-sm font-black uppercase tracking-wide">
-                  {flowState === "input" ? "✨ Story Magic"
+                  {flowState === "input" ? "✨ Storybook Magic"
                     : flowState === "pages" ? "Brief & settings"
                     : "Settings locked"}
                 </span>

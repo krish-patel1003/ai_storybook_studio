@@ -449,7 +449,7 @@ export default function AccountPage() {
         </a>
         <a href="/create" className="flex items-center gap-2.5 rounded-2xl bg-primary p-4 chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
           <BookOpen className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
-          <span className="font-bold text-sm text-primary-foreground">New Story</span>
+          <span className="font-bold text-sm text-primary-foreground">New Storybook</span>
         </a>
       </div>
 

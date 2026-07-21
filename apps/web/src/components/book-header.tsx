@@ -10,7 +10,7 @@ import { useState, useRef, useEffect } from "react";
 // Same nav for everyone; signed-out visitors clicking a protected link are
 // redirected to sign-in by the middleware.
 const primaryNav = [
-  { href: "/create",  label: "Make Story" },
+  { href: "/create",  label: "Make Storybook" },
   { href: "/library", label: "My Books"   },
   { href: "/reader",  label: "Read Aloud" },
 ] as const;
