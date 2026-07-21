@@ -425,7 +425,7 @@ function EditableField({ label, value, multiline, onSave, onRegenerate, regenera
   return (
     <div className="rounded-2xl bg-background p-4 chunky-border">
       <div className="flex items-center justify-between mb-2 gap-2">
-        <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="text-sm font-black uppercase tracking-wide text-foreground">{label}</span>
         <div className="flex items-center gap-1.5 shrink-0">
           {!editing && (
             <button onClick={() => { setDraft(value); setEditing(true); }} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform" title="Edit">
@@ -627,13 +627,13 @@ function EnhancedPromptReview({
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-background p-4 chunky-border">
-        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-1">Suggested title</p>
+        <p className="text-sm font-black uppercase tracking-wide text-foreground mb-1">Suggested title</p>
         <p className="font-display text-2xl font-black">{expanded.title}</p>
       </div>
 
       {/* Short summary — always visible */}
       <div className="rounded-2xl bg-background p-4 chunky-border">
-        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Storybook summary</p>
+        <p className="text-sm font-black uppercase tracking-wide text-foreground mb-2">Storybook summary</p>
         <p className="text-sm font-semibold leading-relaxed text-foreground/80">{summary}</p>
       </div>
 
@@ -642,7 +642,7 @@ function EnhancedPromptReview({
         <div className="rounded-2xl bg-background p-4 chunky-border">
           <div className="flex items-center gap-1.5 mb-3">
             <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Characters</p>
+            <p className="text-sm font-black uppercase tracking-wide text-foreground">Characters</p>
           </div>
           <div className="space-y-1.5">
             {expanded.key_characters.map((c, i) => (
@@ -657,14 +657,14 @@ function EnhancedPromptReview({
 
       {/* Everything else, tucked into a collapsible */}
       <details className="group rounded-2xl bg-background chunky-border overflow-hidden">
-        <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-extrabold uppercase tracking-wider text-muted-foreground select-none list-none">
+        <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-black uppercase tracking-wide text-foreground select-none list-none">
           <span>More details</span>
           <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" strokeWidth={2.5} />
         </summary>
 
         <div className="space-y-5 border-t-[2px] border-foreground/10 px-4 py-4">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Full storybook concept</p>
+            <p className="text-sm font-black uppercase tracking-wide text-foreground mb-2">Full storybook concept</p>
             <p className="text-sm font-semibold leading-relaxed text-foreground/80">{expanded.story_concept}</p>
           </div>
 
@@ -672,7 +672,7 @@ function EnhancedPromptReview({
             <div>
               <div className="flex items-center gap-1.5 mb-3">
                 <Sparkles className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Scene highlights</p>
+                <p className="text-sm font-black uppercase tracking-wide text-foreground">Scene highlights</p>
               </div>
               <div className="space-y-1.5">
                 {expanded.story_highlights.map((h, i) => (
@@ -691,7 +691,7 @@ function EnhancedPromptReview({
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
                     <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-                    <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</p>
+                    <p className="text-sm font-black uppercase tracking-wide text-foreground">Themes</p>
                   </div>
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary">✦ added to settings</span>
                 </div>
@@ -705,7 +705,7 @@ function EnhancedPromptReview({
             <div className="rounded-2xl bg-card p-4 chunky-border">
               <div className="flex items-center gap-1.5 mb-2">
                 <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Visual style</p>
+                <p className="text-sm font-black uppercase tracking-wide text-foreground">Visual style</p>
               </div>
               <p className="text-xs font-semibold leading-relaxed text-foreground/80">{expanded.visual_style}</p>
             </div>
@@ -1284,8 +1284,8 @@ export default function CreatePage() {
                         {activeBrief.characters_intro?.length > 0 && (
                           <div className="rounded-2xl bg-background p-4 chunky-border">
                             <div className="flex items-center gap-1.5 mb-2">
-                              <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-                              <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Characters</span>
+                              <Users className="h-4 w-4 text-foreground" strokeWidth={2.5} />
+                              <span className="text-sm font-black uppercase tracking-wide text-foreground">Characters</span>
                             </div>
                             <div className="space-y-1.5">
                               {activeBrief.characters_intro.map((c, i) => (
@@ -1302,8 +1302,8 @@ export default function CreatePage() {
                         {activeBrief.themes?.length > 0 && (
                           <div className="rounded-2xl bg-background p-4 chunky-border">
                             <div className="flex items-center gap-1.5 mb-2">
-                              <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-                              <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</span>
+                              <Lightbulb className="h-4 w-4 text-foreground" strokeWidth={2.5} />
+                              <span className="text-sm font-black uppercase tracking-wide text-foreground">Themes</span>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
                               {activeBrief.themes.map((t) => <span key={t} className="rounded-full bg-card px-3 py-1 text-xs font-bold chunky-border">{t}</span>)}
@@ -1315,8 +1315,8 @@ export default function CreatePage() {
                         {activeBrief.arc?.length > 0 && (
                           <div className="rounded-2xl bg-background p-4 chunky-border">
                             <div className="flex items-center gap-1.5 mb-3">
-                              <Map className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-                              <span className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Story arc</span>
+                              <Map className="h-4 w-4 text-foreground" strokeWidth={2.5} />
+                              <span className="text-sm font-black uppercase tracking-wide text-foreground">Story arc</span>
                             </div>
                             <div className="space-y-2">
                               {activeBrief.arc.map((stage, i) => (
@@ -1342,7 +1342,7 @@ export default function CreatePage() {
                         <div className="pt-2">
                           <button onClick={handleWritePages}
                             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-                            <FileText className="h-5 w-5" strokeWidth={2} /> Write the pages →
+                            <FileText className="h-5 w-5" strokeWidth={2} /> Write my storybook →
                           </button>
                           <p className="mt-2 text-center text-xs text-muted-foreground">AI writes every page — you&apos;ll review &amp; edit before anything is illustrated.</p>
                         </div>
