@@ -1,12 +1,13 @@
 "use client";
 
-import { Sparkles, ImageIcon, Mic, BookOpen, X } from "lucide-react";
+import { Lightbulb, ImageIcon, Mic, BookOpen, Sparkles, X } from "lucide-react";
 
+// Framed as outcomes, not production steps — kids think in outcomes.
 const STEPS = [
-  { icon: Sparkles, label: "Write", desc: "Describe an idea — we craft the story." },
-  { icon: ImageIcon, label: "Illustrate", desc: "Every page, in your chosen art style." },
-  { icon: Mic, label: "Narrate", desc: "Read aloud in a natural voice." },
-  { icon: BookOpen, label: "Read & Publish", desc: "Flip through it, share, or export." },
+  { icon: Lightbulb, label: "Tell Your Idea", desc: "Tell us what your story is about." },
+  { icon: ImageIcon, label: "Make the Pictures", desc: "We'll create beautiful pictures for every page." },
+  { icon: Mic, label: "Add Your Voice", desc: "Read your story in your own voice." },
+  { icon: BookOpen, label: "Enjoy Your Book", desc: "Read it, share it, or print it." },
 ];
 
 export function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {
