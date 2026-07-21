@@ -228,19 +228,30 @@ const StoryPage = forwardRef<
     return () => ro.disconnect();
   }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize]);
 
-  // Stacked mode: detect whether the text overflows the fixed band (drives the
-  // vertical-align fallback so an overflowing page isn't clipped at the start).
+  // Stacked mode: shrink the font (down to a floor) so the text always fits the
+  // fixed band WITH its padding intact — i.e. the bottom margin is never broken.
   useEffect(() => {
     if (page.text_mode === 1) return; // stacked only (null or 2)
     const p = textRef.current;
-    if (!p) return;
-    const check = () => {
-      const ov = p.scrollHeight > p.clientHeight + 1;
+    const zone = textZoneRef.current;
+    if (!p || !zone) return;
+    const basePx = rawFontSize ?? (effectiveFontSize * 16);
+    const fit = () => {
+      const avail = zone.clientHeight - 32; // minus the 16px top/bottom padding
+      if (avail <= 0 || !page.text) return;
+      p.style.fontSize = `${basePx}px`;
+      let px = basePx;
+      const minPx = 9;
+      while (p.scrollHeight > avail && px > minPx) {
+        px -= 0.5;
+        p.style.fontSize = `${px}px`;
+      }
+      const ov = p.scrollHeight > avail; // still too long even at the floor
       setTextOverflows((prev) => (prev === ov ? prev : ov));
     };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(p);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(zone);
     return () => ro.disconnect();
   }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize, rawFontSize]);
 

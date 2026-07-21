@@ -392,18 +392,30 @@ function Mode2Preview({
   // Base layouts use a fixed 25% band; the "+" variant uses the slider value.
   const textZonePct = settings.plus ? settings.textAreaPct : TEXT_AREA_DEFAULT_PCT;
 
-  // Detect whether the text fits the chosen band (drives the AI-refit hint).
+  // Shrink the font (down to a floor) so the text always fits the band with its
+  // padding intact — the bottom margin is never broken. Matches the reader.
   useEffect(() => {
     const el = textRef.current;
-    if (!el) return;
-    const check = () => {
-      const ov = el.scrollHeight > el.clientHeight + 1;
+    const band = el?.parentElement;
+    if (!el || !band) return;
+    const basePx = settings.fontSize;
+    const fit = () => {
+      const avail = band.clientHeight - 32; // minus the 16px top/bottom padding
+      if (avail <= 0) return;
+      el.style.fontSize = `${basePx}px`;
+      let px = basePx;
+      const minPx = 9;
+      while (el.scrollHeight > avail && px > minPx) {
+        px -= 0.5;
+        el.style.fontSize = `${px}px`;
+      }
+      const ov = el.scrollHeight > avail; // still too long even at the floor
       setOverflows(prev => prev === ov ? prev : ov);
       onOverflow?.(ov);
     };
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(band);
     return () => ro.disconnect();
   }, [text, settings.fontSize, settings.fontFamily, textZonePct, onOverflow]);
 

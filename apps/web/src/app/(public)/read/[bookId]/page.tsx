@@ -32,14 +32,15 @@ const BookPage = forwardRef<
     if (!el || !zone || !page.text) return;
     const fit = () => {
       if (zone.clientHeight === 0) return;
+      const avail = zone.clientHeight - 24; // minus the 12px top/bottom padding → keeps the margin
       el.style.fontSize = "";
       let px = 15;
       const minPx = 9;
-      while (el.scrollHeight > zone.clientHeight && px > minPx) {
+      while (el.scrollHeight > avail && px > minPx) {
         px -= 0.5;
         el.style.fontSize = `${px}px`;
       }
-      el.style.overflow = el.scrollHeight > zone.clientHeight ? "hidden" : "";
+      el.style.overflow = el.scrollHeight > avail ? "hidden" : "";
     };
     fit();
     const ro = new ResizeObserver(fit);
