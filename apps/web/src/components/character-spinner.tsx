@@ -111,20 +111,20 @@ export function LgSpinner({ className }: { className?: string }) {
   return (
     <div
       aria-label="loading"
-      className={cn("flex flex-col items-center gap-3 select-none", className)}
+      className={cn("flex flex-col items-center gap-4 select-none", className)}
     >
-      <div className={cn("relative flex items-end justify-center", isRunner ? "w-60 h-24" : "w-36 h-24")}>
+      <div className={cn("relative flex items-end justify-center", isRunner ? "w-80 h-36" : "w-52 h-36")}>
         {/* Floating trail particles for non-runners */}
         {!isRunner && (
           <>
             <span
-              className="absolute top-1 left-2 leading-none opacity-40 text-base"
+              className="absolute top-1 left-2 leading-none opacity-40 text-2xl"
               style={{ animation: `char-float ${char.speed * 1.3}s ease-in-out infinite`, animationDelay: "0.3s", display: "inline-block" }}
             >
               {char.trail}
             </span>
             <span
-              className="absolute top-5 right-3 leading-none opacity-30 text-sm"
+              className="absolute top-7 right-3 leading-none opacity-30 text-xl"
               style={{ animation: `char-float ${char.speed * 1.6}s ease-in-out infinite`, animationDelay: "0.8s", display: "inline-block" }}
             >
               {char.trail}
@@ -138,7 +138,7 @@ export function LgSpinner({ className }: { className?: string }) {
           style={{
             animation: `${char.anim} ${char.speed}s ${char.anim === "char-flip" ? "linear" : "ease-in-out"} infinite`,
             display: "inline-block",
-            fontSize: "77px",
+            fontSize: "120px",
             willChange: "transform",
           }}
         >
@@ -148,14 +148,14 @@ export function LgSpinner({ className }: { className?: string }) {
         {/* Ground shadow */}
         {hasGround && (
           <div
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-2.5 rounded-full bg-foreground/20"
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 w-20 h-3 rounded-full bg-foreground/20"
             style={{ animation: `shadow-pulse ${char.speed}s ease-in-out infinite` }}
           />
         )}
       </div>
 
       {/* Name badge */}
-      <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 chunky-border text-xs font-extrabold text-primary">
+      <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-1.5 chunky-border text-sm font-extrabold text-primary">
         <span className="leading-none">{char.trail}</span>
         {char.name}
       </div>
