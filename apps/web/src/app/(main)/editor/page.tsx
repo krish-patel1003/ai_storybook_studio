@@ -721,8 +721,8 @@ export default function EditorPage() {
               <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop
             </button>
           )}
-          <button onClick={handleIllustrate} disabled={isRunning} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0">
-            {isRunning ? <><XsSpinner /> Illustrating…</> : allDone ? <><Sparkles className="h-4 w-4" strokeWidth={3} /> Re-illustrate all</> : <><Sparkles className="h-4 w-4" strokeWidth={3} /> Illustrate all</>}
+          <button onClick={handleIllustrate} disabled={isRunning} className="inline-flex items-center justify-center gap-2 min-w-[13.5rem] rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0">
+            {isRunning ? <><XsSpinner /> Making pictures…</> : allDone ? <><Sparkles className="h-4 w-4" strokeWidth={3} /> Remake all pictures</> : <><Sparkles className="h-4 w-4" strokeWidth={3} /> Make the pictures</>}
           </button>
         </div>
       </div>
@@ -738,7 +738,7 @@ export default function EditorPage() {
               {(() => {
                 const voices = [...new Set(allPages.filter((p) => p.has_audio && p.narration_voice).map((p) => p.narration_voice))];
                 if (voices.length === 0) return null;
-                return <p className="text-xs font-bold text-primary/80 mt-0.5">🎙️ Voice: {voices.length === 1 ? voices[0] : "Multiple voices"}</p>;
+                return <p className="text-xs font-bold text-primary/80 mt-0.5">🎙️ Narrated by {voices.length === 1 ? voices[0] : "multiple voices"}</p>;
               })()}
             </div>
           </div>
@@ -763,8 +763,8 @@ export default function EditorPage() {
                 <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop{narrateProgress ? ` (${narrateProgress.done + 1}/${narrateProgress.total})` : ""}
               </button>
             ) : (
-              <button onClick={handleNarrate} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-                <Mic className="h-4 w-4" strokeWidth={2.5} />{allPages.filter((p) => p.has_audio).length > 0 ? " Re-narrate all" : " Narrate all"}
+              <button onClick={handleNarrate} className="inline-flex items-center justify-center gap-2 min-w-[13.5rem] rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+                <Mic className="h-4 w-4" strokeWidth={2.5} />{allPages.filter((p) => p.has_audio).length > 0 ? " Read it aloud again" : " Read it aloud"}
               </button>
             )}
           </div>
