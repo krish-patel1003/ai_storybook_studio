@@ -1222,8 +1222,8 @@ export default function CreatePage() {
 
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div>
-                        <h1 className="font-display text-3xl font-black md:text-4xl">Storybook brief</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">Review, edit, or improve any field — then write the pages.</p>
+                        <h1 className="font-display text-3xl font-black md:text-4xl">Your Storybook Preview</h1>
+                        <p className="mt-1 text-sm text-muted-foreground">Review your story, make changes if you want, then create your storybook.</p>
                       </div>
                     </div>
 
@@ -1231,7 +1231,7 @@ export default function CreatePage() {
                     <details className="group mb-5">
                       <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-extrabold text-muted-foreground hover:text-foreground transition-colors w-fit select-none">
                         <span className="transition-transform group-open:rotate-90">›</span>
-                        Your original prompt
+                        Your original storybook Idea
                       </summary>
                       <div className="mt-2 rounded-xl bg-muted/60 px-4 py-2.5 chunky-border">
                         <p className="text-sm font-semibold text-foreground/80">{prompt}</p>
