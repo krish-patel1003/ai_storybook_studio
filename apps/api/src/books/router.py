@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.models import User
 from src.books import service
 from src.books.dependencies import current_user, owned_book
+from src.rate_limit import rate_limit
 from src.books.models import Book
 from src.books.schemas import (
     AddCharacterIn,
@@ -112,7 +113,7 @@ async def list_models(user: User = Depends(current_user)) -> ModelsOut:
 @router.post("/prompts/brainstorm", response_model=BrainstormOut)
 async def brainstorm_ideas(
     data: BrainstormIn,
-    user: User = Depends(current_user),
+    user: User = Depends(rate_limit("brainstorm", 30)),
 ) -> BrainstormOut:
     """Generate 6 short story seed ideas to inspire the user before they write their prompt."""
     result = await service.brainstorm(data)
@@ -122,7 +123,7 @@ async def brainstorm_ideas(
 @router.post("/prompts/expand", response_model=ExpandedPromptOut)
 async def expand_prompt(
     data: ExpandPromptIn,
-    user: User = Depends(current_user),
+    user: User = Depends(rate_limit("expand", 40)),
 ) -> ExpandedPromptOut:
     """Expand a user's prompt into a rich story concept."""
     result = await service.expand_prompt(data)
@@ -139,7 +140,7 @@ async def expand_prompt(
 @router.post("/briefs/generate", response_model=BriefOut)
 async def generate_brief(
     data: BriefGenerateIn,
-    user: User = Depends(current_user),
+    user: User = Depends(rate_limit("brief", 40)),
 ) -> BriefOut:
     """Generate a single story brief from the user's prompt and settings."""
     b = await service.generate_brief(data)
@@ -157,7 +158,7 @@ async def generate_brief(
 @router.post("/briefs/regenerate-field", response_model=BriefOut)
 async def regenerate_brief_field(
     data: BriefFieldRegenerateIn,
-    user: User = Depends(current_user),
+    user: User = Depends(rate_limit("brief_field", 60)),
 ) -> BriefOut:
     """Regenerate a single field of an existing brief, keeping everything else intact."""
     merged = await service.regenerate_brief_field(data)
