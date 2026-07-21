@@ -28,6 +28,7 @@ import { XsSpinner, SmSpinner, LgSpinner } from "@/components/character-spinner"
 import { AvatarDisplay } from "@/components/avatar-display";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
+import { StepBar } from "@/components/step-bar";
 import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type StorySeedOut } from "@/lib/api";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { toast } from "sonner";
@@ -730,13 +731,6 @@ function EnhancedPromptReview({
 
 // ── Step progress indicator ───────────────────────────────────────────────────
 
-const STEPS = [
-  { id: "input",   label: "✍️ Idea"  },
-  { id: "concept", label: "💡 Story" },
-  { id: "brief",   label: "📖 Book"  },
-  { id: "review",  label: "✅ Review" },
-];
-
 type FlowState = "profile" | "input" | "enhancing" | "enhanced" | "brief" | "writing" | "pages";
 
 function flowToStepIdx(state: FlowState): number {
@@ -744,26 +738,6 @@ function flowToStepIdx(state: FlowState): number {
   if (state === "enhancing" || state === "enhanced") return 1;
   if (state === "brief")     return 2;
   return 3; // writing | pages
-}
-
-function StepBar({ current }: { current: FlowState }) {
-  const idx = flowToStepIdx(current);
-  return (
-    <div className="flex items-center gap-1 shrink-0">
-      {STEPS.map((s, i) => {
-        const done = i < idx; const active = i === idx;
-        return (
-          <div key={s.id} className="flex items-center gap-1">
-            <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-extrabold transition-all chunky-border ${active ? "bg-primary text-primary-foreground" : done ? "bg-foreground text-background" : "bg-card text-muted-foreground"}`}>
-              {done ? <Check className="h-3 w-3" strokeWidth={3} /> : <span className="tabular-nums">{i + 1}</span>}
-              <span className="hidden sm:inline">{s.label}</span>
-            </div>
-            {i < STEPS.length - 1 && <ChevronRight className={`h-3 w-3 shrink-0 ${i < idx ? "text-foreground" : "text-muted-foreground/40"}`} strokeWidth={2.5} />}
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -1001,7 +975,7 @@ export default function CreatePage() {
 
         {/* ── Top bar ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between border-b-[2.5px] border-foreground bg-background px-6 py-3">
-          {flowState !== "profile" && <StepBar current={flowState} />}
+          {flowState !== "profile" && <StepBar currentIdx={flowToStepIdx(flowState)} />}
           {flowState !== "input" && flowState !== "profile" && (
             <button
               onClick={() => {

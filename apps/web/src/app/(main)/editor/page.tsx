@@ -24,6 +24,7 @@ import {
 import { XsSpinner, SmSpinner, MdSpinner, LgSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
+import { StepBar } from "@/components/step-bar";
 import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
@@ -636,6 +637,10 @@ export default function EditorPage() {
 
       {/* Header */}
       <div className="mb-6">
+        {/* Storybook journey — Pictures is this (editor) step */}
+        <div className="mb-4 flex justify-center">
+          <StepBar currentIdx={4} />
+        </div>
         <div className="flex items-center justify-between mb-4">
           <Link href="/create" className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
             <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back
