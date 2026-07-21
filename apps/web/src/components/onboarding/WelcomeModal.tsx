@@ -13,7 +13,7 @@ const STEPS = [
 export function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-      <div className="relative w-full max-w-lg rounded-3xl bg-card p-8 chunky-border chunky-shadow">
+      <div className="relative w-full max-w-2xl rounded-3xl bg-card p-8 chunky-border chunky-shadow">
         <button
           onClick={onSkip}
           aria-label="Close"
@@ -26,23 +26,23 @@ export function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip:
           <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow-sm">
             <BookOpen className="h-7 w-7 text-primary-foreground" strokeWidth={2} />
           </div>
-          <h2 className="font-display text-3xl font-black">Welcome to Storybook Studio!</h2>
+          <h2 className="font-display text-3xl font-black">Let&apos;s Make your Storybook!</h2>
           <p className="mt-2 text-muted-foreground">
-            Turn any idea into a fully illustrated, narrated children&apos;s book in four steps.
+            Turn your idea into a magical storybook in 4 simple steps.
           </p>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
+        <div className="mt-6 grid grid-cols-2 gap-3.5">
           {STEPS.map((s, i) => (
-            <div key={s.label} className="flex items-start gap-3 rounded-2xl bg-background p-3 chunky-border">
+            <div key={s.label} className="flex items-start gap-3 rounded-2xl bg-background p-4 chunky-border">
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-highlight chunky-border font-display text-sm font-black">
                 {i + 1}
               </div>
-              <div>
-                <div className="flex items-center gap-1.5 font-extrabold">
-                  <s.icon className="h-3.5 w-3.5 text-primary" strokeWidth={2.5} /> {s.label}
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 font-extrabold whitespace-nowrap">
+                  <s.icon className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.5} /> {s.label}
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{s.desc}</p>
+                <p className="mt-1 text-sm text-muted-foreground leading-snug">{s.desc}</p>
               </div>
             </div>
           ))}

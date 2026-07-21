@@ -117,6 +117,24 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       },
     },
   ],
+  "/voices": [
+    {
+      popover: {
+        title: "Voice Studio 🎤",
+        description:
+          "Record or clone your own voice here, then choose it when you narrate a book — so the story can be read aloud in your voice.",
+      },
+    },
+  ],
+  "/kdp": [
+    {
+      popover: {
+        title: "Publish 📖",
+        description:
+          "When your book is ready, export a print-ready PDF or prepare it for Amazon KDP — title, description, and cover all set up for you.",
+      },
+    },
+  ],
 };
 
 export const TOUR_ROUTES = Object.keys(TOUR_STEPS);
