@@ -948,6 +948,7 @@ function StudioInner() {
   const [pagePosition, setPagePosition] = useState<TextPosition>("bottom");
   const [pageAlign,    setPageAlign]    = useState<TextAlign>("center");
   const [pageVAlign,   setPageVAlign]   = useState<TextPosition>("center");
+  const [fontsExpanded, setFontsExpanded] = useState(false);
   const [saving,        setSaving]       = useState(false);
   const [dirty,         setDirty]        = useState(false);
   // Undo/redo history (text snapshots only; settings/position changes are lightweight)
@@ -1769,15 +1770,33 @@ function StudioInner() {
             <div>
               <SL>Font</SL>
               <div className="space-y-1">
-                {READER_FONTS.map(f => (
-                  <button key={f.id} onClick={() => patchSettings({ fontFamily: f.id as FontId })}
-                    className={cn("flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-sm chunky-border transition-colors",
-                      settings.fontFamily === f.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}
-                    style={{ fontFamily: f.stack, fontWeight: f.weight }}>
-                    <span>{f.label}</span>
-                    <span className="text-base opacity-70">{f.sample}</span>
+                {(() => {
+                  // Show the first 5 fonts; keep the selected one visible even if
+                  // it's further down the list. "More" reveals the rest.
+                  const first5 = READER_FONTS.slice(0, 5);
+                  const selected = READER_FONTS.find(f => f.id === settings.fontFamily);
+                  const selectedHidden = selected && !first5.some(f => f.id === selected.id);
+                  const visible = fontsExpanded
+                    ? READER_FONTS
+                    : selectedHidden ? [...first5, selected] : first5;
+                  return visible.map(f => (
+                    <button key={f.id} onClick={() => patchSettings({ fontFamily: f.id as FontId })}
+                      className={cn("flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-sm chunky-border transition-colors",
+                        settings.fontFamily === f.id ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}
+                      style={{ fontFamily: f.stack, fontWeight: f.weight }}>
+                      <span>{f.label}</span>
+                      <span className="text-base opacity-70">{f.sample}</span>
+                    </button>
+                  ));
+                })()}
+                {READER_FONTS.length > 5 && (
+                  <button
+                    onClick={() => setFontsExpanded(v => !v)}
+                    className="flex w-full items-center justify-center gap-1 rounded-xl px-3 py-1.5 text-xs font-extrabold text-primary bg-background chunky-border hover:bg-muted transition-colors"
+                  >
+                    {fontsExpanded ? "Show fewer" : `More fonts (${READER_FONTS.length - 5})`}
                   </button>
-                ))}
+                )}
               </div>
             </div>
 
