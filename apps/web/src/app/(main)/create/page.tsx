@@ -618,6 +618,12 @@ function EnhancedPromptReview({
   }
   if (!expanded) return null;
 
+  // Short 2-sentence hook derived from the full concept.
+  const summary = (() => {
+    const sentences = expanded.story_concept.match(/[^.!?]+[.!?]+/g) ?? [expanded.story_concept];
+    return sentences.slice(0, 2).join(" ").trim() || expanded.story_concept;
+  })();
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-background p-4 chunky-border">
@@ -625,70 +631,86 @@ function EnhancedPromptReview({
         <p className="font-display text-2xl font-black">{expanded.title}</p>
       </div>
 
+      {/* Short summary — always visible */}
       <div className="rounded-2xl bg-background p-4 chunky-border">
-        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Story concept</p>
-        <p className="text-sm font-semibold leading-relaxed text-foreground/80">{expanded.story_concept}</p>
+        <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Storybook summary</p>
+        <p className="text-sm font-semibold leading-relaxed text-foreground/80">{summary}</p>
       </div>
 
-      {expanded.key_characters.length > 0 && (
-        <div className="rounded-2xl bg-background p-4 chunky-border">
-          <div className="flex items-center gap-1.5 mb-3">
-            <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Characters</p>
-          </div>
-          <div className="space-y-1.5">
-            {expanded.key_characters.map((c, i) => (
-              <div key={i} className="flex items-start gap-2 rounded-xl bg-card px-3 py-2 chunky-border">
-                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">{i + 1}</span>
-                <p className="text-sm font-semibold leading-snug">{c}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Everything else, tucked into a collapsible */}
+      <details className="group rounded-2xl bg-background chunky-border overflow-hidden">
+        <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-extrabold uppercase tracking-wider text-muted-foreground select-none list-none">
+          <span>More details</span>
+          <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" strokeWidth={2.5} />
+        </summary>
 
-      {expanded.story_highlights.length > 0 && (
-        <div className="rounded-2xl bg-background p-4 chunky-border">
-          <div className="flex items-center gap-1.5 mb-3">
-            <Sparkles className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Scene highlights</p>
+        <div className="space-y-5 border-t-[2px] border-foreground/10 px-4 py-4">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">Full storybook concept</p>
+            <p className="text-sm font-semibold leading-relaxed text-foreground/80">{expanded.story_concept}</p>
           </div>
-          <div className="space-y-1.5">
-            {expanded.story_highlights.map((h, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                <p className="text-sm font-semibold leading-snug text-foreground/80">{h}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {expanded.themes.length > 0 && (
-          <div className="rounded-2xl bg-background p-4 chunky-border">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</p>
+          {expanded.key_characters.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <Users className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Characters</p>
               </div>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary">✦ added to settings</span>
+              <div className="space-y-1.5">
+                {expanded.key_characters.map((c, i) => (
+                  <div key={i} className="flex items-start gap-2 rounded-xl bg-card px-3 py-2 chunky-border">
+                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">{i + 1}</span>
+                    <p className="text-sm font-semibold leading-snug">{c}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {expanded.themes.map((t) => (
-                <span key={t} className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold chunky-border">{t}</span>
-              ))}
+          )}
+
+          {expanded.story_highlights.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <Sparkles className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Scene highlights</p>
+              </div>
+              <div className="space-y-1.5">
+                {expanded.story_highlights.map((h, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    <p className="text-sm font-semibold leading-snug text-foreground/80">{h}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {expanded.themes.length > 0 && (
+              <div className="rounded-2xl bg-card p-4 chunky-border">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Lightbulb className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes</p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary">✦ added to settings</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {expanded.themes.map((t) => (
+                    <span key={t} className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold chunky-border">{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="rounded-2xl bg-card p-4 chunky-border">
+              <div className="flex items-center gap-1.5 mb-2">
+                <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
+                <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Visual style</p>
+              </div>
+              <p className="text-xs font-semibold leading-relaxed text-foreground/80">{expanded.visual_style}</p>
             </div>
           </div>
-        )}
-        <div className="rounded-2xl bg-background p-4 chunky-border">
-          <div className="flex items-center gap-1.5 mb-2">
-            <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.5} />
-            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Visual style</p>
-          </div>
-          <p className="text-xs font-semibold leading-relaxed text-foreground/80">{expanded.visual_style}</p>
         </div>
-      </div>
+      </details>
 
       <div className="flex gap-3 pt-1">
         <button onClick={onRegenerate}
@@ -1433,7 +1455,7 @@ export default function CreatePage() {
                 <span className="font-display text-sm font-black uppercase tracking-wide">
                   {flowState === "input" ? "✨ Storybook Magic"
                     : flowState === "pages" ? "Brief & settings"
-                    : "Settings locked"}
+                    : "Story Settings"}
                 </span>
               </div>
             </div>
