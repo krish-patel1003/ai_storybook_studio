@@ -101,10 +101,48 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
   ],
   "/studio": [
     {
+      element: '[data-tour="studio-preview"]',
       popover: {
-        title: "Design the layout 🖌️",
+        title: "Design your pages 🖌️",
         description:
-          "Fine-tune text placement, fonts, and colors on each page — a live, print-accurate preview of your finished book.",
+          "This is a live, print-accurate preview of the current page. Everything you change on the sides updates here instantly. Use the arrows to move between pages.",
+        side: "left",
+      },
+    },
+    {
+      element: '[data-tour="studio-text"]',
+      popover: {
+        title: "Edit the page text",
+        description:
+          "Tweak the wording for this page right here — fix a typo or reword a line without regenerating anything.",
+        side: "right",
+      },
+    },
+    {
+      element: '[data-tour="studio-layout"]',
+      popover: {
+        title: "Choose the layout",
+        description:
+          "Pick how the picture and text sit together — text over the picture, or picture with the text below. The “+” options let you fine-tune the text-area size.",
+        side: "right",
+      },
+    },
+    {
+      element: '[data-tour="studio-font"]',
+      popover: {
+        title: "Fonts, size & colors",
+        description:
+          "Set the font, size, text color, and the text-area color. These apply across the whole book so it stays consistent.",
+        side: "left",
+      },
+    },
+    {
+      element: '[data-tour="studio-actions"]',
+      popover: {
+        title: "Preview, narrate & export",
+        description:
+          "When it looks right, Preview it in the reader, add Narration, or Export a print-ready PDF.",
+        side: "bottom",
       },
     },
   ],

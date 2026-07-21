@@ -1463,7 +1463,7 @@ function StudioInner() {
             className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
             <Mic className="h-4 w-4" strokeWidth={2.5} /> Narrate
           </button>
-          <button onClick={async () => { await save(); setExportModal(true); }}
+          <button data-tour="studio-actions" onClick={async () => { await save(); setExportModal(true); }}
             className="flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-sm font-extrabold text-background chunky-border hover:-translate-y-0.5 transition-transform">
             <Download className="h-4 w-4" strokeWidth={2.5} /> Export
           </button>
@@ -1510,7 +1510,7 @@ function StudioInner() {
 
             {/* Page text — shown for all pages except back cover */}
             {!page?.is_back_cover && settings.mode !== 3 && (
-              <div>
+              <div data-tour="studio-text">
                 <SL>{page?.is_cover ? "Cover title" : "Page text"}</SL>
                 <textarea
                   value={text}
@@ -1535,7 +1535,7 @@ function StudioInner() {
 
             {/* Book layout selector — hidden for cover and back cover */}
             {!page?.is_cover && !page?.is_back_cover && (
-            <div>
+            <div data-tour="studio-layout">
               <SL>Book layout</SL>
               {/* All four layouts as equal-weight buttons */}
               <div className="grid grid-cols-2 gap-1.5">
@@ -1693,7 +1693,7 @@ function StudioInner() {
         </aside>
 
         {/* ── Center: preview ── */}
-        <main className="flex flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-3 bg-muted/20">
+        <main data-tour="studio-preview" className="flex flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-3 bg-muted/20">
           {/* Page nav */}
           <div className="flex items-center gap-3">
             <button onClick={() => switchPage(Math.max(0, pageIdx - 1))} disabled={pageIdx === 0}
@@ -1779,7 +1779,7 @@ function StudioInner() {
             )}
 
             {/* Font family */}
-            <div>
+            <div data-tour="studio-font">
               <SL>Font</SL>
               <div className="space-y-1">
                 {(() => {
