@@ -697,7 +697,7 @@ function EnhancedPromptReview({
         </button>
         <button onClick={onApprove}
           className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-          <Sparkles className="h-4 w-4" strokeWidth={2.5} /> Generate brief →
+          <Sparkles className="h-4 w-4" strokeWidth={2.5} /> ✨ Build My Book →
         </button>
       </div>
     </div>
@@ -1154,7 +1154,7 @@ export default function CreatePage() {
                       <p className="mt-1 text-sm text-muted-foreground">
                         {flowState === "enhancing"
                           ? "Hang tight — we're turning your idea into a magical story."
-                          : "AI expanded your idea — review it, then generate your brief."}
+                          : "AI expanded your idea — review it, then build your book."}
                       </p>
                     </div>
 
@@ -1225,7 +1225,7 @@ export default function CreatePage() {
                       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
                         <LgSpinner />
                         <div className="text-center">
-                          <p className="font-display text-xl font-black">Building your brief…</p>
+                          <p className="font-display text-xl font-black">Building your book…</p>
                           <AnimatePresence mode="wait">
                             <motion.p
                               key={briefMessage}
