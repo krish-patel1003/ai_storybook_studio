@@ -433,8 +433,9 @@ function EditableField({ label, value, multiline, onSave, onRegenerate, regenera
             </button>
           )}
           {onRegenerate && (
-            <button onClick={onRegenerate} disabled={regenerating} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50" title="Regenerate">
+            <button onClick={onRegenerate} disabled={regenerating} className="flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50" title="Improve">
               {regenerating ? <XsSpinner /> : <RefreshCw className="h-3 w-3" strokeWidth={2.5} />}
+              {regenerating ? "Improving…" : "Improve"}
             </button>
           )}
         </div>
@@ -1222,15 +1223,8 @@ export default function CreatePage() {
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div>
                         <h1 className="font-display text-3xl font-black md:text-4xl">Storybook brief</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">Review, edit, or regenerate any field — then write the pages.</p>
+                        <p className="mt-1 text-sm text-muted-foreground">Review, edit, or improve any field — then write the pages.</p>
                       </div>
-                      {!briefLoading && activeBrief && (
-                        <button onClick={() => { setActiveBrief(null); setBriefLoading(true); api.books.generateBrief(token!, briefParams).then(setActiveBrief).catch((e) => toast.error(e.message ?? "Failed")).finally(() => setBriefLoading(false)); }}
-                          disabled={briefLoading}
-                          className="shrink-0 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-50">
-                          <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Regenerate all
-                        </button>
-                      )}
                     </div>
 
                     {/* Prompt — collapsible toggle */}
