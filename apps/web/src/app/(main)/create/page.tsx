@@ -1221,7 +1221,7 @@ export default function CreatePage() {
 
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div>
-                        <h1 className="font-display text-3xl font-black md:text-4xl">Story brief</h1>
+                        <h1 className="font-display text-3xl font-black md:text-4xl">Storybook brief</h1>
                         <p className="mt-1 text-sm text-muted-foreground">Review, edit, or regenerate any field — then write the pages.</p>
                       </div>
                       {!briefLoading && activeBrief && (
