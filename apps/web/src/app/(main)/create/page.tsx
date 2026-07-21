@@ -249,7 +249,7 @@ function OptionsPanel({
 
       {/* Themes */}
       <div data-tour="create-themes">
-        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Themes &amp; Tone</p>
+        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Pick a Theme</p>
         <div className="flex flex-wrap gap-1.5">
           {[...visiblePresets, ...customTones].map((t) => {
             const on = tone.includes(t); const isCustom = customTones.includes(t);
@@ -285,7 +285,7 @@ function OptionsPanel({
 
       {/* Art style */}
       <div data-tour="create-artstyle">
-        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Art style</p>
+        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Pick a Picture Style</p>
         <div className="grid grid-cols-2 gap-2">
           {STYLES.map((s) => {
             const on = style === s.id;
