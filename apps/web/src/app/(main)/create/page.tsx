@@ -239,7 +239,7 @@ function OptionsPanel({
 
       {/* Age range */}
       <div data-tour="create-reading-level">
-        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Reading level</p>
+        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Who is this storybook for?</p>
         <div className="grid grid-cols-3 gap-2">
           {["3-5", "6-8", "9-11"].map((a) => (
             <button key={a} onClick={() => setAge(a)} className={`rounded-xl px-3 py-2.5 text-sm font-extrabold chunky-border transition-all hover:-translate-y-0.5 ${age === a ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>Ages {a}</button>
@@ -305,7 +305,7 @@ function OptionsPanel({
 
       {/* Page count */}
       <div data-tour="create-pagecount">
-        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Page count</p>
+        <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">How many pages?</p>
         <div className="flex flex-wrap gap-1.5">
           {PAGE_COUNT_OPTIONS.map((n) => (
             <button key={n} onClick={() => { setPageCount(n); setIsCustomPageCount(false); }} className={`rounded-lg px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${!isCustomPageCount && pageCount === n ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>{n}</button>
@@ -1066,7 +1066,7 @@ export default function CreatePage() {
 
                     <div className="relative mt-6" data-tour="create-prompt">
                       <textarea value={prompt} onChange={(e) => setPrompt(truncateToWords(e.target.value, PROMPT_MAX_WORDS))} rows={7}
-                        placeholder="A brave little fox who learns to share…"
+                        placeholder="Once upon a time, there was a little fox who wanted to be brave…"
                         className="w-full resize-none rounded-2xl bg-card p-5 pb-10 text-lg outline-none chunky-border focus:ring-4 focus:ring-primary/30" />
                       <div className="absolute bottom-3 right-4 flex items-center gap-2">
                         <span className={`text-xs font-bold tabular-nums transition-colors ${wordCount(prompt) >= PROMPT_MAX_WORDS ? "text-destructive" : wordCount(prompt) >= PROMPT_MAX_WORDS * 0.85 ? "text-amber-500" : "text-muted-foreground"}`}>
