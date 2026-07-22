@@ -78,22 +78,30 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
   "/editor": [
     {
       popover: {
-        title: "Bring it to life 🎨",
-        description: "This is where your outline becomes an illustrated, narrated book.",
+        title: "Draw your pictures 🎨",
+        description: "This is where your storybook gets its illustrations.",
       },
     },
     {
       element: '[data-tour="editor-illustrate"]',
       popover: {
-        title: "Illustrate every page",
+        title: "Make every picture",
         description:
-          "One click illustrates the whole book — cover included — keeping your characters consistent. You can Re-illustrate any single page too.",
+          "One click illustrates the whole book — cover included — keeping your characters consistent. You can remake any single page too.",
+      },
+    },
+  ],
+  "/narrate": [
+    {
+      popover: {
+        title: "Add your voice 🎤",
+        description: "The last step — narrate your storybook so it can be read aloud.",
       },
     },
     {
       element: '[data-tour="editor-narrate"]',
       popover: {
-        title: "Add narration",
+        title: "Narrate the book",
         description:
           "Pick a voice and narrate the whole book, so it can be read aloud in the reader with word-by-word highlighting.",
       },

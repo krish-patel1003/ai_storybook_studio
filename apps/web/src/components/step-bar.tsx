@@ -3,13 +3,14 @@
 import { Check, ChevronRight } from "lucide-react";
 
 // The full storybook journey. Steps 0–3 live on the create page; step 4
-// (Pictures) is the editor, where the book gets illustrated.
+// (Draw My Pictures) is the editor, and step 5 (Add My Voice) is the narrate page.
 export const CREATE_STEPS = [
-  { id: "input",    label: "✍️ Idea"     },
-  { id: "concept",  label: "💡 Story"    },
-  { id: "brief",    label: "📖 Book"     },
-  { id: "review",   label: "✅ Review"   },
-  { id: "pictures", label: "🎨 Pictures" },
+  { id: "input",    label: "💡 My Idea"          },
+  { id: "concept",  label: "🌟 Make My Story"    },
+  { id: "brief",    label: "📋 Plan My Story"    },
+  { id: "review",   label: "📖 Write My Pages"   },
+  { id: "pictures", label: "🎨 Draw My Pictures" },
+  { id: "voice",    label: "🎤 Add My Voice"     },
 ] as const;
 
 export function StepBar({ currentIdx }: { currentIdx: number }) {

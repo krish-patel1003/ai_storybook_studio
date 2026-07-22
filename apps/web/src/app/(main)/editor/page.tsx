@@ -662,7 +662,7 @@ export default function EditorPage() {
 
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="font-display text-4xl font-black md:text-5xl">Illustrations</h1>
+            <h1 className="font-display text-4xl font-black md:text-5xl">Pictures</h1>
             <p className="mt-1 text-muted-foreground">
               {illustratedCount} of {totalCount} pages illustrated
               {book.brief && <span className="ml-2 font-semibold text-foreground">· {book.brief.title}</span>}
@@ -703,7 +703,7 @@ export default function EditorPage() {
           {job?.sheetsGenerating ? (
             <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Generating character sheets for consistency…</p></div>
           ) : isRunning ? (
-            <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Illustrating {job?.done ?? 0} of {job?.total ?? totalCount} pages… <span className="ml-1.5 font-semibold text-muted-foreground text-xs">You can switch tabs — it keeps going.</span></p></div>
+            <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Creating {job?.done ?? 0} of {job?.total ?? totalCount} pages… <span className="ml-1.5 font-semibold text-muted-foreground text-xs">You can switch tabs — it keeps going.</span></p></div>
           ) : allDone ? (
             <p className="text-sm font-extrabold text-primary">✓ All pages illustrated</p>
           ) : (
@@ -726,50 +726,6 @@ export default function EditorPage() {
           </button>
         </div>
       </div>
-
-      {/* Narration */}
-      {allPages.some((p) => p.text) && (
-        <div data-tour="editor-narrate" className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 chunky-border"><Volume2 className="h-4 w-4 text-primary" strokeWidth={2.5} /></div>
-            <div>
-              <p className="text-sm font-extrabold">Audio narration</p>
-              <p className="text-xs text-muted-foreground">{allPages.filter((p) => p.has_audio).length} of {allPages.filter((p) => p.text).length} pages narrated</p>
-              {(() => {
-                const voices = [...new Set(allPages.filter((p) => p.has_audio && p.narration_voice).map((p) => p.narration_voice))];
-                if (voices.length === 0) return null;
-                return <p className="text-xs font-bold text-primary/80 mt-0.5">🎙️ Narrated by {voices.length === 1 ? voices[0] : "multiple voices"}</p>;
-              })()}
-            </div>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {(availableVoices.length > 0 || voiceProfiles.length > 0) && (
-              <select
-                value={selectedVoice.type === "preset" ? `preset:${selectedVoice.id}` : `clone:${selectedVoice.profileId}`}
-                onChange={(e) => {
-                  const [type, id] = e.target.value.split(":");
-                  if (type === "preset") setSelectedVoice({ type: "preset", id });
-                  else { const profile = voiceProfiles.find((p) => p.id === id); if (profile) setSelectedVoice({ type: "clone", profileId: id, name: profile.name }); }
-                }}
-                disabled={narratingBook}
-                className="rounded-full bg-card px-3 py-2 text-xs font-bold chunky-border disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                {availableVoices.length > 0 && <optgroup label="── Preset Voices ──">{availableVoices.map((v) => <option key={v.id} value={`preset:${v.id}`}>{v.id} — {v.description}</option>)}</optgroup>}
-                {voiceProfiles.length > 0 && <optgroup label="── Your Voices ──">{voiceProfiles.map((p) => <option key={p.id} value={`clone:${p.id}`}>{p.name}</option>)}</optgroup>}
-              </select>
-            )}
-            {narratingBook ? (
-              <button onClick={() => { narrateCancelledRef.current = true; }} className="inline-flex items-center gap-2 rounded-full bg-destructive px-5 py-2.5 text-sm font-extrabold text-destructive-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-                <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop{narrateProgress ? ` (${narrateProgress.done + 1}/${narrateProgress.total})` : ""}
-              </button>
-            ) : (
-              <button onClick={handleNarrate} className="inline-flex items-center justify-center gap-2 min-w-[13.5rem] rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-                <Mic className="h-4 w-4" strokeWidth={2.5} />{allPages.filter((p) => p.has_audio).length > 0 ? " Read it aloud again" : " Read it aloud"}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Character sheets note */}
       {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image) && !isRunning && illustratedCount === 0 && (
@@ -797,22 +753,22 @@ export default function EditorPage() {
         ))}
       </div>
 
-      {/* Studio CTA — shown once any page is illustrated */}
+      {/* Next-step CTA — shown once any page is illustrated */}
       {illustratedCount > 0 && (
         <div className="mt-10 flex flex-col items-center gap-4 rounded-3xl bg-card p-8 chunky-border text-center">
           <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow-sm">
-            <PenLine className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
+            <Mic className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
           </div>
           <div>
-            <h2 className="font-display text-2xl font-black">Ready to fine-tune?</h2>
-            <p className="mt-1 text-muted-foreground text-sm">Open Studio mode to edit text, adjust styles, and position text on each page.</p>
+            <h2 className="font-display text-2xl font-black">Pictures done — now add your voice!</h2>
+            <p className="mt-1 text-muted-foreground text-sm">Narrate your storybook so it can be read aloud. You can fine-tune pages in Studio too.</p>
           </div>
           <div className="flex gap-3">
-            <Link href="/reader?from=editor" className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview book
+            <Link href="/narrate" className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
+              <Mic className="h-4 w-4" strokeWidth={2.5} /> Add My Voice →
             </Link>
-            <Link href="/studio" className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-              <PenLine className="h-4 w-4" strokeWidth={2.5} /> Open Studio →
+            <Link href="/studio" className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+              <PenLine className="h-4 w-4" strokeWidth={2.5} /> Open Studio
             </Link>
           </div>
         </div>
