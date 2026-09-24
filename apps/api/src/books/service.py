@@ -16,9 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.books.models import Book, Character, GenerationStage, Page
-from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdatePageIn
+from src.books.schemas import AddCharacterIn, AddPageIn, BriefGenerateIn, CreateBookIn, CreateDraftIn, GenerateIn, RecalibrateIn, UpdateBookIn, UpdateDraftIn, UpdatePageIn
 from src.config import settings
-from src.exceptions import NotFoundError
+from src.exceptions import ConflictError, NotFoundError
 from src.generation.pipeline import ModelConfig, StoryPipeline
 from src.generation.schemas import (
     CharacterSheet,
@@ -112,6 +112,59 @@ async def create_draft(
     return await get_book(db, book.id, user_id)
 
 
+async def generate_draft_briefs(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Book:
+    """Generate brief options for a draft and persist them so they survive a reload."""
+    book = await get_book(db, book_id, user_id)
+    _ensure_draft(book)
+    briefs = await generate_brief_options(BriefGenerateIn(
+        raw_prompt=book.raw_prompt,
+        age_range=book.age_range,
+        tone=book.tone,
+        safety_mode=book.safety_mode,
+        page_count=book.page_count,
+        model_provider=book.model_provider,
+        model_name=book.model_name,
+    ))
+    book.brief_options = [b.model_dump() for b in briefs]
+    book.brief = None  # a new set of options invalidates the previous pick
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def update_draft(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: UpdateDraftIn,
+) -> Book:
+    """Save wizard progress. Changing story inputs discards stale brief options."""
+    book = await get_book(db, book_id, user_id)
+    _ensure_draft(book)
+
+    inputs_changed = False
+    for field in ("raw_prompt", "age_range", "tone", "safety_mode", "page_count", "model_provider", "model_name"):
+        value = getattr(data, field)
+        if value is not None and value != getattr(book, field):
+            setattr(book, field, value)
+            inputs_changed = True
+    if inputs_changed:
+        book.brief_options = None
+        book.brief = None
+
+    if data.brief is not None:
+        book.brief = data.brief.model_dump()
+        book.title = data.brief.title[:255]
+    if data.art_style is not None:
+        book.art_style = data.art_style
+
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
 async def generate_from_draft(
     db: AsyncSession,
     book_id: uuid.UUID,
@@ -119,9 +172,15 @@ async def generate_from_draft(
     data: GenerateIn,
 ) -> Book:
     book = await get_book(db, book_id, user_id)
+    _ensure_draft(book)
     book.art_style = data.art_style
+    if data.brief is not None:
+        book.brief = data.brief.model_dump()
     book.stage = GenerationStage.ENHANCING
-    await db.flush()
+    book.error = None
+    # Commit the user's choices first so a failed run can be retried without
+    # re-doing the wizard.
+    await db.commit()
 
     try:
         cfg = ModelConfig(provider=book.model_provider, model_name=book.model_name)
@@ -134,6 +193,7 @@ async def generate_from_draft(
             art_style=book.art_style,
             safety=book.safety_mode,
             page_count=book.page_count,
+            brief=StoryBrief.model_validate(book.brief) if book.brief else None,
         )
 
         await _persist_result(db, book, result.brief, result.characters, result.beats, result.pages)
@@ -435,6 +495,13 @@ async def add_character(
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+def _ensure_draft(book: Book) -> None:
+    # Failed books have no pages persisted (generation rolls back), so they can
+    # be resumed and retried from the wizard just like pending drafts.
+    if book.stage not in (GenerationStage.PENDING, GenerationStage.FAILED):
+        raise ConflictError("Book is no longer a draft")
+
 
 async def _set_stage(db: AsyncSession, book: Book, stage: GenerationStage) -> None:
     book.stage = stage

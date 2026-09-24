@@ -55,6 +55,9 @@ class Book(Base):
 
     # Generated content (stored as JSONB so no migration needed when schemas evolve)
     brief: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Brief candidates generated during the /create wizard — persisted so a
+    # draft can be resumed without paying for another round of generation.
+    brief_options: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # Visibility
     visibility: Mapped[str] = mapped_column(String(10), nullable=False, default="private")

@@ -25,6 +25,7 @@ from src.books.schemas import (
     ProviderInfo,
     RecalibrateIn,
     UpdateBookIn,
+    UpdateDraftIn,
     UpdatePageIn,
 )
 from src.database import get_db
@@ -195,6 +196,25 @@ async def recalibrate(
     book: Book = Depends(owned_book),
 ) -> BookOut:
     updated = await service.recalibrate_book(db, book.id, book.user_id, data)
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/briefs", response_model=BookOut)
+async def generate_draft_briefs(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.generate_draft_briefs(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
+@router.patch("/{book_id}/draft", response_model=BookOut)
+async def update_draft(
+    data: UpdateDraftIn,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    updated = await service.update_draft(db, book.id, book.user_id, data)
     return BookOut.model_validate(updated)
 
 

@@ -91,10 +91,13 @@ export interface BookOut {
   art_style: string;
   safety_mode: boolean;
   page_count: number;
+  model_provider: string;
+  model_name: string;
   visibility: "public" | "private";
   stage: GenerationStage;
   error: string | null;
   brief: BriefOut | null;
+  brief_options: BriefOut[] | null;
   characters: CharacterOut[];
   pages: PageOut[];
   created_at: string;
@@ -187,6 +190,11 @@ export interface CreateDraftIn {
   page_count: number;
   model_provider: string;
   model_name: string;
+}
+
+export interface UpdateDraftIn extends Partial<CreateDraftIn> {
+  brief?: BriefOut;
+  art_style?: string;
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -333,11 +341,24 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
-    generate: (token: string, bookId: string, artStyle: string) =>
+    generateDraftBriefs: (token: string, bookId: string) =>
+      request<BookOut>(`/books/${bookId}/briefs`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    updateDraft: (token: string, bookId: string, data: UpdateDraftIn) =>
+      request<BookOut>(`/books/${bookId}/draft`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify(data),
+      }),
+
+    generate: (token: string, bookId: string, artStyle: string, brief?: BriefOut) =>
       request<BookOut>(`/books/${bookId}/generate`, {
         method: "POST",
         headers: authed(token),
-        body: JSON.stringify({ art_style: artStyle }),
+        body: JSON.stringify({ art_style: artStyle, brief }),
       }),
 
     delete: (token: string, bookId: string) =>

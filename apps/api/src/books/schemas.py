@@ -115,6 +115,7 @@ class BookOut(BaseModel):
     stage: GenerationStage
     error: str | None
     brief: BriefOut | None
+    brief_options: list[BriefOut] | None = None
     characters: list[CharacterOut]
     pages: list[PageOut]
     created_at: datetime
@@ -190,8 +191,24 @@ class CreateDraftIn(BaseModel):
     model_name: str = "gemini-3.5-flash"
 
 
+class UpdateDraftIn(BaseModel):
+    """Saves wizard progress on a pending draft. Every field is optional."""
+    raw_prompt: str | None = Field(default=None, min_length=10, max_length=2000)
+    age_range: str | None = Field(default=None, pattern=r"^(3-5|6-8|9-11)$")
+    tone: list[str] | None = Field(default=None, max_length=5)
+    safety_mode: bool | None = None
+    page_count: int | None = Field(default=None, ge=MIN_PAGE_COUNT, le=MAX_PAGE_COUNT)
+    model_provider: str | None = None
+    model_name: str | None = None
+    brief: BriefOut | None = None
+    art_style: str | None = Field(default=None, min_length=3, max_length=100)
+
+
 class GenerateIn(BaseModel):
     art_style: str = Field(min_length=3, max_length=100)
+    # The brief the user picked/edited. When omitted, the brief saved on the
+    # draft is used; only if neither exists is a fresh one generated.
+    brief: BriefOut | None = None
 
 
 class AddPageIn(BaseModel):

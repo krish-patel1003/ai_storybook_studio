@@ -54,7 +54,8 @@ function relativeTime(iso: string) {
 
 // Smart route: where to take the user based on book state
 function continueRoute(book: BookSummaryOut): string {
-  if (book.stage === "pending") return "/create";
+  // Drafts (and failed runs, which persist no pages) resume inside the wizard
+  if (book.stage === "pending" || book.stage === "failed") return `/create?book=${book.id}`;
   if (book.stage === "complete" && book.illustrated_page_count > 0) return "/editor";
   return "/outline";
 }
@@ -273,10 +274,6 @@ export default function LibraryPage() {
 
   async function loadAndGo(book: BookSummaryOut, destination: string, setLoading: (id: string | null) => void) {
     if (!token) return;
-    if (book.stage === "pending") {
-      router.push("/create");
-      return;
-    }
     setLoading(book.id);
     try {
       const full = await api.books.get(token, book.id);

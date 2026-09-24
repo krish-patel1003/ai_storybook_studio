@@ -100,14 +100,17 @@ class StoryPipeline:
         art_style: str,
         safety: bool,
         page_count: int,
+        brief: StoryBrief | None = None,
     ) -> GenerationResult:
-        brief = await self._enhance.run(
-            raw_prompt=raw_prompt,
-            age_range=age_range,
-            tone=tone,
-            safety=safety,
-            page_count=page_count,
-        )
+        # A brief the user already picked in the wizard skips the enhance stage
+        if brief is None:
+            brief = await self._enhance.run(
+                raw_prompt=raw_prompt,
+                age_range=age_range,
+                tone=tone,
+                safety=safety,
+                page_count=page_count,
+            )
         characters = await self._characters.run(brief=brief, art_style=art_style)
         beats = await self._outline.run(
             brief=brief, characters=characters, page_count=page_count

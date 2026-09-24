@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowRight,
@@ -209,7 +209,18 @@ function BriefEditor({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CreatePage() {
+  // useSearchParams needs a Suspense boundary in the app router
+  return (
+    <Suspense>
+      <CreateWizard />
+    </Suspense>
+  );
+}
+
+function CreateWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resumeId = searchParams.get("book");
   const { token } = useAuth();
   const { setBook } = useBook();
 
@@ -237,6 +248,7 @@ export default function CreatePage() {
   // Draft & generation state
   const [draft, setDraft] = useState<BookOut | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   // Fetch available models once on mount
   useEffect(() => {
@@ -248,39 +260,125 @@ export default function CreatePage() {
       .finally(() => setModelsLoading(false));
   }, [token]);
 
+  // Resume a saved draft (e.g. "Continue" from the library)
+  useEffect(() => {
+    if (!token || !resumeId || resumeId === draft?.id) return;
+    setResuming(true);
+    api.books.get(token, resumeId)
+      .then(hydrateFromDraft)
+      .catch((err: any) => {
+        toast.error(err.message ?? "Could not load your draft");
+        router.replace("/create");
+      })
+      .finally(() => setResuming(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, resumeId]);
+
   const activeBrief = editedBrief ?? briefs[selectedBriefIdx] ?? null;
 
-  async function fetchBriefs(existingDraft?: BookOut) {
+  // Persist the picked/edited brief while the user is on the brief step
+  useEffect(() => {
+    if (step !== 2 || !draft || !editedBrief) return;
+    const t = setTimeout(() => saveDraft({ brief: editedBrief }), 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editedBrief, step, draft?.id]);
+
+  function hydrateFromDraft(saved: BookOut) {
+    setBook(saved);
+    if (saved.stage !== "pending" && saved.stage !== "failed") {
+      // Generation already ran — nothing left to do in the wizard
+      router.replace("/outline");
+      return;
+    }
+    setDraft(saved);
+    setPrompt(saved.raw_prompt);
+    setAge(saved.age_range);
+    setTone(saved.tone);
+    setSafety(saved.safety_mode);
+    setPageCount(saved.page_count);
+    setModelProvider(saved.model_provider);
+    setModelName(saved.model_name);
+    if (saved.art_style) setStyle(saved.art_style);
+
+    const options = saved.brief_options ?? [];
+    setBriefs(options);
+    if (saved.brief) {
+      const chosen = saved.brief;
+      const idx = options.findIndex((o) => o.title === chosen.title || o.logline === chosen.logline);
+      setSelectedBriefIdx(idx);
+      setEditedBrief(chosen);
+      setStep(3);
+    } else if (options.length > 0) {
+      setSelectedBriefIdx(0);
+      setEditedBrief(null);
+      setStep(2);
+    } else {
+      setStep(1);
+    }
+
+    if (saved.stage === "failed") {
+      toast.error("The last generation failed — your choices are saved, try again.");
+    }
+  }
+
+  function draftInputs() {
+    return {
+      raw_prompt: prompt,
+      age_range: age,
+      tone,
+      safety_mode: safety,
+      page_count: pageCount,
+      model_provider: modelProvider,
+      model_name: modelName,
+    };
+  }
+
+  function inputsChanged(d: BookOut) {
+    return (
+      d.raw_prompt !== prompt ||
+      d.age_range !== age ||
+      JSON.stringify(d.tone) !== JSON.stringify(tone) ||
+      d.safety_mode !== safety ||
+      d.page_count !== pageCount ||
+      d.model_provider !== modelProvider ||
+      d.model_name !== modelName
+    );
+  }
+
+  async function saveDraft(data: Parameters<typeof api.books.updateDraft>[2]) {
+    if (!token || !draft) return;
+    try {
+      const saved = await api.books.updateDraft(token, draft.id, data);
+      setDraft(saved);
+      setBook(saved);
+    } catch {
+      // non-fatal — the wizard keeps working with local state
+    }
+  }
+
+  async function fetchBriefs() {
     if (!token) { toast.error("Please sign in first"); return false; }
     setBriefsLoading(true);
     setBriefs([]);
     setEditedBrief(null);
     setSelectedBriefIdx(0);
     try {
-      // Save draft to DB on first brief generation (not on regenerate)
-      if (!existingDraft && !draft) {
-        const saved = await api.books.createDraft(token, {
-          raw_prompt: prompt,
-          age_range: age,
-          tone,
-          safety_mode: safety,
-          page_count: pageCount,
-          model_provider: modelProvider,
-          model_name: modelName,
-        });
-        setDraft(saved);
-        setBook(saved);
+      let current = draft;
+      if (!current) {
+        // Save the draft before spending anything on generation
+        current = await api.books.createDraft(token, draftInputs());
+        router.replace(`/create?book=${current.id}`);
+      } else if (inputsChanged(current)) {
+        current = await api.books.updateDraft(token, current.id, draftInputs());
       }
-      const res = await api.books.generateBriefs(token, {
-        raw_prompt: prompt,
-        age_range: age,
-        tone,
-        safety_mode: safety,
-        page_count: pageCount,
-        model_provider: modelProvider,
-        model_name: modelName,
-      });
-      setBriefs(res.briefs);
+      setDraft(current);
+
+      // Options are persisted on the draft so they survive leaving the page
+      const withBriefs = await api.books.generateDraftBriefs(token, current.id);
+      setDraft(withBriefs);
+      setBook(withBriefs);
+      setBriefs(withBriefs.brief_options ?? []);
       return true;
     } catch (err: any) {
       toast.error(err.message ?? "Failed to generate briefs");
@@ -301,14 +399,16 @@ export default function CreatePage() {
     }
 
     if (step === 1) {
-      // Audience → trigger brief generation, advance to step 2
       setStep(2);
+      // Reuse saved options unless the story inputs changed since they were made
+      if (draft && briefs.length > 0 && !inputsChanged(draft)) return;
       await fetchBriefs();
       return;
     }
 
     if (step === 2) {
       if (!activeBrief) { toast.error("Pick a brief first"); return; }
+      saveDraft({ brief: activeBrief });
       setStep(3);
       return;
     }
@@ -326,7 +426,7 @@ export default function CreatePage() {
       let book;
       if (draft) {
         // Use existing draft — just kick off generation with the chosen art style
-        book = await api.books.generate(token, draft.id, style);
+        book = await api.books.generate(token, draft.id, style, activeBrief);
       } else {
         // Fallback: create + generate in one call (shouldn't happen in normal flow)
         book = await api.books.create(token, {
@@ -362,6 +462,15 @@ export default function CreatePage() {
     step === 1 ||
     (step === 2 && (briefs.length > 0 || briefsLoading)) ||
     step === 3;
+
+  if (resuming) {
+    return (
+      <main className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="font-bold text-muted-foreground">Picking up where you left off…</p>
+      </main>
+    );
+  }
 
   return (
     <>
@@ -619,7 +728,7 @@ export default function CreatePage() {
                         </p>
                       </div>
                       <button
-                        onClick={() => fetchBriefs(draft ?? undefined)}
+                        onClick={() => fetchBriefs()}
                         disabled={briefsLoading}
                         className="flex shrink-0 items-center gap-1.5 rounded-full bg-background px-4 py-2 text-sm font-extrabold chunky-border disabled:opacity-50"
                       >
@@ -675,7 +784,10 @@ export default function CreatePage() {
                         return (
                           <button
                             key={s.id}
-                            onClick={() => setStyle(s.id)}
+                            onClick={() => {
+                              setStyle(s.id);
+                              saveDraft({ art_style: s.id });
+                            }}
                             className={`overflow-hidden rounded-2xl bg-background text-left chunky-border transition-transform ${
                               on ? "ring-4 ring-primary/40 -translate-y-1 chunky-shadow" : ""
                             }`}
