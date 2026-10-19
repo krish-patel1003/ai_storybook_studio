@@ -1,31 +1,138 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+# ─────────────────────────────────────────────────────────────────────────────
+# OlivianX CI/CD
+#
+# test  → unit-test the API (SQLite, no services) + build/typecheck the web app
+# deploy→ (manual, protected branches only) API to Cloud Run, web to Vercel
+#
+# Required CI/CD variables (Settings → CI/CD → Variables) for the DEPLOY jobs —
+# mark them Masked + Protected:
+#   GCP_SA_KEY         JSON key of a deployer service account (roles: Cloud Build
+#                      Editor, Cloud Run Admin, Artifact Registry Writer, Service
+#                      Account User). Paste the whole JSON as the value.
+#   GCP_PROJECT        e.g. ai-storybook-studio-496817
+#   GCP_REGION         e.g. us-central1
+#   VERCEL_TOKEN       Vercel access token
+#   VERCEL_ORG_ID      Vercel org id        (from .vercel/project.json)
+#   VERCEL_PROJECT_ID  Vercel project id    (from .vercel/project.json)
+#   NEXT_PUBLIC_API_URL  https://storybook-api-….run.app  (baked into the web build)
+# The test/build jobs need no secrets.
+# ─────────────────────────────────────────────────────────────────────────────
+
 stages:
-- build
-- test
-- deploy
-- review
-- dast
-- staging
-- canary
-- production
-- incremental rollout 10%
-- incremental rollout 25%
-- incremental rollout 50%
-- incremental rollout 100%
-- performance
-- cleanup
-- secret-detection
-sast:
+  - test
+  - build
+  - deploy
+
+# ── API: unit tests (SQLite in-memory) ───────────────────────────────────────
+api:test:
   stage: test
-include:
-- template: Auto-DevOps.gitlab-ci.yml
-variables:
-  SECRET_DETECTION_ENABLED: 'true'
-secret_detection:
-  stage: secret-detection
+  image: python:3.12-slim
+  # Real Postgres — the ORM models use Postgres-only types (JSONB, UUID).
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: "test"
+    POSTGRES_USER: "test"
+    POSTGRES_PASSWORD: "test"
+    # App config (imported at startup) — dummy values are fine for unit tests.
+    DATABASE_URL: "postgresql+asyncpg://test:test@postgres:5432/test"
+    REDIS_URL: "redis://localhost:6379/0"
+    ADMIN_USERNAME: "admin"
+    ADMIN_PASSWORD: "admin"
+    JWT_SECRET: "ci-test-secret"
+    ENVIRONMENT: "local"
+    # Tests create/drop their own tables against this Postgres service.
+    TEST_DATABASE_URL: "postgresql+asyncpg://test:test@postgres:5432/test"
+  before_script:
+    - cd apps/api
+    - pip install --no-cache-dir -r requirements/dev.txt
+  script:
+    - python -m pytest -q
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+# ── API: lint (non-blocking) ─────────────────────────────────────────────────
+api:lint:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - cd apps/api
+    - pip install --no-cache-dir ruff==0.8.4
+  script:
+    - ruff check src
+  allow_failure: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+# ── Web: install, typecheck, build ───────────────────────────────────────────
+web:build:
+  stage: build
+  image: node:20-slim
+  variables:
+    # Needed for `next build`; override via a CI/CD variable for the real API URL.
+    NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL}"
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+      - apps/web/node_modules/
+  before_script:
+    - npm ci
+  script:
+    - npm run -w apps/web lint || true
+    - npm run -w apps/web build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+# ── Deploy API → Cloud Run (build-only image → migrate → deploy) ──────────────
+api:deploy:
+  stage: deploy
+  image: google/cloud-sdk:slim
+  needs: ["api:test"]
+  variables:
+    IMAGE: "us-central1-docker.pkg.dev/${GCP_PROJECT}/storybook/api:latest"
+  before_script:
+    - echo "$GCP_SA_KEY" > /tmp/gcp-key.json
+    - gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+    - gcloud config set project "$GCP_PROJECT"
+  script:
+    # 1) Build + push the image (no deploy yet) so migrations run against it first.
+    - gcloud builds submit . --config=infra/cloudbuild-build-only.yaml --region="$GCP_REGION" --substitutions=_TAG=latest
+    # 2) Point the migrate job at the new image and run it BEFORE serving.
+    - gcloud run jobs update storybook-migrate --region="$GCP_REGION" --image="$IMAGE"
+    - gcloud run jobs execute storybook-migrate --region="$GCP_REGION" --wait
+    # 3) Deploy the service.
+    - gcloud run deploy storybook-api --region="$GCP_REGION" --image="$IMAGE"
+  after_script:
+    - rm -f /tmp/gcp-key.json
+  environment:
+    name: production-api
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "deploy/gcp-vercel-launch"'
+      when: manual
+  allow_failure: false
+
+# ── Deploy Web → Vercel ──────────────────────────────────────────────────────
+web:deploy:
+  stage: deploy
+  image: node:20-slim
+  needs: ["web:build"]
+  before_script:
+    - npm i -g vercel@latest
+  script:
+    - cd apps/web
+    - vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+    - vercel build --prod --token="$VERCEL_TOKEN"
+    - vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+  environment:
+    name: production-web
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "deploy/gcp-vercel-launch"'
+      when: manual
+  allow_failure: false

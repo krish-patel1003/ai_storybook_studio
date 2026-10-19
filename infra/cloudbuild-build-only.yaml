@@ -1,0 +1,23 @@
+# Builds + pushes the API image WITHOUT deploying, so the migration job can run
+# against the new image before the service starts serving it (CI uses this, then
+# runs the migrate job, then deploys). See .gitlab-ci.yml : api:deploy.
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--platform=linux/amd64'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/${PROJECT_ID}/storybook/api:${_TAG}'
+      - '-f'
+      - 'infra/docker/api.Dockerfile'
+      - 'apps/api'
+
+images:
+  - 'us-central1-docker.pkg.dev/${PROJECT_ID}/storybook/api:${_TAG}'
+
+substitutions:
+  _TAG: 'latest'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

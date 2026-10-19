@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -10,10 +11,12 @@ from src.database import get_db
 from src.main import app
 from src.models import metadata
 
-# In-memory SQLite for tests (fast, no external dependency)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Test database. Defaults to in-memory SQLite (fast), but the models use Postgres
+# types (JSONB, UUID), so CI sets TEST_DATABASE_URL to a real Postgres service.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-test_engine = create_async_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+_connect_args = {"check_same_thread": False} if TEST_DATABASE_URL.startswith("sqlite") else {}
+test_engine = create_async_engine(TEST_DATABASE_URL, connect_args=_connect_args)
 test_session_maker = async_sessionmaker(test_engine, expire_on_commit=False)
 
 
