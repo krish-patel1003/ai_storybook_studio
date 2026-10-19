@@ -75,6 +75,52 @@ def _compute_cost(model: str | None, illustrated: int, narrated: int) -> dict:
 
 # ── routes ────────────────────────────────────────────────────────────────────
 
+@router.get("/elevenlabs-voices", dependencies=[Depends(require_admin)])
+async def elevenlabs_voices() -> dict:
+    """List the ElevenLabs voices available on the account (to discover preset voice_ids)."""
+    from src.generation.elevenlabs import list_account_voices
+    try:
+        return {"voices": await list_account_voices()}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"ElevenLabs list failed: {exc}")
+
+
+@router.post("/test-results", dependencies=[Depends(require_admin)])
+async def store_test_results(
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Store a load/scalability/resilience test report (posted by scripts/loadtest.py)."""
+    from src.admin.models import TestRun
+    run = TestRun(label=str(body.get("label", "load test"))[:200], summary=body)
+    db.add(run)
+    await db.commit()
+    return {"id": str(run.id), "created_at": run.created_at.isoformat() if run.created_at else None}
+
+
+@router.get("/test-results", dependencies=[Depends(require_admin)])
+async def get_test_results(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    limit: int = 10,
+) -> dict:
+    """Return the most recent test runs (newest first) for the admin dashboard."""
+    from src.admin.models import TestRun
+    rows = (
+        await db.execute(select(TestRun).order_by(TestRun.created_at.desc()).limit(max(1, min(limit, 50))))
+    ).scalars().all()
+    return {
+        "runs": [
+            {
+                "id": str(r.id),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "label": r.label,
+                "summary": r.summary,
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.get("/stats")
 async def get_stats(
     _: AdminDep,
@@ -266,8 +312,13 @@ async def get_costs(
             "llm":           round(total_llm,  4),
             "illustrations": round(total_ilus, 4),
             "audio":         round(total_aud,  4),
+            # Arcade games run 100% in the browser (canvas + requestAnimationFrame),
+            # store scores in the visitor's own session, and make no server/API/DB
+            # calls — so they cost $0 in GCP compute, storage, or egress.
+            "games":         0.0,
             "total":         grand_total,
         },
+        "games_note": "Games run entirely client-side (browser compute) — no GCP cost.",
         "by_model":     by_model,
         "avg_per_book": avg_per_book,
         "total_books":  total_books,
@@ -624,9 +675,83 @@ async def toggle_bypass_limits(
         raise HTTPException(status_code=404, detail="User not found")
     user.bypass_limits = not user.bypass_limits
     if user.bypass_limits:
-        user.subscription_tier = "creator"
+        user.subscription_tier = "studio"
     await db.commit()
     return {"user_id": str(user_id), "email": user.email, "bypass_limits": user.bypass_limits}
+
+
+@router.patch("/users/{user_id}/tier", dependencies=[Depends(require_admin)])
+async def set_user_tier(
+    user_id: UUID,
+    tier: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Set a user's subscription tier directly (support / testing).
+
+    Valid tiers: free, storyteller, studio. Resets the page pool so the new
+    tier's allowance takes effect immediately.
+    """
+    from src.billing.tiers import TIERS
+    if tier not in TIERS:
+        raise HTTPException(status_code=400, detail=f"Unknown tier '{tier}'. Valid: {', '.join(TIERS)}")
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.subscription_tier = tier
+    user.subscription_status = "active" if tier != "free" else None
+    user.page_pool_used = 0
+    # Reset the period usage counters so the new tier starts clean.
+    user.avatars_used = 0
+    user.avatars_reset_at = None
+    await db.commit()
+    return {"user_id": str(user_id), "email": user.email, "subscription_tier": user.subscription_tier}
+
+
+@router.patch("/users/{user_id}/topup", dependencies=[Depends(require_admin)])
+async def grant_topup_pages(
+    user_id: UUID,
+    pages: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Add prepaid top-up pages to a user (support / testing — mirrors a page-pack purchase)."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.topup_pages_remaining = (user.topup_pages_remaining or 0) + int(pages)
+    await db.commit()
+    return {"user_id": str(user_id), "email": user.email, "topup_pages_remaining": user.topup_pages_remaining}
+
+
+@router.post("/test-user", dependencies=[Depends(require_admin)])
+async def upsert_test_user(
+    email: str,
+    password: str,
+    tier: str = "free",
+    username: str = "Test User",
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Create (or reset) a verified test user at a given tier. Support/testing only."""
+    from sqlalchemy import select as _select
+    from src.auth.utils import hash_password
+    from src.billing.tiers import TIERS
+    if tier not in TIERS:
+        raise HTTPException(status_code=400, detail=f"Unknown tier '{tier}'. Valid: {', '.join(TIERS)}")
+    res = await db.execute(_select(User).where(User.email == email))
+    user = res.scalar_one_or_none()
+    if user is None:
+        user = User(email=email, username=username)
+        db.add(user)
+    user.username = username
+    user.password_hash = hash_password(password)
+    user.is_email_verified = True
+    user.email_verification_token = None
+    user.subscription_tier = tier
+    user.subscription_status = "active" if tier != "free" else None
+    user.page_pool_used = 0
+    user.bypass_limits = False
+    await db.commit()
+    await db.refresh(user)
+    return {"user_id": str(user.id), "email": user.email, "subscription_tier": user.subscription_tier}
 
 
 @router.patch("/books/{book_id}/sample", dependencies=[Depends(require_admin)])

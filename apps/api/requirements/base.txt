@@ -11,7 +11,7 @@ PyJWT==2.10.1
 google-auth==2.37.0
 httpx==0.28.1
 python-multipart==0.0.20
-google-genai==1.14.0
+google-genai==1.48.0
 redis[hiredis]==5.2.1
 minio==7.2.15
 google-cloud-storage==2.19.0
@@ -21,3 +21,6 @@ ebooklib==0.18
 numpy>=1.26.0
 soundfile>=0.12.1
 stripe==11.1.1
+google-cloud-tasks==2.16.5
+prometheus-client==0.21.1
+prometheus-fastapi-instrumentator==7.0.0

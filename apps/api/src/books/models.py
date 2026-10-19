@@ -89,6 +89,18 @@ class Book(Base):
         index=True,
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Pages reserved from the user's quota when generation was committed (reserve-at-start),
+    # split by bucket so a failure refunds each exactly (top-up pages are paid and must not be
+    # converted to expiring monthly pages). Both zeroed once refunded; 0 for bypass users.
+    pages_charged: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    pages_charged_topup: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # Cached reader translations: { "<lang>": { "title": str, "pages": { "<page_id>": text } } }.
+    # Populated lazily the first time a reader toggles that language (direct translation).
+    translations: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=None)
+    # True once the user has entered the editor and committed to drawing pictures
+    # (even before any page finishes). Routes "continue" to the editor, not the
+    # pages-review step. Never reset once set.
+    illustration_started: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -165,6 +177,11 @@ class Page(Base):
 
     # MinIO object key — set after illustration is uploaded (null = not yet illustrated)
     image_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # How many times this page has been re-illustrated (remade). The first
+    # illustration is free (included when pages are written); remakes are capped
+    # per tier (remakes_per_page).
+    remake_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     # MinIO object key — set after narration is generated (null = not yet narrated)
     audio_key: Mapped[str | None] = mapped_column(String(255), nullable=True)

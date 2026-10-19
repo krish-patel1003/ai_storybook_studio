@@ -129,14 +129,32 @@
   * {
     border-color: var(--color-border);
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    /* Mobile hygiene: never let a stray wide element cause horizontal scroll,
+       and don't flash the grey tap highlight on touch. `clip` (not `hidden`)
+       so it doesn't become a scroll container and break the sticky header. */
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
   }
   h1, h2, h3, h4, .font-display {
     font-family: var(--font-display);
     letter-spacing: -0.01em;
+  }
+}
+
+/* On phones, iOS Safari zooms the page when a form field with <16px text is
+   focused. Keep form text at 16px below sm so focusing an input never zooms. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
   }
 }
 

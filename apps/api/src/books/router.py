@@ -2,7 +2,7 @@ import uuid
 from typing import Sequence
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.models import User
@@ -33,6 +33,7 @@ from src.books.schemas import (
     PageOut,
     ProviderInfo,
     RecalibrateIn,
+    ReflowIn,
     StorySeedOut,
     UpdateBookIn,
     BulkPageStyleIn,
@@ -116,6 +117,8 @@ async def brainstorm_ideas(
     user: User = Depends(rate_limit("brainstorm", 30)),
 ) -> BrainstormOut:
     """Generate 6 short story seed ideas to inspire the user before they write their prompt."""
+    from src.billing.guards import check_page_pool
+    check_page_pool(user, data.page_count)
     result = await service.brainstorm(data)
     return BrainstormOut(seeds=[StorySeedOut(title=s.title, hook=s.hook) for s in result.seeds])
 
@@ -126,6 +129,8 @@ async def expand_prompt(
     user: User = Depends(rate_limit("expand", 40)),
 ) -> ExpandedPromptOut:
     """Expand a user's prompt into a rich story concept."""
+    from src.billing.guards import check_page_pool
+    check_page_pool(user, data.page_count)
     result = await service.expand_prompt(data)
     return ExpandedPromptOut(
         title=result.title,
@@ -143,6 +148,8 @@ async def generate_brief(
     user: User = Depends(rate_limit("brief", 40)),
 ) -> BriefOut:
     """Generate a single story brief from the user's prompt and settings."""
+    from src.billing.guards import check_page_pool
+    check_page_pool(user, data.page_count)
     b = await service.generate_brief(data)
     from src.books.schemas import ArcStageOut
     return BriefOut(
@@ -161,6 +168,8 @@ async def regenerate_brief_field(
     user: User = Depends(rate_limit("brief_field", 60)),
 ) -> BriefOut:
     """Regenerate a single field of an existing brief, keeping everything else intact."""
+    from src.billing.guards import check_page_pool
+    check_page_pool(user, data.page_count)
     merged = await service.regenerate_brief_field(data)
     return BriefOut(**merged)
 
@@ -181,8 +190,39 @@ async def create_book(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(current_user),
 ) -> BookOut:
-    book = await service.create_and_generate(db, user.id, data)
+    from src.billing.guards import reserve_pages
+    from src.generation.tasks import enqueue_generation
+
+    # Reserve the pages up front (reserve-at-start) — this both checks and
+    # consumes atomically, so there's no window where a second book can slip
+    # through while this one is still generating. Refunded if generation fails.
+    charged_m, charged_t = await reserve_pages(db, user, data.page_count)
+    book = await service.create_book_record(db, user.id, data, pages_charged=charged_m, pages_charged_topup=charged_t)
+    enqueued = await enqueue_generation(book.id, user.id, mode="create")
+    if not enqueued:
+        # Cloud Tasks not configured — run generation inline (previous behaviour).
+        await service.run_generation(book.id, user.id)
+        book = await service.get_book(db, book.id, user.id)
     return BookOut.model_validate(book)
+
+
+@router.post("/_internal/generate", include_in_schema=False)
+async def _generate_worker(request: Request) -> dict:
+    """Internal endpoint invoked by Cloud Tasks to run a generation job.
+
+    Authenticated via the task's OIDC token (verified in-process). Returns 200
+    once generation finishes — whether it succeeded or recorded a FAILED stage —
+    so Cloud Tasks only retries when the worker never responded (e.g. the
+    instance was reclaimed mid-run), which is exactly the resilience we want.
+    """
+    from src.generation.tasks import verify_worker_request
+
+    verify_worker_request(request.headers.get("authorization"))
+    body = await request.json()
+    book_id = uuid.UUID(body["book_id"])
+    user_id = uuid.UUID(body["user_id"])
+    await service.run_generation(book_id, user_id)
+    return {"status": "ok"}
 
 
 @router.get("", response_model=list[BookSummaryOut])
@@ -193,9 +233,11 @@ async def list_books(
 ) -> list[BookSummaryOut]:
     rows = await service.list_books(db, user.id)
     result = []
-    for book, illustrated_count, cover_page_id in rows:
+    for book, illustrated_count, narrated_count, cover_page_id, is_fully_illustrated in rows:
         summary = BookSummaryOut.model_validate(book)
         summary.illustrated_page_count = illustrated_count
+        summary.narrated_page_count = narrated_count
+        summary.is_fully_illustrated = is_fully_illustrated
         if cover_page_id:
             summary.cover_image_url = f"/books/{book.id}/pages/{cover_page_id}/image"
         result.append(summary)
@@ -208,6 +250,8 @@ async def create_draft(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(current_user),
 ) -> BookOut:
+    from src.billing.guards import check_page_pool
+    check_page_pool(user, data.page_count)
     book = await service.create_draft(db, user.id, data)
     return BookOut.model_validate(book)
 
@@ -265,6 +309,25 @@ async def get_public_book(
         .where(BookModel.id == book_id)
     )
     book = result2.scalar_one()
+
+    # Sample books showcase both page styles: alternate Clear separation (3) and
+    # Words on Picture (1) across the curated set, with the last one on Words on
+    # Picture. Applied in-memory only (this is a read; nothing is persisted).
+    if getattr(book, "is_sample", False):
+        ids_res = await db.execute(
+            sa_select(BookModel.id)
+            .where(BookModel.is_sample.is_(True), BookModel.visibility == "public")
+            .order_by(BookModel.created_at.asc())
+        )
+        sample_ids = [r[0] for r in ids_res.all()]
+        if book_id in sample_ids:
+            idx = sample_ids.index(book_id)
+            is_last = idx == len(sample_ids) - 1
+            mode = 1 if (is_last or idx % 2 == 1) else 3
+            for p in book.pages:
+                if not getattr(p, "is_cover", False) and not getattr(p, "is_back_cover", False):
+                    p.text_mode = mode
+
     return BookOut.model_validate(book)
 
 
@@ -299,12 +362,12 @@ async def get_public_page_image(
 
 @router.get("/voices", response_model=dict)
 async def list_voices(user: User = Depends(current_user)) -> dict:
-    """Return available TTS voices with descriptions."""
-    from src.generation.tts import AVAILABLE_VOICES, DEFAULT_VOICE
+    """Return the preset narration voices (ElevenLabs) with descriptions."""
+    from src.generation.preset_voices import PRESET_VOICES
     return {
         "voices": [
-            {"id": k, "description": v, "is_default": k == DEFAULT_VOICE}
-            for k, v in AVAILABLE_VOICES.items()
+            {"id": v["id"], "name": v["name"], "description": v["description"], "is_default": v["is_default"]}
+            for v in PRESET_VOICES
         ]
     }
 
@@ -326,6 +389,43 @@ async def update_book(
     book: Book = Depends(owned_book),
 ) -> BookOut:
     updated = await service.update_book(db, book.id, book.user_id, data)
+    return BookOut.model_validate(updated)
+
+
+@router.get("/translate/languages")
+async def list_translate_languages() -> dict:
+    """Languages the reader can translate a book into (direct translation)."""
+    from src.books.translate import SUPPORTED_LANGUAGES, RTL_LANGUAGES
+    return {
+        "languages": [
+            {"code": code, "name": name, "rtl": code in RTL_LANGUAGES}
+            for code, name in SUPPORTED_LANGUAGES.items()
+        ]
+    }
+
+
+@router.post("/{book_id}/translate")
+async def translate_book(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> dict:
+    """Translate (and cache) a book's page text into a supported language.
+    Body: {"language": "<code>"}. Returns {language, title, pages: {page_id: text}}."""
+    from src.books.translate import translate_book as _translate
+    language = (body or {}).get("language", "")
+    return await _translate(db, book.id, book.user_id, language)
+
+
+@router.patch("/{book_id}/brief", response_model=BookOut)
+async def save_book_brief(
+    data: BriefOut,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    """Persist the planning brief onto a draft so the user can resume where they
+    left off instead of starting over (and re-spending tokens)."""
+    updated = await service.save_brief(db, book.id, book.user_id, data.model_dump())
     return BookOut.model_validate(updated)
 
 
@@ -378,16 +478,23 @@ async def export_pdf(
     )
 
 
-@router.get("/{book_id}/export/cover-pdf")
-async def export_cover_pdf(
+@router.get("/{book_id}/export/cover-image")
+async def export_cover_image(
+    format: str = Query(default="jpeg"),
+    with_text: bool = Query(default=True),
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
     user: User = Depends(current_user),
 ) -> Response:
-    """Single-page PDF of the front cover — needed for Amazon publishing."""
+    """Front cover as a raster image.
+
+    with_text=True  → "Standard" cover (title + author baked in), returned as JPG.
+    with_text=False → "Editor" cover (clean artwork, no text), returned as PNG so the
+                      user can add their own title in the Amazon KDP cover editor.
+    """
     import re as _re
     from src.books import service
-    from src.books.export import build_cover_pdf
+    from src.books.export import build_cover_image
     from fastapi.responses import Response as FastAPIResponse
 
     export_pages = await service.build_export_pages(db, book)
@@ -396,14 +503,22 @@ async def export_cover_pdf(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="No cover page found")
 
+    fmt = "jpeg" if format.lower() in ("jpg", "jpeg") else "png"
+    ext = "jpg" if fmt == "jpeg" else "png"
+    media = f"image/{'jpeg' if fmt == 'jpeg' else 'png'}"
+
     title  = book.brief.get("title", book.title) if book.brief else book.title
     author = book.author_name or getattr(user, "username", "") or ""
-    pdf_bytes  = await build_cover_pdf(title, cover, author=author)
+    img_bytes  = await build_cover_image(title, cover, author=author, fmt=fmt, with_text=with_text)
     safe_title = _re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "storybook"
+    variant = "" if with_text else "_editor"
     return FastAPIResponse(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}_cover.pdf"'},
+        content=img_bytes,
+        media_type=media,
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_title}_cover{variant}.{ext}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -482,8 +597,15 @@ async def bulk_page_style(
     data: BulkPageStyleIn,
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
 ) -> BookOut:
-    """Apply book-level style (font, size, color, mode) to every content page."""
+    """Apply book-level style (font, size, color, mode) to every content page.
+
+    This is the Parent-mode (Studio) advanced-editing endpoint, gated to tiers
+    that include parent mode.
+    """
+    from src.billing.guards import require_feature
+    require_feature(user, "parent_mode")
     updated = await service.bulk_apply_page_style(db, book.id, book.user_id, data)
     return BookOut.model_validate(updated)
 
@@ -524,8 +646,19 @@ async def generate_from_draft(
     data: GenerateIn,
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
 ) -> BookOut:
-    updated = await service.generate_from_draft(db, book.id, book.user_id, data)
+    from src.billing.guards import reserve_pages
+    from src.generation.tasks import enqueue_generation
+
+    # Reserve the pages atomically before committing to generation (see create_book).
+    charged_m, charged_t = await reserve_pages(db, user, book.page_count)
+    # Mark the draft as generating + persist the art style, then run async.
+    updated = await service.prepare_draft_for_generation(db, book.id, book.user_id, data, pages_charged=charged_m, pages_charged_topup=charged_t)
+    enqueued = await enqueue_generation(book.id, book.user_id, mode="draft")
+    if not enqueued:
+        await service.run_generation(book.id, book.user_id)
+        updated = await service.get_book(db, book.id, book.user_id)
     return BookOut.model_validate(updated)
 
 
@@ -566,6 +699,17 @@ async def get_character_image(
     return Response(content=data, media_type=content_type)
 
 
+@router.post("/{book_id}/illustrating", response_model=BookOut)
+async def mark_illustrating(
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    """Mark that the user has entered the editor / started drawing pictures, so
+    'continue' routes to the editor instead of the pages-review step."""
+    updated = await service.mark_illustration_started(db, book.id, book.user_id)
+    return BookOut.model_validate(updated)
+
+
 @router.post("/{book_id}/pages/{page_id}/illustrate", response_model=BookOut)
 async def illustrate_page(
     page_id: uuid.UUID,
@@ -574,13 +718,62 @@ async def illustrate_page(
     user: User = Depends(current_user),
 ) -> BookOut:
     from fastapi import HTTPException
-    from src.billing.guards import check_page_pool, deduct_page_pool
-    check_page_pool(user)
+    from sqlalchemy import select as _sa_select, update as _sa_update
+    from src.books.models import Page as _Page
+    from src.billing.tiers import get_tier
+
+    # Pages are paid for when they're WRITTEN (the pool is deducted at book creation),
+    # so the FIRST illustration of any page is free/included. Re-illustrating (a remake)
+    # is capped per tier: cover/back covers are always free, content pages get
+    # `remakes_per_page` remakes. Extra remakes are blocked (upgrade to get more).
+    row = (await db.execute(
+        _sa_select(_Page.is_cover, _Page.is_back_cover, _Page.image_key, _Page.remake_count).where(
+            _Page.id == page_id, _Page.book_id == book.id
+        )
+    )).one_or_none()
+    is_extra = bool(row and (row.is_cover or row.is_back_cover))
+    is_remake = bool(row and row.image_key is not None) and not is_extra
+
+    if is_remake and not user.bypass_limits:
+        allowance = get_tier(user.subscription_tier).remakes_per_page
+        if (row.remake_count or 0) >= allowance:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "You've used your remake for this page. "
+                    "Upgrade your plan for more picture remakes."
+                    if allowance > 0 else
+                    "Picture remakes aren't included on your plan. Upgrade to remake pictures."
+                ),
+            )
     try:
         updated = await service.illustrate_page(db, book.id, page_id, book.user_id)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=_generation_detail(exc))
-    await deduct_page_pool(db, user.id)
+    # Count the remake against this page's allowance (no pool deduction — pages were
+    # already paid for at write-time).
+    if is_remake and not user.bypass_limits:
+        await db.execute(
+            _sa_update(_Page).where(_Page.id == page_id).values(remake_count=_Page.remake_count + 1)
+        )
+        await db.commit()
+    return BookOut.model_validate(updated)
+
+
+@router.post("/{book_id}/pages/{page_id}/reflow", response_model=BookOut)
+async def reflow_page(
+    data: ReflowIn,
+    page_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    book: Book = Depends(owned_book),
+) -> BookOut:
+    """Rewrite a page's text shorter so it fits the text area without shrinking the
+    font. Triggered automatically by the reader when a page would overflow."""
+    from fastapi import HTTPException
+    try:
+        updated = await service.reflow_page(db, book.id, page_id, book.user_id, data.max_words)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=_generation_detail(exc))
     return BookOut.model_validate(updated)
 
 
@@ -667,9 +860,12 @@ async def narrate_book(
     data: NarrateIn = NarrateIn(),
     db: AsyncSession = Depends(get_db),
     book: Book = Depends(owned_book),
+    user: User = Depends(current_user),
 ) -> BookOut:
     """Narrate all un-narrated pages in the book sequentially."""
     from fastapi import HTTPException
+    from src.billing.guards import require_feature
+    require_feature(user, "narration")
     try:
         updated = await service.narrate_book(
             db, book.id, book.user_id,

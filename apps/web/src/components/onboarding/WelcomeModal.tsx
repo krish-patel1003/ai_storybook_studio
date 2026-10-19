@@ -4,10 +4,10 @@ import { Lightbulb, ImageIcon, Mic, BookOpen, Sparkles, X } from "lucide-react";
 
 // Framed as outcomes, not production steps — kids think in outcomes.
 const STEPS = [
-  { icon: Lightbulb, label: "Tell Your Idea", desc: "Tell us what your story is about." },
-  { icon: ImageIcon, label: "Make the Pictures", desc: "We'll create beautiful pictures for every page." },
-  { icon: Mic, label: "Add Your Voice", desc: "Read your story in your own voice." },
-  { icon: BookOpen, label: "Enjoy Your Book", desc: "Read it, share it, or print it." },
+  { icon: Lightbulb, label: "Tell Your Idea", desc: "Tell us what your story is about — we plan and write it with you." },
+  { icon: ImageIcon, label: "Draw the Pictures", desc: "We create a matching picture for every page." },
+  { icon: Mic, label: "Add Your Voice", desc: "Narrate it aloud in your own voice. ✨ On paid plans." },
+  { icon: BookOpen, label: "Read & Publish", desc: "Read it, share a link, download a PDF, or publish to Amazon." },
 ];
 
 export function WelcomeModal({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {

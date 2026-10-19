@@ -44,6 +44,7 @@ class ImageStage:
         visual_seed: int,
         character_refs: dict[str, bytes] | None = None,
         max_retries: int = 3,
+        reseed: int = 0,
     ) -> list[GeneratedImage]:
         tasks = [
             self._generate_one(
@@ -51,6 +52,7 @@ class ImageStage:
                 visual_seed=visual_seed,
                 character_refs=character_refs or {},
                 max_retries=max_retries,
+                reseed=reseed,
             )
             for p in pages
             if p.illustration_metadata is not None
@@ -64,6 +66,7 @@ class ImageStage:
         visual_seed: int,
         character_refs: dict[str, bytes],
         max_retries: int,
+        reseed: int = 0,
     ) -> GeneratedImage:
         async with self._sem:
             meta = page.illustration_metadata
@@ -93,7 +96,9 @@ class ImageStage:
             else:
                 contents = prompt_text
 
-            seed = (visual_seed + page.order) % (2**31)
+            # `reseed` is non-zero on a remake so the same page/prompt produces a
+            # genuinely different image (character refs still keep the look consistent).
+            seed = (visual_seed + page.order + reseed) % (2**31)
 
             last_exc: Exception | None = None
             for attempt in range(max_retries):
@@ -104,6 +109,8 @@ class ImageStage:
                         config=gtypes.GenerateContentConfig(
                             response_modalities=["IMAGE"],
                             seed=seed,
+                            # Portrait pages — matches the A5 book/reader layout.
+                            image_config=gtypes.ImageConfig(aspect_ratio="3:4"),
                         ),
                     )
                     for part in response.candidates[0].content.parts:

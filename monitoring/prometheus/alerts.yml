@@ -1,0 +1,73 @@
+groups:
+  - name: storybook-api-availability
+    rules:
+      - alert: APIDown
+        expr: up{job="storybook-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Storybook API is unreachable"
+          description: "Prometheus cannot scrape the API (/metrics) for >2m. The service may be down or METRICS_TOKEN may be wrong."
+
+  - name: storybook-api-errors
+    rules:
+      - alert: HighServerErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="storybook-api",status="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total{job="storybook-api"}[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx error rate above 5%"
+          description: "More than 5% of API requests are returning 5xx over the last 5 minutes."
+
+      - alert: UnhandledExceptions
+        expr: increase(storybook_unhandled_errors_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unhandled exceptions in the API"
+          description: "{{ $value }} unhandled exception(s) in the last 10m on path {{ $labels.path }}."
+
+  - name: storybook-api-latency
+    rules:
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket{job="storybook-api"}[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 request latency above 2s"
+          description: "95th-percentile API latency has exceeded 2s for 10 minutes (generation endpoints excluded from alerting thresholds should be reviewed separately)."
+
+  - name: storybook-generation
+    rules:
+      - alert: HighGenerationFailureRate
+        expr: |
+          sum(rate(storybook_generation_total{result="failure"}[15m]))
+          /
+          clamp_min(sum(rate(storybook_generation_total{result=~"success|failure"}[15m])), 0.001)
+          > 0.30
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Book generation failing for >30% of attempts"
+          description: "Over 30% of completed generations failed in the last 15m — check the AI provider, Cloud Tasks, and worker logs."
+
+      - alert: GenerationBacklog
+        expr: storybook_generation_in_progress > 8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Many generations in progress"
+          description: "{{ $value }} generations running concurrently for 10m — the Cloud Run max-instances ceiling may be throttling throughput."

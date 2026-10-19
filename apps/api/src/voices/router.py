@@ -52,13 +52,19 @@ async def upload_voice(
     """
     from src.generation.elevenlabs import clone_voice
     from src.storage import minio_client as mc
+    from src.billing.guards import require_feature
+
+    # Voice cloning / narration is a Studio-tier feature.
+    require_feature(user, "narration")
 
     if not name or not name.strip():
         raise HTTPException(status_code=400, detail="Voice name cannot be empty")
 
     audio_bytes = await file.read()
     if len(audio_bytes) < 1024:  # sanity check: at least 1 KB
-        raise HTTPException(status_code=400, detail="Audio file is too small — please record at least 30 seconds")
+        raise HTTPException(status_code=400, detail="Audio file is too small — please record at least 1 minute")
+    if len(audio_bytes) > 40 * 1024 * 1024:  # ~40 MB ceiling (15 min of opus is well under this)
+        raise HTTPException(status_code=400, detail="Audio file is too large — please keep recordings to 15 minutes or less")
 
     mime_type = file.content_type or "audio/webm"
 

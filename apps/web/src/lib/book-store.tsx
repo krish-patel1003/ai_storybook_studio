@@ -12,6 +12,9 @@ import type { BookOut, PageOut } from "./api";
 
 interface BookStore {
   book: BookOut | null;
+  /** True once the initial localStorage read has completed, so consumers can tell
+   *  "no book yet, still hydrating" apart from "hydrated and genuinely empty". */
+  hydrated: boolean;
   setBook: (book: BookOut | null) => void;
   updateBook: (partial: Partial<BookOut>) => void;
   /**
@@ -25,6 +28,7 @@ interface BookStore {
 
 const BookStoreContext = createContext<BookStore>({
   book: null,
+  hydrated: false,
   setBook: () => {},
   updateBook: () => {},
   mergePages: () => {},
@@ -34,12 +38,14 @@ const STORAGE_KEY = "sb_current_book";
 
 export function BookProvider({ children }: { children: ReactNode }) {
   const [book, setBookState] = useState<BookOut | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setBookState(JSON.parse(raw));
     } catch {}
+    setHydrated(true);
   }, []);
 
   const setBook = useCallback((b: BookOut | null) => {
@@ -73,7 +79,7 @@ export function BookProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <BookStoreContext.Provider value={{ book, setBook, updateBook, mergePages }}>
+    <BookStoreContext.Provider value={{ book, hydrated, setBook, updateBook, mergePages }}>
       {children}
     </BookStoreContext.Provider>
   );

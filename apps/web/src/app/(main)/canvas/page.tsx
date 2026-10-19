@@ -58,7 +58,7 @@ function PageThumb({
 }: {
   page: PageOut; bookId: string; token: string; isActive: boolean; onClick: () => void;
 }) {
-  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id, page.image_version), token, page.has_image);
 
   return (
     <button
@@ -351,7 +351,7 @@ export default function CanvasPage() {
 
   // ── Image ─────────────────────────────────────────────────────────────────────
 
-  const imgUrl = page ? pageImageUrl(book!.id, page.id) : "";
+  const imgUrl = page ? pageImageUrl(book!.id, page.id, page.image_version) : "";
   const blobUrl = useAuthImage(imgUrl, token ?? null, !!page?.has_image);
 
   // ── Guards ────────────────────────────────────────────────────────────────────
@@ -414,10 +414,11 @@ export default function CanvasPage() {
       </header>
 
       {/* ── Body ──────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Mobile: panes stack and the column scrolls. lg+ keeps the desktop 3-pane. */}
+      <div className="flex flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
 
         {/* ── Left sidebar: page thumbnails ─────────────────────────────────── */}
-        <aside className="flex w-44 shrink-0 flex-col gap-0 border-r-[2.5px] border-foreground bg-card overflow-y-auto">
+        <aside className="flex w-full lg:w-44 shrink-0 flex-row lg:flex-col gap-0 border-b-[2.5px] lg:border-b-0 lg:border-r-[2.5px] border-foreground bg-card overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto">
           <div className="p-2 space-y-2">
             {pages.map((p, i) => (
               <PageThumb
@@ -434,7 +435,7 @@ export default function CanvasPage() {
 
         {/* ── Center: canvas area ───────────────────────────────────────────── */}
         <main
-          className="flex flex-1 flex-col items-center justify-center gap-4 overflow-auto p-6 bg-muted/20"
+          className="flex flex-1 flex-col items-center justify-center gap-4 overflow-auto p-6 bg-muted/20 min-h-[55vh] lg:min-h-0"
           onClick={() => setActive(true)}
         >
           {/* Canvas */}
@@ -478,7 +479,7 @@ export default function CanvasPage() {
         </main>
 
         {/* ── Right panel: controls ─────────────────────────────────────────── */}
-        <aside className="flex w-[280px] shrink-0 flex-col border-l-[2.5px] border-foreground bg-card overflow-y-auto">
+        <aside className="flex w-full lg:w-[280px] shrink-0 flex-col border-t-[2.5px] lg:border-t-0 lg:border-l-[2.5px] border-foreground bg-card overflow-visible lg:overflow-y-auto">
           <div className="p-4 space-y-5">
 
             {/* ── Text content ── */}

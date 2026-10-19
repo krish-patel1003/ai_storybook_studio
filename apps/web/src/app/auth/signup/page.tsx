@@ -39,7 +39,7 @@ export default function SignUpPage() {
   async function handleGoogleCredential(credential: string) {
     try {
       await googleLogin(credential);
-      toast.success("Account created! Welcome to Storybook Studio.");
+      toast.success("Account created! Welcome to OlivianX.");
       window.location.href = "/";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Google sign up failed");
@@ -60,7 +60,7 @@ export default function SignUpPage() {
     try {
       await registerUser(data.username, data.email, data.password);
       if (isMock) {
-        toast.success("Account created! Welcome to Storybook Studio.");
+        toast.success("Account created! Welcome to OlivianX.");
         router.push("/");
       } else {
         router.push(`/auth/check-email?email=${encodeURIComponent(data.email)}`);

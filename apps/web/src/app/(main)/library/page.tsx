@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   BookOpen,
   Plus,
   Sparkles,
+  Mic,
   AlertCircle,
   Clock,
   CheckCircle2,
@@ -17,12 +19,13 @@ import {
   Pencil,
   Eye,
   ImageIcon,
+  Baby,
 } from "lucide-react";
 import { XsSpinner, LgSpinner } from "@/components/character-spinner";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
-import { api, type BookSummaryOut, type BookOut } from "@/lib/api";
+import { api, type BookSummaryOut, type BookOut, type ChildProfile } from "@/lib/api";
 import { toast } from "sonner";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -81,8 +84,15 @@ function relativeTime(iso: string) {
 
 // Smart route: where to take the user based on book state
 function continueRoute(book: BookSummaryOut): string {
-  if (book.stage === "pending") return "/create";
-  return "/editor";
+  // Still planning or still generating pages → resume the create flow (shows the
+  // live writing state, then the pages-review step once ready).
+  if (book.stage === "pending" || book.stage === "enhancing") return `/create?resume=${book.id}`;
+  if (book.is_fully_illustrated) return "/studio";
+  // Once the user has entered the editor / started drawing pictures (even before
+  // any page finishes), continue in the editor — never back to pages-review.
+  if (book.illustration_started || (book.illustrated_page_count ?? 0) > 0) return "/editor";
+  // Pages written but pictures not started yet → the pages-review step.
+  return `/create?resume=${book.id}`;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -136,8 +146,8 @@ function DeleteDialog({
 }
 
 function BookCard({
-  book, token, onContinue, onPreview, onDelete, onToggleVisibility,
-  loadingContinue, loadingPreview, loadingVisibility,
+  book, token, onContinue, onPreview, onDelete, onToggleVisibility, onAddVoice,
+  loadingContinue, loadingPreview, loadingVisibility, loadingVoice,
 }: {
   book: BookSummaryOut;
   token: string;
@@ -145,20 +155,31 @@ function BookCard({
   onPreview: () => void;
   onDelete: () => void;
   onToggleVisibility: () => void;
+  onAddVoice: () => void;
   loadingContinue: boolean;
   loadingPreview: boolean;
   loadingVisibility: boolean;
+  loadingVoice: boolean;
 }) {
   const isPublic = book.visibility === "public";
   const hasIllustrations = book.illustrated_page_count > 0;
+  const hasNarration = book.narrated_page_count > 0;
   const isComplete = book.stage === "complete";
+  const isInProgress = !book.is_fully_illustrated && book.stage !== "pending" && book.stage !== "failed";
   const canContinue = isComplete || book.stage === "pending" || book.stage === "failed";
 
-  const continueIcon = book.stage === "pending"
+  const continueIcon = (book.stage === "pending" || isInProgress)
     ? <Pencil className="h-4 w-4" strokeWidth={2.5} />
     : <BookOpen className="h-4 w-4" strokeWidth={2.5} />;
 
-  const continueLabel = book.stage === "pending" ? "Continue" : book.stage === "failed" ? "View / retry" : "Open book";
+  // In-progress and pictures NOT started yet → the next step is reviewing the
+  // written pages. Once illustration has begun, it's "Go to editor" instead.
+  const needsReview = isInProgress && !book.illustration_started && book.illustrated_page_count === 0;
+  const continueLabel = book.stage === "pending" ? "Continue"
+    : book.stage === "failed" ? "View / retry"
+    : needsReview ? "Review pages"
+    : isInProgress ? "Go to editor"
+    : "Open in Parent mode";
 
   return (
     <motion.div
@@ -222,8 +243,8 @@ function BookCard({
           <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
             <ImageIcon className="h-3 w-3" />
             {hasIllustrations
-              ? `${book.illustrated_page_count} of ${book.page_count} illustrated`
-              : "Not illustrated yet"}
+              ? `${book.illustrated_page_count} of ${book.page_count} pictured`
+              : "No pictures yet"}
           </div>
         )}
 
@@ -238,26 +259,34 @@ function BookCard({
       </div>
 
       {/* Actions */}
-      <div className="px-4 pb-4 flex gap-2">
+      <div className="px-4 pb-4 flex flex-col gap-2">
         <button onClick={onContinue} disabled={!canContinue || loadingContinue}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:translate-y-0">
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:translate-y-0">
           {loadingContinue
             ? <XsSpinner />
             : <>{continueIcon} {continueLabel}</>}
         </button>
 
+        <div className="flex gap-2">
+          {hasIllustrations && (
+            <button onClick={onPreview} disabled={loadingPreview}
+              title="Read storybook"
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-accent py-2.5 text-sm font-extrabold text-accent-foreground chunky-border transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:translate-y-0">
+              {loadingPreview ? <XsSpinner /> : <><Eye className="h-4 w-4" strokeWidth={2.5} /> Read Storybook</>}
+            </button>
+          )}
+
+          <button onClick={onDelete} title="Delete book"
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-background hover:bg-destructive/10 hover:text-destructive chunky-border transition-colors ${hasIllustrations ? "" : "ml-auto"}`}>
+            <Trash2 className="h-4 w-4" strokeWidth={2.5} />
+          </button>
+        </div>
         {hasIllustrations && (
-          <button onClick={onPreview} disabled={loadingPreview}
-            title="Preview book"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-accent text-accent-foreground chunky-border transition-transform hover:-translate-y-0.5">
-            {loadingPreview ? <XsSpinner /> : <Eye className="h-4 w-4" strokeWidth={2.5} />}
+          <button onClick={onAddVoice} disabled={loadingVoice}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-background py-2 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-40">
+            {loadingVoice ? <XsSpinner /> : <><Mic className="h-3.5 w-3.5" strokeWidth={2.5} /> {hasNarration ? "Change voice" : "Add voice"}</>}
           </button>
         )}
-
-        <button onClick={onDelete} title="Delete book"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-background hover:bg-destructive/10 hover:text-destructive chunky-border transition-colors">
-          <Trash2 className="h-4 w-4" strokeWidth={2.5} />
-        </button>
       </div>
     </motion.div>
   );
@@ -285,7 +314,7 @@ function EmptyState() {
 
 import { useRequireAuth } from "@/lib/use-require-auth";
 
-export default function LibraryPage() {
+function LibraryInner() {
   useRequireAuth();
   const router = useRouter();
   const { token } = useAuth();
@@ -299,6 +328,14 @@ export default function LibraryPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BookSummaryOut | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [voiceLoadingId, setVoiceLoadingId] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<ChildProfile[]>([]);
+  const [profileFilter, setProfileFilter] = useState<string>("all");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: "all" | "myself" | "tome" | "progress" =
+    tabParam === "tome" || tabParam === "myself" || tabParam === "progress" ? tabParam : "all";
+  const setTab = (t: "all" | "myself" | "tome" | "progress") => router.replace(`/library?tab=${t}`);
 
   useEffect(() => {
     if (!token) return;
@@ -306,12 +343,14 @@ export default function LibraryPage() {
       .then(setBooks)
       .catch((e) => setError(e.message))
       .finally(() => setFetching(false));
+    api.profiles.list(token).then(setProfiles).catch(() => {});
   }, [token]);
 
   async function loadAndGo(book: BookSummaryOut, destination: string, setLoading: (id: string | null) => void) {
     if (!token) return;
-    if (book.stage === "pending") {
-      router.push("/create");
+    if (destination.startsWith("/create?resume=")) {
+      // The create flow loads the book itself — don't preload, just navigate.
+      router.push(destination);
       return;
     }
     setLoading(book.id);
@@ -332,6 +371,10 @@ export default function LibraryPage() {
 
   function previewBook(book: BookSummaryOut) {
     loadAndGo(book, "/reader?from=library", setPreviewLoadingId);
+  }
+
+  function addVoiceBook(book: BookSummaryOut) {
+    loadAndGo(book, "/narrate", setVoiceLoadingId);
   }
 
   async function toggleVisibility(book: BookSummaryOut) {
@@ -408,29 +451,136 @@ export default function LibraryPage() {
               Retry
             </button>
           </div>
-        ) : (
+        ) : books.length === 0 ? (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {books.length === 0 ? (
-              <EmptyState />
-            ) : (
-              books.map((book) => (
-                <BookCard
-                  key={book.id}
-                  book={book}
-                  token={token ?? ""}
-                  onContinue={() => continueBook(book)}
-                  onPreview={() => previewBook(book)}
-                  onDelete={() => setDeleteTarget(book)}
-                  onToggleVisibility={() => toggleVisibility(book)}
-                  loadingContinue={loadingId === book.id}
-                  loadingPreview={previewLoadingId === book.id}
-                  loadingVisibility={visibilityLoadingId === book.id}
-                />
-              ))
-            )}
+            <EmptyState />
           </div>
-        )}
+        ) : (() => {
+          const byProfile = (list: BookSummaryOut[]) =>
+            profileFilter === "all" ? list : list.filter((b) => b.child_profile_id === profileFilter);
+          // Complete = every content page illustrated. In Progress = pages written but
+          // illustration still remaining. Planning-only drafts (pending) are hidden.
+          const completed = books.filter((b) => b.is_fully_illustrated);
+          const inProgress = books.filter((b) => !b.is_fully_illustrated && b.stage !== "pending");
+          const myselfBooks = byProfile(completed.filter((b) => (b.narrated_page_count ?? 0) === 0));
+          const tomeBooks = byProfile(completed.filter((b) => (b.narrated_page_count ?? 0) > 0));
+          const allBooks = byProfile(completed);
+          const progressBooks = byProfile(inProgress);
+          const shown = tab === "myself" ? myselfBooks : tab === "tome" ? tomeBooks : tab === "progress" ? progressBooks : allBooks;
+          return (
+            <>
+              {/* In-progress nudge — surfaces books the user started but didn't finish */}
+              {inProgress.length > 0 && tab !== "progress" && (
+                <button
+                  onClick={() => setTab("progress")}
+                  className="mb-5 flex w-full items-center gap-3 rounded-2xl bg-highlight px-4 py-3 text-left chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background chunky-border text-lg">🚧</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-extrabold text-foreground">
+                      You have {inProgress.length} book{inProgress.length > 1 ? "s" : ""} in progress
+                    </span>
+                    <span className="block text-xs font-bold text-foreground/70">Pick up where you left off and finish the pictures.</span>
+                  </span>
+                  <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-extrabold text-primary-foreground chunky-border">Finish →</span>
+                </button>
+              )}
+
+              {/* Tabs + child-profile filter */}
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+                {/* All (My Books) · Read Myself (no narration) · Read to Me (has narration) */}
+                <div data-tour="library-tabs" className="flex w-full gap-1 overflow-x-auto rounded-full bg-card p-1 chunky-border sm:w-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {([
+                    { id: "all" as const, label: "📚 My Books", count: allBooks.length },
+                    { id: "myself" as const, label: "📖 Read Myself", count: myselfBooks.length },
+                    { id: "tome" as const, label: "🎧 Read to Me", count: tomeBooks.length },
+                    { id: "progress" as const, label: "🚧 In Progress", count: progressBooks.length },
+                  ]).map((t) => (
+                    <button key={t.id} onClick={() => setTab(t.id)}
+                      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-extrabold transition-colors sm:px-5 sm:py-2.5 sm:text-base ${tab === t.id ? "bg-primary text-primary-foreground chunky-shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                      {t.label} <span className="opacity-70">({t.count})</span>
+                    </button>
+                  ))}
+                </div>
+
+                {profiles.length > 0 && (() => {
+                  const isImgAvatar = (v: string) => v.startsWith("http://") || v.startsWith("https://");
+                  const selectedProfile = profiles.find((p) => p.id === profileFilter);
+                  return (
+                    <label data-tour="library-filter" className="inline-flex items-center gap-2.5 rounded-full bg-card px-4 py-2.5 chunky-border chunky-shadow-sm">
+                      {selectedProfile ? (
+                        isImgAvatar(selectedProfile.avatar_emoji) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={selectedProfile.avatar_emoji} alt="" className="h-8 w-8 rounded-full object-cover chunky-border shrink-0" />
+                        ) : (
+                          <span className="text-2xl leading-none shrink-0">{selectedProfile.avatar_emoji}</span>
+                        )
+                      ) : (
+                        <Baby className="h-5 w-5 text-primary shrink-0" strokeWidth={2.5} />
+                      )}
+                      <span className="text-sm font-extrabold text-muted-foreground">Child</span>
+                      <select
+                        value={profileFilter}
+                        onChange={(e) => setProfileFilter(e.target.value)}
+                        className="bg-transparent text-base font-extrabold text-foreground outline-none cursor-pointer pr-1"
+                      >
+                        <option value="all">All children</option>
+                        {profiles.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  );
+                })()}
+              </div>
+
+              {shown.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-20 text-center">
+                  <div className="grid h-16 w-16 place-items-center rounded-2xl bg-muted chunky-border">
+                    <BookOpen className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
+                  </div>
+                  <p className="font-bold text-muted-foreground">
+                    {tab === "tome"
+                      ? "No narrated books yet — add a voice to a book to see it here."
+                      : tab === "progress"
+                      ? "Nothing in progress — books you've written but not finished illustrating will appear here."
+                      : tab === "myself"
+                      ? "No un-narrated books here."
+                      : "No finished books yet."}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {shown.map((book) => (
+                    <BookCard
+                      key={book.id}
+                      book={book}
+                      token={token ?? ""}
+                      onContinue={() => continueBook(book)}
+                      onPreview={() => previewBook(book)}
+                      onDelete={() => setDeleteTarget(book)}
+                      onToggleVisibility={() => toggleVisibility(book)}
+                      onAddVoice={() => addVoiceBook(book)}
+                      loadingContinue={loadingId === book.id}
+                      loadingPreview={previewLoadingId === book.id}
+                      loadingVisibility={visibilityLoadingId === book.id}
+                      loadingVoice={voiceLoadingId === book.id}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </main>
     </>
+  );
+}
+
+export default function LibraryPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-32"><LgSpinner /></div>}>
+      <LibraryInner />
+    </Suspense>
   );
 }

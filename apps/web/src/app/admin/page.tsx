@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Users, BookOpen, ImageIcon, Mic, TrendingUp,
   LogOut, RefreshCw, CheckCircle, Chrome, Shield,
-  BarChart2, Clock, DollarSign, X, Activity, AlertCircle, Tag,
+  BarChart2, Clock, DollarSign, X, Activity, AlertCircle, Tag, Gamepad2, Gauge,
 } from "lucide-react";
 import { XsSpinner, LgSpinner, MdSpinner } from "@/components/character-spinner";
 
@@ -31,7 +31,7 @@ interface Stats {
 }
 
 interface CostBreakdown {
-  llm: number; illustrations: number; audio: number; total: number;
+  llm: number; illustrations: number; audio: number; games?: number; total: number;
 }
 
 interface Costs {
@@ -370,7 +370,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => void }) {
             <Shield className="h-3.5 w-3.5" strokeWidth={3} /> Admin
           </span>
           <h1 className="mt-4 font-display text-4xl font-black">Dashboard</h1>
-          <p className="mt-1 text-muted-foreground text-sm">Storybook.Studio internal</p>
+          <p className="mt-1 text-muted-foreground text-sm">OlivianX internal</p>
         </div>
         <form onSubmit={handleSubmit} className="rounded-3xl bg-card p-8 chunky-border chunky-shadow space-y-4">
           <div>
@@ -486,7 +486,7 @@ export default function AdminDashboard() {
               <BarChart2 className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} />
             </span>
             <span className="font-display text-lg font-black">
-              Storybook<span className="text-primary">.</span>Studio Admin
+              Olivian<span className="text-primary">X</span> Admin
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -502,6 +502,13 @@ export default function AdminDashboard() {
               <Tag className="h-3.5 w-3.5" strokeWidth={2.5} />
               Pricing
             </Link>
+            <a
+              href="/admin/test-results"
+              className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-bold chunky-border hover:-translate-y-0.5 transition-transform"
+            >
+              <Gauge className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Load tests
+            </a>
             <button
               onClick={() => creds && fetchAll(creds.user, creds.pass)}
               disabled={loading}
@@ -665,6 +672,7 @@ export default function AdminDashboard() {
                 <StatCard icon={DollarSign} label="LLM Cost"      value={fmtCost(costs.totals.llm)}           color="bg-blue-500" />
                 <StatCard icon={ImageIcon}  label="Illustrations" value={fmtCost(costs.totals.illustrations)} color="bg-purple-500" />
                 <StatCard icon={Mic}        label="Audio / TTS"   value={fmtCost(costs.totals.audio)}         color="bg-pink-500" />
+                <StatCard icon={Gamepad2}   label="Games"         value={fmtCost(costs.totals.games ?? 0)}    sub="Client-side · no server cost" color="bg-accent" />
                 <StatCard icon={BarChart2}  label="Total Spend"   value={fmtCost(costs.totals.total)}         sub={`~${fmtCost(costs.avg_per_book)} / book`} color="bg-green-500" />
               </div>
 

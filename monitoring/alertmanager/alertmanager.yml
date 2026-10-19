@@ -1,0 +1,39 @@
+global:
+  resolve_timeout: 5m
+
+# Route every alert to the default receiver. Critical alerts repeat sooner.
+route:
+  receiver: team-default
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: team-critical
+      repeat_interval: 1h
+
+receivers:
+  - name: team-default
+    # Configure ONE of the integrations below (fill in via env/edit before use).
+    slack_configs:
+      - send_resolved: true
+        api_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#storybook-alerts"
+        title: "{{ .CommonAnnotations.summary }}"
+        text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+
+  - name: team-critical
+    slack_configs:
+      - send_resolved: true
+        api_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#storybook-alerts"
+        title: "[CRITICAL] {{ .CommonAnnotations.summary }}"
+        text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+    # Example email alternative (uncomment + set global.smtp_* above):
+    # email_configs:
+    #   - to: "oncall@your-org.example"
+    #     from: "alerts@your-org.example"
+    #     smarthost: "smtp.gmail.com:587"
+    #     auth_username: "alerts@your-org.example"
+    #     auth_password: "${SMTP_APP_PASSWORD}"

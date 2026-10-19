@@ -10,7 +10,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <BookOpen className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
           </span>
           <span className="font-display text-2xl font-black tracking-tight">
-            Storybook<span className="text-primary">.</span>Studio
+            Olivian<span className="text-primary">X</span>
           </span>
         </Link>
       </div>

@@ -75,24 +75,50 @@ const BookPage = forwardRef<
           <p className="font-display text-2xl font-black text-white tracking-wide" style={{ textShadow: "0 2px 12px rgba(0,0,0,0.7)" }}>The End</p>
           <p className="text-xs font-bold text-white/60 max-w-[160px] leading-relaxed" style={{ textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>{title}</p>
         </div>
-        <p className="absolute bottom-2 right-3 text-[10px] font-bold text-white/20 tracking-widest uppercase select-none">AI Storybook Studio</p>
+        <p className="absolute bottom-2 right-3 text-[10px] font-bold text-white/20 tracking-widest uppercase select-none">OlivianX</p>
       </div>
     );
   }
 
-  // ── Story page — image top 72% + gradient fade + text bottom 28% ──
+  // ── Story page — honors the saved layout: Words on Picture (1),
+  //    Blended (2/null), or Clear separation (3, no blend) ──
   const isTextBottom = (page.text_position ?? "bottom") !== "top";
   const textAlign = (page.text_align ?? "center") as React.CSSProperties["textAlign"];
-  const TEXT_PCT = "28%";
-  return (
-    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: BG }}>
-      <div style={{ position: "absolute", top: isTextBottom ? 0 : TEXT_PCT, bottom: isTextBottom ? TEXT_PCT : 0, left: 0, right: 0, overflow: "hidden" }}>
+
+  // Words on Picture — full-bleed image with the text overlaid.
+  if (page.text_mode === 1) {
+    return (
+      <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: BG }}>
         {imgUrl ? (
-          <img src={imgUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "center top" }} draggable={false} />
+          <img src={imgUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "center" }} draggable={false} />
         ) : (
           <div className="absolute inset-0 bg-muted flex items-center justify-center"><ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} /></div>
         )}
-        <div style={{ position: "absolute", left: 0, right: 0, height: "45%", [isTextBottom ? "bottom" : "top"]: 0, background: isTextBottom ? `linear-gradient(to bottom, transparent, ${BG})` : `linear-gradient(to top, transparent, ${BG})` }} />
+        <div style={{ position: "absolute", left: 0, right: 0, height: "55%", [isTextBottom ? "bottom" : "top"]: 0, background: isTextBottom ? "linear-gradient(to top, rgba(10,10,20,0.82), transparent)" : "linear-gradient(to bottom, rgba(10,10,20,0.82), transparent)" }} />
+        <div ref={zoneRef} className="absolute inset-x-0 flex items-end justify-center" style={{ [isTextBottom ? "bottom" : "top"]: 0, height: "42%", padding: "18px 22px", alignItems: isTextBottom ? "flex-end" : "flex-start" }}>
+          <p ref={textRef} className="font-display leading-relaxed" style={{ textAlign, fontSize: "15px", color: "#fff" }}>
+            {page.text ?? <span className="italic text-white/60">No text yet</span>}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Stacked — image on top, text band below. Blend only for explicit "Blended"
+  // (mode 2); Clear separation (3) and the default (null) show no blend.
+  const TEXT_PCT = "28%";
+  const showBlend = page.text_mode === 2;
+  return (
+    <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: BG }}>
+      <div style={{ position: "absolute", top: isTextBottom ? 0 : TEXT_PCT, bottom: isTextBottom ? TEXT_PCT : 0, left: 0, right: 0, overflow: "hidden", background: BG }}>
+        {imgUrl ? (
+          <img src={imgUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "center" }} draggable={false} />
+        ) : (
+          <div className="absolute inset-0 bg-muted flex items-center justify-center"><ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} /></div>
+        )}
+        {showBlend && (
+          <div style={{ position: "absolute", left: 0, right: 0, height: "22%", [isTextBottom ? "bottom" : "top"]: 0, background: isTextBottom ? `linear-gradient(to bottom, transparent, ${BG})` : `linear-gradient(to top, transparent, ${BG})` }} />
+        )}
       </div>
       <div ref={zoneRef} style={{ position: "absolute", top: isTextBottom ? "72%" : 0, bottom: isTextBottom ? 0 : "72%", left: 0, right: 0, background: BG, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 22px", overflow: "hidden" }}>
         <p ref={textRef} className="font-display leading-relaxed" style={{ textAlign, fontSize: "15px", color: "var(--foreground)" }}>
@@ -113,7 +139,7 @@ const BackCoverFallback = forwardRef<HTMLDivElement, { title: string }>(({ title
       <p className="font-display text-2xl font-black text-primary-foreground tracking-wide">The End</p>
       <p className="text-sm font-bold text-primary-foreground/60 max-w-[180px] leading-relaxed">{title}</p>
     </div>
-    <p className="text-xs font-bold text-primary-foreground/30 tracking-widest uppercase">AI Storybook Studio</p>
+    <p className="text-xs font-bold text-primary-foreground/30 tracking-widest uppercase">OlivianX</p>
   </div>
 ));
 BackCoverFallback.displayName = "BackCoverFallback";
@@ -134,7 +160,7 @@ function BookNotFound() {
         href="/"
         className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
       >
-        View on AI Storybook Studio
+        View on OlivianX
       </Link>
     </div>
   );
@@ -183,7 +209,7 @@ export default function PublicReaderPage() {
   function goPrev() { bookRef.current?.pageFlip().flipPrev(); }
 
   return (
-    <main className="flex h-[calc(100vh-4rem)] flex-col bg-background overflow-hidden">
+    <main className="flex h-[calc(100dvh-4rem)] flex-col bg-background overflow-hidden">
       {/* Book title strip */}
       <div className="flex shrink-0 items-center justify-center border-b-[2px] border-foreground/20 px-5 py-2">
         <span className="font-display text-base font-black md:text-lg">{title}</span>

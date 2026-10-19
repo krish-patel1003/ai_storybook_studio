@@ -1,51 +1,73 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby, HelpCircle, Palette, Mic, BookMarked, Tag } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { BookOpen, Sparkles, LogOut, Library, ChevronDown, User, Baby, HelpCircle, Palette, Mic, BookMarked, Tag, Menu, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useSubscription } from "@/lib/use-subscription";
 import { useOnboarding } from "@/components/onboarding/OnboardingProvider";
 import { useState, useRef, useEffect } from "react";
 
 // Same nav for everyone; signed-out visitors clicking a protected link are
 // redirected to sign-in by the middleware.
-const primaryNav = [
+const primaryNav: { href: string; label: string; tab?: "all" | "myself" | "tome" }[] = [
   { href: "/create",  label: "Make Storybook" },
-  { href: "/library", label: "My Books"   },
-  { href: "/reader",  label: "Read Aloud" },
-] as const;
+  { href: "/library?tab=all",    label: "My Books",    tab: "all" },
+  { href: "/library?tab=myself", label: "Read Myself", tab: "myself" },
+  { href: "/library?tab=tome",   label: "Read to Me",  tab: "tome" },
+];
 
 // Secondary items live in the "More" dropdown with a one-line description.
+// `requires` gates the item to tiers whose plan includes that feature.
 const moreNav = [
-  { href: "/studio",  label: "Studio",       icon: Palette,    desc: "Design page layouts, fonts & colors" },
-  { href: "/voices",  label: "Voice Studio", icon: Mic,        desc: "Record or clone a narration voice" },
+  { href: "/studio",  label: "Parent mode",  icon: Palette,    desc: "Advanced editing — design page layouts, fonts & colors", requires: "parent_mode" as const },
+  { href: "/voices",  label: "Voice Studio", icon: Mic,        desc: "Record or clone a narration voice", requires: "narration" as const },
   { href: "/kdp",     label: "Publish",      icon: BookMarked, desc: "Export a print-ready PDF for Amazon KDP" },
   { href: "/pricing", label: "Pricing",      icon: Tag,        desc: "Plans, page limits & upgrades" },
 ] as const;
 
 export function BookHeader() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab");
   const router = useRouter();
   const { user, logout, isLoading } = useAuth();
   const onboarding = useOnboarding();
+  const { sub: subInfo } = useSubscription();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
+  const mobileRef = useRef<HTMLDivElement>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (menuRef.current && !menuRef.current.contains(t)) {
         setMenuOpen(false);
       }
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+      if (moreRef.current && !moreRef.current.contains(t)) {
         setMoreOpen(false);
+      }
+      if (
+        mobileRef.current && !mobileRef.current.contains(t) &&
+        hamburgerRef.current && !hamburgerRef.current.contains(t)
+      ) {
+        setMobileOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Close the mobile menu whenever the route (or library tab) changes.
+  useEffect(() => {
+    setMobileOpen(false);
+    setMoreOpen(false);
+  }, [pathname, currentTab]);
 
   function handleLogout() {
     logout();
@@ -55,22 +77,27 @@ export function BookHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b-[2.5px] border-foreground bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+      <div className="mx-auto flex h-16 md:h-[84px] max-w-7xl items-center justify-between px-4">
 
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary chunky-border chunky-shadow-sm">
-            <BookOpen className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
-          </span>
-          <span className="font-display text-2xl font-black tracking-tight">
-            Storybook<span className="text-primary">.</span>Studio
+        {/* Logo + tagline */}
+        <Link href="/" className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/assets/olivianX_logo.png"
+            alt="OlivianX"
+            className="h-10 w-auto sm:h-[52px] md:h-[60px] max-h-[60px]"
+          />
+          <span className="hidden sm:block border-l-2 border-foreground/15 pl-2.5 font-display text-[11px] font-black uppercase leading-[1.15] tracking-wide text-muted-foreground">
+            Kids Storybook<br />Creator
           </span>
         </Link>
 
         {/* Nav */}
         <nav className="hidden items-center gap-0.5 md:flex">
           {primaryNav.map((item) => {
-            const active = pathname === item.href;
+            const active = item.tab
+              ? pathname === "/library" && (currentTab ?? "all") === item.tab
+              : pathname === item.href;
             return (
               <Link
                 key={item.href}
@@ -103,22 +130,36 @@ export function BookHeader() {
             {moreOpen && (
               <div className="absolute left-0 top-full mt-2 w-72 rounded-2xl bg-card p-1.5 chunky-border chunky-shadow z-50">
                 {moreNav.map((item) => {
+                  const requires = (item as { requires?: "narration" | "parent_mode" }).requires;
+                  // Locked once we know the tier lacks the feature. Show it anyway,
+                  // tagged "Upgrade", and route the click to pricing instead.
+                  const locked = !!requires && subInfo !== null && !subInfo[requires];
+                  const href = locked ? "/pricing" : item.href;
                   const active = pathname === item.href;
                   return (
                     <Link
                       key={item.href}
-                      href={item.href}
+                      href={href}
                       onClick={() => setMoreOpen(false)}
                       className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors ${
                         active ? "bg-highlight" : "hover:bg-highlight"
                       }`}
                     >
-                      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-background chunky-border">
-                        <item.icon className="h-4 w-4" strokeWidth={2.5} />
+                      <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg chunky-border ${locked ? "bg-muted" : "bg-background"}`}>
+                        <item.icon className={`h-4 w-4 ${locked ? "text-muted-foreground" : ""}`} strokeWidth={2.5} />
                       </span>
-                      <span>
-                        <span className="block text-sm font-extrabold leading-tight">{item.label}</span>
-                        <span className="block text-xs text-muted-foreground leading-snug">{item.desc}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-sm font-extrabold leading-tight">{item.label}</span>
+                          {locked && (
+                            <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-primary-foreground chunky-border">
+                              Upgrade
+                            </span>
+                          )}
+                        </span>
+                        <span className="block text-xs text-muted-foreground leading-snug">
+                          {locked ? "Available on a higher plan — tap to upgrade" : item.desc}
+                        </span>
                       </span>
                     </Link>
                   );
@@ -130,13 +171,23 @@ export function BookHeader() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          {/* Mobile menu toggle — the primary nav is hidden below md */}
+          <button
+            ref={hamburgerRef}
+            onClick={() => setMobileOpen((o) => !o)}
+            aria-label="Menu"
+            aria-expanded={mobileOpen}
+            className="grid h-9 w-9 place-items-center rounded-full bg-card chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5 md:hidden"
+          >
+            {mobileOpen ? <X className="h-5 w-5" strokeWidth={2.5} /> : <Menu className="h-5 w-5" strokeWidth={2.5} />}
+          </button>
           {isLoading ? (
             <div className="h-9 w-24 animate-pulse rounded-full bg-muted" />
           ) : user ? (
             <>
               {onboarding && (
                 <button
-                  onClick={onboarding.openWelcome}
+                  onClick={onboarding.helpHere}
                   aria-label="Help & tour"
                   title="Help & tour"
                   className="grid h-9 w-9 place-items-center rounded-full bg-card chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"
@@ -238,6 +289,82 @@ export function BookHeader() {
           )}
         </div>
       </div>
+
+      {/* ── Mobile menu panel (below md) ── */}
+      {mobileOpen && (
+        <div ref={mobileRef} className="md:hidden border-t-[2.5px] border-foreground bg-background">
+          <nav className="mx-auto max-w-7xl space-y-1 px-4 py-3">
+            {user && (
+              <Link
+                href="/create"
+                onClick={() => setMobileOpen(false)}
+                className="mb-1 flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow-sm"
+              >
+                <Sparkles className="h-4 w-4" strokeWidth={2.5} /> New book
+              </Link>
+            )}
+
+            {primaryNav.map((item) => {
+              const active = item.tab
+                ? pathname === "/library" && (currentTab ?? "all") === item.tab
+                : pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`block rounded-xl px-4 py-3 text-base font-extrabold transition-colors ${
+                    active ? "bg-foreground text-background" : "hover:bg-highlight"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+
+            <div className="my-1 border-t-[2px] border-foreground/10" />
+
+            {moreNav.map((item) => {
+              const requires = (item as { requires?: "narration" | "parent_mode" }).requires;
+              const locked = !!requires && subInfo !== null && !subInfo[requires];
+              const href = locked ? "/pricing" : item.href;
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`flex items-center gap-3 rounded-xl px-4 py-3 transition-colors ${
+                    active ? "bg-highlight" : "hover:bg-highlight"
+                  }`}
+                >
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg chunky-border ${locked ? "bg-muted" : "bg-background"}`}>
+                    <item.icon className={`h-4 w-4 ${locked ? "text-muted-foreground" : ""}`} strokeWidth={2.5} />
+                  </span>
+                  <span className="flex-1 text-base font-extrabold">{item.label}</span>
+                  {locked && (
+                    <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-primary-foreground chunky-border">
+                      Upgrade
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+
+            {user && (
+              <>
+                <div className="my-1 border-t-[2px] border-foreground/10" />
+                <Link href="/profiles" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 rounded-xl px-4 py-3 text-base font-extrabold transition-colors hover:bg-highlight">
+                  <Baby className="h-5 w-5 shrink-0" strokeWidth={2.5} /> Child Profiles
+                </Link>
+                <Link href="/account" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 rounded-xl px-4 py-3 text-base font-extrabold transition-colors hover:bg-highlight">
+                  <User className="h-5 w-5 shrink-0" strokeWidth={2.5} /> Account
+                </Link>
+              </>
+            )}
+          </nav>
+        </div>
+      )}
     </header>
   );
 }

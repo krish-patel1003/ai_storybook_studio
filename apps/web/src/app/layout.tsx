@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Unkempt, Kranky, Nunito, Patrick_Hand,
   Caveat, Merriweather, Quicksand, Mochiy_Pop_One,
@@ -63,14 +63,21 @@ const mochibop = Mochiy_Pop_One({
 });
 
 export const metadata: Metadata = {
-  title: "Storybook Studio — Turn one idea into a children's book",
+  title: "OlivianX — Turn one idea into a children's book",
   description:
-    "AI storybook studio that turns a single prompt into a consistent, illustrated, publish-ready children's book.",
+    "OlivianX turns a single prompt into a consistent, illustrated, publish-ready children's book.",
   openGraph: {
-    title: "Storybook Studio",
+    title: "OlivianX",
     description: "Turn one idea into a children's book.",
     type: "website",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Allow pinch-zoom (accessibility); avoid iOS auto-zoom surprises via 16px inputs.
+  maximumScale: 5,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

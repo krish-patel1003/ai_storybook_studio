@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
+import { useSubscription } from "@/lib/use-subscription";
+import NextLink from "next/link";
 import { useBook } from "@/lib/book-store";
 import {
   api, pageImageUrl,
@@ -138,7 +140,7 @@ interface BookTextSettings {
 }
 
 const DEFAULT_SETTINGS: BookTextSettings = {
-  mode: 2, // Picture & Story (stacked) is the default
+  mode: 3, // Clear separation (stacked, no blend) is the default
   plus: false,
   textAreaPct: TEXT_AREA_DEFAULT_PCT,
   fontSize: 14,
@@ -155,7 +157,7 @@ function loadSettings(bookId: string): BookTextSettings {
     const raw = localStorage.getItem(`studio-settings-${bookId}`);
     if (raw) {
       const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
-      if (parsed.mode === 3) parsed.mode = 2; // canvas mode disabled
+      // mode 3 is now "Clear textarea" (stacked, no blend); no longer coerced.
       if (parsed.fontFamily === "unkempt") parsed.fontFamily = "nunito"; // migrate old default
       if (parsed.fontSize === 15) parsed.fontSize = 14; // migrate old default
       return parsed;
@@ -233,7 +235,7 @@ function PageThumb({
   page: PageOut; bookId: string; token: string;
   isActive: boolean; illStatus?: IllStatus; onClick: () => void;
 }) {
-  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id, page.image_version), token, page.has_image);
   const pending = illStatus === "pending";
   const errored = illStatus === "error";
 
@@ -373,7 +375,7 @@ function Mode1Preview({
 // ── Center: Mode 2 preview (stacked) ──────────────────────────────────────────
 
 function Mode2Preview({
-  blobUrl, text, settings, align, position, valign = "center", onOverflow,
+  blobUrl, text, settings, align, position, valign = "center", onOverflow, blend = true,
 }: {
   blobUrl: string | null;
   text: string;
@@ -382,6 +384,7 @@ function Mode2Preview({
   position: TextPosition;
   valign?: TextPosition;
   onOverflow?: (overflows: boolean) => void;
+  blend?: boolean;
 }) {
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -420,24 +423,27 @@ function Mode2Preview({
   }, [text, settings.fontSize, settings.fontFamily, textZonePct, onOverflow]);
 
   const imgBlock = (
-    <div className="relative" style={{ flex: "1 1 0px", minHeight: 0, overflow: "hidden" }}>
+    <div className="relative" style={{ flex: "1 1 0px", minHeight: 0, overflow: "hidden", background: settings.bgColor }}>
       {blobUrl ? (
         <img src={blobUrl} alt="" className="absolute inset-0 h-full w-full object-cover"
-          style={{ objectPosition: "center top" }} draggable={false} />
+          style={{ objectPosition: "center" }} draggable={false} />
       ) : (
         <div className="absolute inset-0 bg-muted flex items-center justify-center">
           <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
         </div>
       )}
-      {/* Gradient blend: a tight, well-blended seam between image and text area */}
-      <div style={{
-        position: "absolute",
-        [isTextBottom ? "bottom" : "top"]: 0,
-        left: 0, right: 0, height: "20%",
-        background: isTextBottom
-          ? `linear-gradient(to bottom, transparent, ${settings.bgColor})`
-          : `linear-gradient(to top, transparent, ${settings.bgColor})`,
-      }} />
+      {/* Gradient blend: a tight, well-blended seam between image and text area.
+          "Clear textarea" (mode 3) omits it for a clean edge with no blend. */}
+      {blend && (
+        <div style={{
+          position: "absolute",
+          [isTextBottom ? "bottom" : "top"]: 0,
+          left: 0, right: 0, height: "20%",
+          background: isTextBottom
+            ? `linear-gradient(to bottom, transparent, ${settings.bgColor})`
+            : `linear-gradient(to top, transparent, ${settings.bgColor})`,
+        }} />
+      )}
     </div>
   );
 
@@ -508,7 +514,7 @@ function CoverPagePreview({
       ) : (
         <div className="absolute inset-0 bg-muted flex flex-col items-center justify-center gap-2">
           <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
-          <span className="text-xs font-bold text-muted-foreground">Cover — not yet illustrated</span>
+          <span className="text-xs font-bold text-muted-foreground">Cover — no picture yet</span>
         </div>
       )}
       {/* Dark gradient — matches reader */}
@@ -554,7 +560,7 @@ function BackCoverPreview({ blobUrl }: { blobUrl: string | null }) {
       ) : (
         <div className="absolute inset-0 bg-muted flex flex-col items-center justify-center gap-2">
           <ImageIcon className="h-16 w-16 text-muted-foreground/20" strokeWidth={1} />
-          <span className="text-xs font-bold text-muted-foreground">Back cover — not yet illustrated</span>
+          <span className="text-xs font-bold text-muted-foreground">Back cover — no picture yet</span>
         </div>
       )}
       <div className="absolute bottom-3 inset-x-3 text-center pointer-events-none">
@@ -902,12 +908,12 @@ function ExportModal({ book, token, fontFamily, onClose }: { book: BookOut; toke
     setLoading(true);
     try {
       const res = type === "pdf"   ? await api.books.exportPdf(token, book.id, fontFamily)
-                : type === "cover" ? await api.books.exportCoverPdf(token, book.id)
+                : type === "cover" ? await api.books.exportCoverImage(token, book.id, "png")
                 :                    await api.books.exportEpub(token, book.id, fontFamily);
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const name = (book.brief?.title ?? book.title).replace(/\s+/g, "_");
-      const ext  = type === "epub" ? "epub" : "pdf";
+      const ext  = type === "epub" ? "epub" : type === "cover" ? "png" : "pdf";
       const suf  = type === "cover" ? "_cover" : "";
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -924,7 +930,7 @@ function ExportModal({ book, token, fontFamily, onClose }: { book: BookOut; toke
         <div className="space-y-2">
           {[
             { id: "pdf"  as const, label: "Full Book PDF",  desc: "Print-ready A5 with all pages" },
-            { id: "cover"as const, label: "Cover PDF",       desc: "Single cover page for Amazon" },
+            { id: "cover"as const, label: "Cover Image (PNG)", desc: "Front cover as an image" },
             { id: "epub" as const, label: "Amazon Kindle",   desc: "Reflowable e-book" },
           ].map(opt => (
             <button key={opt.id} onClick={() => dl(opt.id)} disabled={loading}
@@ -949,7 +955,25 @@ function StudioInner() {
   const router        = useRouter();
   const searchParams  = useSearchParams();
   const { token, user } = useAuth();
-  const { book, setBook } = useBook();
+  const { sub: subInfo, loading: subLoading } = useSubscription();
+  const parentModeLocked = !subLoading && subInfo !== null && !subInfo.parent_mode;
+  const { book, setBook, hydrated } = useBook();
+
+  // Parent mode is ONLY for a finished book (every content page illustrated).
+  const _content = book?.pages?.filter((p) => !p.is_cover && !p.is_back_cover) ?? [];
+  const fullyIllustrated = _content.length > 0 && _content.every((p) => p.has_image);
+
+  // If we land here with no book, or a book whose pictures aren't done yet (e.g. a
+  // reload mid-generation, or reopening into the last route), leave parent mode:
+  // send them to the editor to finish, or the library if there's nothing loaded.
+  // Rendering waits for hydration + this decision so the parent-mode canvas never
+  // flashes for an incomplete book.
+  const studioReady = hydrated && !!book && fullyIllustrated;
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!book) { router.replace("/library"); return; }
+    if (!fullyIllustrated) { router.replace("/editor?from=studio"); return; }
+  }, [hydrated, book, fullyIllustrated, router]);
 
   const [pageIdx,  setPageIdx]  = useState(0);
   const [text,          setText]         = useState("");
@@ -968,6 +992,8 @@ function StudioInner() {
   const [redoStack,     setRedoStack]    = useState<string[]>([]);
   const [textOverflows, setTextOverflows] = useState(false);
   const [backCoverLoading, setBackCoverLoading] = useState(false);
+  const [authorName, setAuthorName] = useState("");
+  const [savingAuthor, setSavingAuthor] = useState(false);
 
   const [illustrating, setIllustrating]  = useState(false);
   const [reIllLoading, setReIllLoading]  = useState(false);
@@ -980,6 +1006,8 @@ function StudioInner() {
   const undoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSnapshotRef = useRef<string>("");
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards a single in-flight save loop so keystrokes made mid-save are never dropped.
+  const savingRef = useRef(false);
 
   const pages = book?.pages ?? [];
   const page  = pages[pageIdx] ?? null;
@@ -1054,8 +1082,8 @@ function StudioInner() {
     startIllJob(token, book, b => setBook(b))
       .then(failedCount => {
         setIllustrating(false);
-        if (failedCount > 0) toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to illustrate — click Re-illustrate to retry`);
-        else toast.success("All pages illustrated!");
+        if (failedCount > 0) toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed — click Remake pictures to retry`);
+        else toast.success("All pages have pictures!");
       })
       .catch(() => setIllustrating(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1082,81 +1110,86 @@ function StudioInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep the author field in sync with the loaded book.
+  useEffect(() => { setAuthorName(book?.author_name || user?.username || ""); }, [book?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveAuthor() {
+    if (!token || !book) return;
+    const name = authorName.trim();
+    if (!name || name === (book.author_name ?? "")) return;
+    setSavingAuthor(true);
+    try {
+      const updated = await api.books.updateAuthor(token, book.id, name);
+      setBook(updated);
+      toast.success("Author name saved");
+    } catch { toast.error("Couldn't save author name — please try again."); }
+    finally { setSavingAuthor(false); }
+  }
+
+  // Signature of the editable content, used to detect changes that land while a
+  // save is in flight (so nothing typed in a split second is lost).
+  const contentSig = (v: typeof latestRef.current) =>
+    JSON.stringify({ t: v.text, s: v.settings, p: v.pagePosition, a: v.pageAlign, va: v.pageVAlign });
+
   const save = useCallback(async () => {
     if (!token || !book || !page) return;
-    const { text: tx, boxes: bxs, settings: st, pagePosition: pos, pageAlign: align, pageVAlign: valign } = latestRef.current;
-
-    // Persist canvas boxes locally
-    if (st.mode === 3) persistBoxes(book.id, page.id, bxs);
-
-    // Build canvas_overlay for backend (used by exports)
-    let overlayToSave: CanvasOverlay | null = null;
-    if (st.mode === 1) {
-      overlayToSave = {
-        ...DEFAULT_OVERLAY,
-        fontSize: st.fontSize,
-        fontFamily: st.fontFamily,
-        textColor: st.textColor,
-        bgStyle: st.m1BgStyle,
-        bgOpacity: st.m1BgOpacity,
-      };
-    } else if (st.mode === 2) {
-      overlayToSave = {
-        ...DEFAULT_OVERLAY,
-        fontSize: st.fontSize,
-        fontFamily: st.fontFamily,
-        textColor: st.textColor,
-        bgStyle: ("stacked-" + st.m2Position) as CanvasOverlay["bgStyle"],
-        bgOpacity: 1,
-      };
-    } else {
-      // Save first box position for basic export compat
-      const b = bxs[0];
-      overlayToSave = b ? {
-        x: b.x, y: b.y, w: b.w, h: b.h,
-        fontSize: st.fontSize, fontFamily: st.fontFamily, textColor: st.textColor,
-        bgStyle: b.bgStyle as CanvasOverlay["bgStyle"], bgOpacity: b.bgOpacity,
-      } : DEFAULT_OVERLAY;
-    }
-
+    // One save loop at a time; if it's already running it will re-read the latest
+    // content on its next iteration and persist that too.
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
-      // Save current page: text content + per-page position/align + cover style
-      const pagePayload: Record<string, unknown> = {
-        text: tx,
-        text_align: align,
-        text_position: pos,
-        text_valign: valign,
-        canvas_overlay: overlayToSave,
-      };
-      // Cover page saves its own font/size/color; content pages use book-level bulk save below
-      if (page.is_cover) {
-        pagePayload.font_size   = st.fontSize;
-        pagePayload.font_family = st.fontFamily;
-        pagePayload.text_color  = st.textColor;
-      }
+      let savedSig = "";
+      // Keep saving until the persisted snapshot matches the very latest content —
+      // this closes the race where a keystroke arrives during the network round-trip.
+      do {
+        const snap = latestRef.current;
+        savedSig = contentSig(snap);
+        const { text: tx, settings: st, pagePosition: pos, pageAlign: align, pageVAlign: valign } = snap;
 
-      // Apply book-level style (mode, font, size, color, overlay) to ALL content pages
-      const [pageResult, bulkResult] = await Promise.all([
-        api.books.updatePage(token, book.id, page.id, pagePayload as Parameters<typeof api.books.updatePage>[3]),
-        !page.is_cover && !page.is_back_cover
-          ? api.books.bulkPageStyle(token, book.id, {
-              font_family:    st.fontFamily,
-              font_size:      st.fontSize,
-              text_color:     st.textColor,
-              text_mode:      st.mode,
-              bg_color:       st.bgColor,
-              canvas_overlay: overlayToSave,
-              text_valign:    valign,   // vertical align applies to every page
+        let overlayToSave: CanvasOverlay | null = null;
+        if (st.mode === 1) {
+          overlayToSave = {
+            ...DEFAULT_OVERLAY,
+            fontSize: st.fontSize, fontFamily: st.fontFamily, textColor: st.textColor,
+            bgStyle: st.m1BgStyle, bgOpacity: st.m1BgOpacity,
+          };
+        } else {
+          // Modes 2 & 3 are stacked; mode 3 ("Clear separation") just drops the blend.
+          overlayToSave = {
+            ...DEFAULT_OVERLAY,
+            fontSize: st.fontSize, fontFamily: st.fontFamily, textColor: st.textColor,
+            bgStyle: ("stacked-" + st.m2Position) as CanvasOverlay["bgStyle"], bgOpacity: 1,
+          };
+        }
+
+        const pagePayload: Record<string, unknown> = {
+          text: tx, text_align: align, text_position: pos, text_valign: valign,
+          canvas_overlay: overlayToSave,
+        };
+        if (page.is_cover) {
+          pagePayload.font_size = st.fontSize;
+          pagePayload.font_family = st.fontFamily;
+          pagePayload.text_color = st.textColor;
+        }
+
+        // Sequential (NOT Promise.all): the text must commit first, so the book
+        // returned by bulkPageStyle reflects the new text — otherwise the store (and
+        // therefore the preview/export) would lag one save behind.
+        const pageResult = await api.books.updatePage(
+          token, book.id, page.id, pagePayload as Parameters<typeof api.books.updatePage>[3]);
+        const bulkResult = (!page.is_cover && !page.is_back_cover)
+          ? await api.books.bulkPageStyle(token, book.id, {
+              font_family: st.fontFamily, font_size: st.fontSize, text_color: st.textColor,
+              text_mode: st.mode, bg_color: st.bgColor, canvas_overlay: overlayToSave,
+              text_valign: valign,
             })
-          : Promise.resolve(null),
-      ]);
-      // Use bulkPageStyle result when available — it reflects the updated text_mode
-      // across all pages; fall back to updatePage result for cover edits
-      setBook((bulkResult ?? pageResult) as unknown as BookOut);
+          : null;
+        setBook((bulkResult ?? pageResult) as unknown as BookOut);
+      } while (contentSig(latestRef.current) !== savedSig); // re-save if content changed mid-flight
       setDirty(false);
     } catch { toast.error("Failed to save"); }
-    finally { setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); }
   }, [token, book?.id, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function markDirty() {
@@ -1169,9 +1202,11 @@ function StudioInner() {
   useEffect(() => {
     if (!dirty) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    // Depends on the live content, so every keystroke re-arms the debounce and the
+    // save always fires ~500ms after the LAST change (never a stale early snapshot).
     autoSaveTimerRef.current = setTimeout(() => { save(); }, 500);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-  }, [dirty, save]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dirty, text, settings, pagePosition, pageAlign, pageVAlign, save]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Push a text snapshot to undo stack (debounced — groups rapid keystrokes)
   function pushUndoSnapshot(prev: string) {
@@ -1325,8 +1360,8 @@ function StudioInner() {
       setBook(withCover as unknown as BookOut);
       const updated = await api.books.illustrateBackCover(token, book.id);
       setBook(updated as unknown as BookOut);
-      toast.success("Back cover illustrated!");
-    } catch (err) { toast.error(err instanceof Error ? err.message : "Back cover illustration failed — please try again"); }
+      toast.success("Back cover picture done!");
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Back cover picture failed — please try again"); }
     finally { setBackCoverLoading(false); }
   }
 
@@ -1340,8 +1375,8 @@ function StudioInner() {
       // Bust the image cache so the new illustration loads immediately
       bustAuthImageCache(pageImageUrl(book.id, page.id));
       setBook(updated as unknown as BookOut);
-      toast.success("Re-illustrated!");
-    } catch (err) { toast.error(err instanceof Error ? err.message : "Illustration failed — please try again"); }
+      toast.success("Picture remade!");
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Picture failed — please try again"); }
     finally { setReIllLoading(false); }
   }
 
@@ -1363,7 +1398,7 @@ function StudioInner() {
 
   // ── Image ──────────────────────────────────────────────────────────────────
 
-  const imgUrl  = page ? pageImageUrl(book!.id, page.id) : "";
+  const imgUrl  = page ? pageImageUrl(book!.id, page.id, page.image_version) : "";
   const blobUrl = useAuthImage(imgUrl, token ?? null, !!page?.has_image);
 
   const illustrated = pages.filter(p => !p.is_cover && p.has_image).length;
@@ -1386,10 +1421,42 @@ function StudioInner() {
     );
   }
 
+  // Parent mode is a paid feature — show a locked upsell instead of the editor
+  // so lower tiers can view that it exists but can't use (or save) it.
+  if (parentModeLocked) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16">
+        <div className="rounded-3xl bg-card p-8 text-center chunky-border chunky-shadow-sm">
+          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-highlight chunky-border text-4xl">🔒</div>
+          <h1 className="font-display text-3xl font-black">Parent mode is a paid feature</h1>
+          <p className="mt-2 font-bold text-foreground/80">
+            Your {subInfo?.display_name ?? "current"} plan doesn&apos;t include Parent mode editing.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upgrade to <span className="font-bold text-foreground">Storyteller</span> or <span className="font-bold text-foreground">Studio</span> to design page layouts, fonts and colors.
+          </p>
+          <NextLink href="/pricing" className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+            View plans &amp; upgrade →
+          </NextLink>
+        </div>
+      </main>
+    );
+  }
+
+  // Not a finished book (or still hydrating) → don't flash parent mode; the effect
+  // above is redirecting to the editor/library.
+  if (!studioReady) {
+    return (
+      <main className="flex h-[calc(100dvh-4rem)] items-center justify-center">
+        <LgSpinner />
+      </main>
+    );
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col bg-background overflow-hidden select-none">
+    <div className="flex h-[calc(100dvh-4rem)] flex-col bg-background overflow-hidden select-none">
 
       {/* ── Top bar ── */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b-[2.5px] border-foreground bg-card px-4">
@@ -1418,7 +1485,7 @@ function StudioInner() {
             </div>
             <button
               onClick={() => stopIllJob(book.id)}
-              title="Stop illustration"
+              title="Stop pictures"
               className="grid h-7 w-7 place-items-center rounded-full bg-destructive text-destructive-foreground chunky-border hover:opacity-80 transition-opacity">
               <StopIcon className="h-3.5 w-3.5" strokeWidth={2.5} />
             </button>
@@ -1451,32 +1518,52 @@ function StudioInner() {
             className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-40"
           >
             {saving ? <XsSpinner /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
-            {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+            <span className="hidden sm:inline">{saving ? "Saving…" : dirty ? "Save" : "Saved"}</span>
           </button>
           <button
             onClick={async () => { if (dirty) await save(); router.push(`/reader?from=studio`); }}
             className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-sm font-extrabold text-accent-foreground chunky-border hover:-translate-y-0.5 transition-transform"
           >
-            <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview
+            <Eye className="h-4 w-4" strokeWidth={2.5} /> <span className="hidden sm:inline">Preview</span>
           </button>
           <button onClick={() => setNarrateModal(true)}
             className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
-            <Mic className="h-4 w-4" strokeWidth={2.5} /> Narrate
+            <Mic className="h-4 w-4" strokeWidth={2.5} /> <span className="hidden sm:inline">Narrate</span>
           </button>
           <button data-tour="studio-actions" onClick={async () => { await save(); setExportModal(true); }}
             className="flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-sm font-extrabold text-background chunky-border hover:-translate-y-0.5 transition-transform">
-            <Download className="h-4 w-4" strokeWidth={2.5} /> Export
+            <Download className="h-4 w-4" strokeWidth={2.5} /> <span className="hidden sm:inline">Export</span>
           </button>
         </div>
       </header>
 
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden flex-col">
-      <div className="flex flex-1 overflow-hidden">
+      {/* On mobile the three panes stack and the whole column scrolls; from lg up
+          it's the original side-by-side desktop layout (unchanged). */}
+      <div className="flex flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
 
         {/* ── Left panel: page actions + text + layout ── */}
-        <aside className="flex w-[320px] shrink-0 flex-col border-r-[2.5px] border-foreground bg-card overflow-y-auto">
+        <aside className="flex w-full lg:w-[320px] shrink-0 flex-col border-b-[2.5px] lg:border-b-0 lg:border-r-[2.5px] border-foreground bg-card overflow-visible lg:overflow-y-auto">
           <div className="p-4 space-y-4">
+
+            {/* Author name — book-level, shown on the cover */}
+            <div>
+              <SL>Author name</SL>
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={authorName}
+                  onChange={(e) => setAuthorName(e.target.value)}
+                  onBlur={saveAuthor}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                  maxLength={100}
+                  placeholder="Author name"
+                  className="flex-1 rounded-xl bg-background px-3 py-2 text-sm font-bold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                {savingAuthor && <XsSpinner />}
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground">Shown on the cover as &ldquo;by {authorName || "…"}&rdquo;.</p>
+            </div>
 
             {/* Page actions */}
             {page?.is_back_cover ? (
@@ -1484,7 +1571,7 @@ function StudioInner() {
                 <button onClick={handleBackCoverIllustrate} disabled={backCoverLoading}
                   className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-muted transition-colors disabled:opacity-40">
                   {backCoverLoading ? <XsSpinner /> : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
-                  {page?.has_image ? "Re-illustrate back cover" : "Illustrate back cover"}
+                  {page?.has_image ? "Remake back cover picture" : "Make back cover picture"}
                 </button>
               </div>
             ) : (
@@ -1492,7 +1579,7 @@ function StudioInner() {
                 <button onClick={reIllustrate} disabled={reIllLoading || illustrating}
                   className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-muted transition-colors disabled:opacity-40">
                   {reIllLoading ? <XsSpinner /> : <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} />}
-                  {page?.has_image ? "Re-illustrate" : "Illustrate"}
+                  {page?.has_image ? "Remake picture" : "Make picture"}
                 </button>
                 <button onClick={audio.toggle} disabled={!page?.has_audio || audio.loading}
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-background chunky-border hover:bg-muted transition-colors disabled:opacity-40">
@@ -1509,7 +1596,7 @@ function StudioInner() {
             )}
 
             {/* Page text — shown for all pages except back cover */}
-            {!page?.is_back_cover && settings.mode !== 3 && (
+            {!page?.is_back_cover && (
               <div data-tour="studio-text">
                 <SL>{page?.is_cover ? "Cover title" : "Page text"}</SL>
                 <textarea
@@ -1527,7 +1614,7 @@ function StudioInner() {
             {/* Back cover info */}
             {page?.is_back_cover && (
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                The back cover is a full-bleed illustration — no text overlay.
+                The back cover is a full-bleed picture — no text overlay.
               </p>
             )}
 
@@ -1537,13 +1624,11 @@ function StudioInner() {
             {!page?.is_cover && !page?.is_back_cover && (
             <div data-tour="studio-layout">
               <SL>Book layout</SL>
-              {/* All four layouts as equal-weight buttons */}
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {([
-                  { mode: 1 as TextMode, plus: false, icon: Layers,  label: "Words on Picture",  desc: "Text over the image" },
-                  { mode: 2 as TextMode, plus: false, icon: Grid3X3, label: "Picture & Story",   desc: "Image + text below" },
-                  { mode: 1 as TextMode, plus: true,  icon: Layers,  label: "Words on Picture+", desc: "Adjustable text size" },
-                  { mode: 2 as TextMode, plus: true,  icon: Grid3X3, label: "Picture & Story+",  desc: "Adjustable text size" },
+                  { n: 1, mode: 3 as TextMode, plus: false, icon: AlignLeft, label: "Clear separation", desc: "Text below the picture", isDefault: true },
+                  { n: 2, mode: 1 as TextMode, plus: false, icon: Layers,  label: "Words on Picture",  desc: "Text over the image", isDefault: false },
+                  { n: 3, mode: 2 as TextMode, plus: false, icon: Grid3X3, label: "Blended",   desc: "Text softly blended in", isDefault: false },
                 ] as const).map(opt => {
                   const active = settings.mode === opt.mode && settings.plus === opt.plus;
                   return (
@@ -1556,10 +1641,16 @@ function StudioInner() {
                       className={cn("flex flex-col items-center gap-0.5 rounded-xl py-2 px-1 chunky-border transition-colors",
                         active ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
                       <opt.icon className="h-4 w-4" strokeWidth={2} />
-                      <span className="text-[10px] font-extrabold text-center leading-tight">{opt.label}</span>
+                      <span className="text-[10px] font-extrabold text-center leading-tight">{opt.n}. {opt.label}</span>
                       <span className={cn("text-[8px] text-center leading-tight", active ? "text-primary-foreground/70" : "text-muted-foreground")}>
                         {opt.desc}
                       </span>
+                      {opt.isDefault && (
+                        <span className={cn("mt-0.5 rounded-full px-1.5 py-px text-[7px] font-black tracking-wide",
+                          active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-accent text-accent-foreground")}>
+                          DEFAULT
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -1618,17 +1709,17 @@ function StudioInner() {
               </>
             )}
 
-            {/* Mode 2 — stacked controls */}
-            {!page?.is_cover && !page?.is_back_cover && settings.mode === 2 && (
+            {/* Stacked controls — shared by Clear separation (3) and Blended (2) */}
+            {!page?.is_cover && !page?.is_back_cover && (settings.mode === 2 || settings.mode === 3) && (
               <>
                 <div>
                   <SL>Text area position</SL>
                   <div className="grid grid-cols-2 gap-1.5">
                     {(["bottom", "top"] as const).map(pos => (
                       <button key={pos} onClick={() => { setPagePosition(pos); markDirty(); }}
-                        className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors",
+                        className={cn("rounded-xl py-1.5 text-xs font-extrabold chunky-border transition-colors leading-tight",
                           pagePosition === pos ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted")}>
-                        {pos === "bottom" ? "Image top, text bottom" : "Text top, image bottom"}
+                        {pos === "bottom" ? "Text below" : "Text above"}
                       </button>
                     ))}
                   </div>
@@ -1693,7 +1784,7 @@ function StudioInner() {
         </aside>
 
         {/* ── Center: preview ── */}
-        <main data-tour="studio-preview" className="flex flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-3 bg-muted/20">
+        <main data-tour="studio-preview" className="flex flex-1 flex-col items-center justify-center gap-2 overflow-hidden px-4 py-3 bg-muted/20 min-h-[55vh] lg:min-h-0">
           {/* Page nav */}
           <div className="flex items-center gap-3">
             <button onClick={() => switchPage(Math.max(0, pageIdx - 1))} disabled={pageIdx === 0}
@@ -1722,11 +1813,12 @@ function StudioInner() {
               onOverflow={setTextOverflows} />
           ) : (
             <Mode2Preview blobUrl={blobUrl} text={text} settings={settings}
-              align={pageAlign} position={pagePosition} valign={pageVAlign} onOverflow={setTextOverflows} />
+              align={pageAlign} position={pagePosition} valign={pageVAlign} onOverflow={setTextOverflows}
+              blend={settings.mode !== 3} />
           )}
 
           {/* Overflow warning — shown in modes 1 & 2 when text exceeds the text zone */}
-          {textOverflows && !page?.is_cover && settings.mode !== 3 && (
+          {textOverflows && !page?.is_cover && (
             <div className="flex items-center gap-2 rounded-xl border-[2px] border-amber-400 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
               <span>⚠ Text overflows the page — shorten the text or increase the text area.</span>
             </div>
@@ -1740,7 +1832,7 @@ function StudioInner() {
         </main>
 
         {/* ── Right panel: font + size + color ── */}
-        <aside className="flex w-[320px] shrink-0 flex-col border-l-[2.5px] border-foreground bg-card overflow-y-auto">
+        <aside className="flex w-full lg:w-[320px] shrink-0 flex-col border-t-[2.5px] lg:border-t-0 lg:border-l-[2.5px] border-foreground bg-card overflow-visible lg:overflow-y-auto">
           <div className="p-4 space-y-5">
 
             {/* Cover-only: position + alignment */}
@@ -1884,7 +1976,7 @@ function StudioInner() {
               {pages.length}
             </span>
             {illustrated > 0 && (
-              <span className="text-[10px] font-semibold text-muted-foreground">{illustrated}/{total} illustrated</span>
+              <span className="text-[10px] font-semibold text-muted-foreground">{illustrated}/{total} pictured</span>
             )}
           </div>
           <ChevronLeft

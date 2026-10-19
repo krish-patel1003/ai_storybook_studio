@@ -56,9 +56,38 @@ class Config(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     # Price IDs — set after creating products in Stripe dashboard
+    STRIPE_PRICE_STORYTELLER: str = ""
+    STRIPE_PRICE_STUDIO: str = ""
+    # One-time page-pack prices (top-ups)
+    STRIPE_PRICE_PACK_MINI: str = ""
+    STRIPE_PRICE_PACK_VALUE: str = ""
+    STRIPE_PRICE_PACK_BULK: str = ""
+    # Legacy (kept so old env files don't break; no longer used for new checkouts)
     STRIPE_PRICE_STARTER: str = ""
     STRIPE_PRICE_FAMILY: str = ""
     STRIPE_PRICE_CREATOR: str = ""
+
+    # ── Async generation via Cloud Tasks ────────────────────────────────────
+    # When TASKS_ENABLED is true, POST /books returns immediately and the heavy
+    # generation runs on a Cloud Tasks-driven worker request (which keeps the
+    # Cloud Run instance alive for the whole job and auto-retries if the
+    # instance dies mid-run). When false, generation runs inline in the request
+    # (the previous synchronous behaviour) — the safe default for local dev.
+    TASKS_ENABLED: bool = False
+    GCP_PROJECT_ID: str = ""
+    GCP_LOCATION: str = "us-central1"
+    TASKS_QUEUE: str = "storybook-generation"
+    # Service account email Cloud Tasks mints its OIDC token as; the worker
+    # endpoint verifies inbound tokens carry exactly this verified email.
+    TASKS_INVOKER_SA: str = ""
+    # Max seconds Cloud Tasks waits for the worker before treating the attempt
+    # as failed and retrying (HTTP task hard cap is 1800s / 30 min).
+    TASKS_DISPATCH_DEADLINE_SECONDS: int = 1800
+
+    # ── Observability ───────────────────────────────────────────────────────
+    # When set, /metrics requires a matching bearer token (Prometheus scrape
+    # config supplies it). Leave empty to expose /metrics without auth (dev only).
+    METRICS_TOKEN: str = ""
 
 
 settings = Config()

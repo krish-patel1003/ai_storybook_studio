@@ -1,12 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
   Sparkles,
   Check,
+  Eye,
   BookOpen,
   RefreshCw,
   Wand2,
@@ -29,8 +30,10 @@ import { AvatarDisplay } from "@/components/avatar-display";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { StepBar } from "@/components/step-bar";
-import { api, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type StorySeedOut } from "@/lib/api";
+import { api, ApiError, type BookOut, type BriefOut, type ChildProfile, type ExpandedPromptOut, type PageOut, type StorySeedOut } from "@/lib/api";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
+import { estimateLabel, estimateWritingSeconds } from "@/lib/fun-estimate";
+import { EstimatePopup } from "@/components/estimate-popup";
 import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -206,6 +209,75 @@ const BRIEF_MSGS = [
   "Adding just the right amount of heart…",
 ];
 
+// ── Page-style mini preview ───────────────────────────────────────────────────
+// A quick static thumbnail: same image, same text, shown in each layout so the
+// user can see the difference before choosing.
+const PREVIEW_IMG = "/assets/page1.jpg";
+const PREVIEW_TEXT = "The little fox found a glowing feather.";
+const PREVIEW_TEXT_LONG = "Deep in the whispering woods, the little fox found a glowing feather. It shimmered like a tiny fallen star, and when she picked it up, the whole forest seemed to hold its breath.";
+
+// `big` renders a page-accurate portrait preview for the popup; otherwise a tiny thumbnail.
+function PageModePreview({ mode, big = false }: { mode: "clear" | "words"; big?: boolean }) {
+  const text = big ? PREVIEW_TEXT_LONG : PREVIEW_TEXT;
+  const textCls = big ? "text-sm font-semibold leading-relaxed" : "text-[8px] font-bold leading-tight";
+  const wrap = big ? "aspect-[3/4] w-full" : "h-24 w-full";
+
+  if (mode === "words") {
+    return (
+      <div className={`relative ${wrap} overflow-hidden rounded-xl chunky-border`}>
+        <img src={PREVIEW_IMG} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+        <div className="absolute inset-x-0 bottom-0 h-2/3" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.78), transparent)" }} />
+        <p className={`absolute inset-x-0 bottom-0 px-3 pb-3 text-center text-white ${textCls}`}>{text}</p>
+      </div>
+    );
+  }
+  // clear separation — image on top, text band below (no blend)
+  return (
+    <div className={`flex ${wrap} flex-col overflow-hidden rounded-xl chunky-border`}>
+      <img src={PREVIEW_IMG} alt="" className={`${big ? "h-[70%]" : "h-16"} w-full object-cover`} draggable={false} />
+      <div className="flex flex-1 items-center justify-center px-3 text-center" style={{ background: "#faf8f3" }}>
+        <p className={`text-foreground ${textCls}`}>{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function PageModePreviewModal({ selected, onSelect, onClose }: {
+  selected: "clear" | "words";
+  onSelect: (m: "clear" | "words") => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-3xl rounded-3xl bg-card p-6 chunky-border chunky-shadow max-h-[90vh] overflow-y-auto">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-2xl font-black">Choose a page style</h2>
+          <button onClick={onClose} className="rounded-full bg-background p-2 chunky-border hover:-translate-y-0.5 transition-transform"><X className="h-4 w-4" strokeWidth={2.5} /></button>
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">Same page, same picture — here&apos;s how each style looks. Tap one to choose it.</p>
+        <div className="grid gap-5 sm:grid-cols-2">
+          {([
+            { id: "clear" as const, label: "Clear separation", sub: "Text sits in a clean band below the picture." },
+            { id: "words" as const, label: "Words on picture", sub: "Text sits over the picture." },
+          ]).map((opt) => {
+            const on = selected === opt.id;
+            return (
+              <button key={opt.id} onClick={() => { onSelect(opt.id); onClose(); }}
+                className={`group rounded-2xl p-3 text-left chunky-border transition-all hover:-translate-y-0.5 ${on ? "bg-primary/10 ring-2 ring-primary" : "bg-background"}`}>
+                <div className="mx-auto max-w-[280px]"><PageModePreview mode={opt.id} big /></div>
+                <p className="mt-3 text-sm font-extrabold flex items-center gap-1.5">
+                  {on && <Check className="h-4 w-4 text-primary" strokeWidth={3} />}{opt.label}
+                </p>
+                <p className="text-xs text-muted-foreground">{opt.sub}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Options panel ─────────────────────────────────────────────────────────────
 
 function OptionsPanel({
@@ -213,6 +285,7 @@ function OptionsPanel({
   customToneInput, setCustomToneInput, style, setStyle,
   pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
   customPageCountInput, setCustomPageCountInput,
+  pageMode, setPageMode,
   locked,
 }: {
   age: string; setAge: (v: string) => void;
@@ -223,9 +296,11 @@ function OptionsPanel({
   pageCount: number; setPageCount: (v: number) => void;
   isCustomPageCount: boolean; setIsCustomPageCount: (v: boolean) => void;
   customPageCountInput: string; setCustomPageCountInput: (v: string) => void;
+  pageMode: "clear" | "words"; setPageMode: (v: "clear" | "words") => void;
   locked?: boolean;
 }) {
   const [showAllThemes, setShowAllThemes] = useState(false);
+  const [showModePreview, setShowModePreview] = useState(false);
   // Favorites first; a selected non-favorite stays visible even when collapsed.
   const visiblePresets = showAllThemes
     ? TONES_PRESET
@@ -313,13 +388,72 @@ function OptionsPanel({
           ))}
           <button onClick={() => setIsCustomPageCount(true)} className={`rounded-lg px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 ${isCustomPageCount ? "bg-primary text-primary-foreground chunky-shadow-sm" : "bg-background"}`}>Custom</button>
         </div>
-        {isCustomPageCount && (
-          <div className="mt-2 flex items-center gap-2">
-            <input type="number" min={4} max={100} value={customPageCountInput} onChange={(e) => { setCustomPageCountInput(e.target.value); const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= 4 && n <= 100) setPageCount(n); }} placeholder="e.g. 18" className="w-24 rounded-xl bg-background px-3 py-1.5 text-sm font-extrabold chunky-border outline-none focus:ring-2 focus:ring-primary/30" />
-            <span className="text-xs font-bold text-muted-foreground">pages (4–100)</span>
-          </div>
-        )}
+        {isCustomPageCount && (() => {
+          const raw = customPageCountInput.trim();
+          const n = parseInt(raw, 10);
+          const below = raw !== "" && !isNaN(n) && n < 4;
+          const above = !isNaN(n) && n > 100;
+          return (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number" min={4} max={100} value={customPageCountInput}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCustomPageCountInput(v);
+                  // Keep pageCount in sync with a value clamped to the valid range,
+                  // so it never stays stale (e.g. a leftover preset) when the user
+                  // is clearly entering a custom length.
+                  const m = parseInt(v, 10);
+                  if (!isNaN(m)) setPageCount(Math.min(100, Math.max(4, m)));
+                }}
+                onBlur={() => {
+                  // Snap the visible value to the clamped page count so the field
+                  // always shows exactly what will be used.
+                  const m = parseInt(customPageCountInput, 10);
+                  const clamped = isNaN(m) ? pageCount : Math.min(100, Math.max(4, m));
+                  setPageCount(clamped);
+                  setCustomPageCountInput(String(clamped));
+                }}
+                placeholder="e.g. 18"
+                className="w-24 rounded-xl bg-background px-3 py-1.5 text-sm font-extrabold chunky-border outline-none focus:ring-2 focus:ring-primary/30" />
+              <span className={`text-xs font-bold ${below || above ? "text-destructive" : "text-muted-foreground"}`}>
+                {below ? "Minimum 4 pages" : above ? "Maximum 100 pages" : "pages (4–100)"}
+              </span>
+            </div>
+          );
+        })()}
       </div>
+
+      {/* Page style — how the text sits with the picture (with a quick preview) */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Page style</p>
+          <button type="button" onClick={() => setShowModePreview(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-background px-2.5 py-1 text-[11px] font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
+            <Eye className="h-3 w-3" strokeWidth={2.5} /> See full preview
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          {([
+            { id: "clear" as const, label: "Clear separation", sub: "Text below the picture" },
+            { id: "words" as const, label: "Words on picture", sub: "Text over the picture" },
+          ]).map((opt) => {
+            const on = pageMode === opt.id;
+            return (
+              <button key={opt.id} onClick={() => setPageMode(opt.id)}
+                className={`group rounded-2xl p-2 text-left chunky-border transition-all hover:-translate-y-0.5 ${on ? "bg-primary/10 ring-2 ring-primary" : "bg-background"}`}>
+                <PageModePreview mode={opt.id} />
+                <p className="mt-2 text-xs font-extrabold leading-tight">{opt.label}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{opt.sub}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {showModePreview && (
+        <PageModePreviewModal selected={pageMode} onSelect={setPageMode} onClose={() => setShowModePreview(false)} />
+      )}
     </div>
   );
 }
@@ -429,8 +563,8 @@ function EditableField({ label, value, multiline, onSave, onRegenerate, regenera
         <span className="text-base font-black uppercase tracking-wide text-foreground">{label}</span>
         <div className="flex items-center gap-1.5 shrink-0">
           {!editing && (
-            <button onClick={() => { setDraft(value); setEditing(true); }} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform" title="Edit">
-              <Pencil className="h-3 w-3" strokeWidth={2.5} />
+            <button onClick={() => { setDraft(value); setEditing(true); }} className="flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform" title="Edit">
+              <Pencil className="h-3 w-3" strokeWidth={2.5} /> Edit
             </button>
           )}
           {onRegenerate && (
@@ -493,7 +627,7 @@ function PageReviewCard({ page, bookId, token, onUpdate }: {
       const updated = await api.books.regeneratePage(token, bookId, page.id);
       onUpdate(updated);
     } catch (err: any) {
-      toast.error(err.message ?? "Failed to regenerate");
+      toast.error(err.message ?? "Failed to improve");
     } finally {
       setRegenerating(false);
     }
@@ -535,7 +669,7 @@ function PageReviewCard({ page, bookId, token, onUpdate }: {
           <button onClick={handleRegenerate} disabled={regenerating || editing}
             className="rounded-full bg-background px-2.5 py-1 text-xs font-bold chunky-border hover:-translate-y-0.5 transition-transform flex items-center gap-1 disabled:opacity-50">
             {regenerating ? <XsSpinner /> : <RotateCcw className="h-3 w-3" strokeWidth={2.5} />}
-            {regenerating ? "Rewriting…" : "Regenerate"}
+            {regenerating ? "Improving…" : "Improve"}
           </button>
         </div>
       </div>
@@ -601,7 +735,7 @@ function EnhancedPromptReview({
       <div className="flex flex-1 flex-col items-center justify-center gap-5 py-20 text-center">
         <LgSpinner />
         <div>
-          <p className="font-display text-2xl font-black">Expanding your idea…</p>
+          <p className="font-display text-2xl font-black">Imagining your idea…</p>
           <AnimatePresence mode="wait">
             <motion.p
               key={loadingMessage}
@@ -722,7 +856,7 @@ function EnhancedPromptReview({
         </button>
         <button onClick={onApprove}
           className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-          <Sparkles className="h-4 w-4" strokeWidth={2.5} /> ✨ Build My Book →
+          <Sparkles className="h-4 w-4" strokeWidth={2.5} /> Plan My Storybook →
         </button>
       </div>
     </div>
@@ -743,7 +877,16 @@ function flowToStepIdx(state: FlowState): number {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CreatePage() {
+  return (
+    <Suspense fallback={<div className="flex h-[calc(100dvh-4rem)] items-center justify-center"><LgSpinner /></div>}>
+      <CreatePageInner />
+    </Suspense>
+  );
+}
+
+function CreatePageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { token, user, isLoading: authLoading } = useAuth();
   const { setBook } = useBook();
 
@@ -757,6 +900,8 @@ export default function CreatePage() {
   // Prompt + settings
   const [prompt, setPrompt] = useState("");
   const [age, setAge] = useState("3-5");
+  const [pageMode, setPageMode] = useState<"clear" | "words">("clear");
+  const [showEstimate, setShowEstimate] = useState(false);
   const [tone, setTone] = useState<string[]>(["Funny"]);
   const [customTones, setCustomTones] = useState<string[]>([]);
   const [customToneInput, setCustomToneInput] = useState("");
@@ -789,6 +934,11 @@ export default function CreatePage() {
   // Book + pages
   const [draft, setDraft] = useState<BookOut | null>(null);
   const [currentBook, setCurrentBook] = useState<BookOut | null>(null);
+  // Plan-limit reached (per-book page cap) — shows an upgrade modal instead of a toast.
+  const [limitError, setLimitError] = useState<string | null>(null);
+  // Navigation guard: warn before leaving unfinished planning, block during writing.
+  const [leaveWarning, setLeaveWarning] = useState<null | "planning" | "writing">(null);
+  const pendingHref = useRef<string | null>(null);
 
   // Child profile
   const [profiles, setProfiles] = useState<ChildProfile[]>([]);
@@ -803,6 +953,98 @@ export default function CreatePage() {
       .catch(() => {})
       .finally(() => setProfilesLoading(false));
   }, [token]);
+
+  // ── Resume an existing book ────────────────────────────────────────────────
+  // `/create?resume=<id>` reopens a book the user started earlier. If it is
+  // still generating we show the writing state and poll to completion; once the
+  // pages exist we land on the PAGES REVIEW step — never jumping the user into
+  // image generation. (A fully-illustrated book goes to the design studio.)
+  const resumeId = searchParams.get("resume");
+  const resumeStarted = useRef(false);
+  const [resumeResolving, setResumeResolving] = useState(!!resumeId);
+
+  useEffect(() => {
+    if (!token || !resumeId || resumeStarted.current) return;
+    resumeStarted.current = true;
+    (async () => {
+      try {
+        let book = await api.books.get(token, resumeId);
+        // Hydrate settings so the panels, estimates and step bar match the book.
+        setPrompt(book.raw_prompt || "");
+        if (book.age_range) setAge(book.age_range);
+        if (Array.isArray(book.tone)) setTone(book.tone);
+        if (book.art_style) setStyle(book.art_style);
+        if (book.page_count) setPageCount(book.page_count);
+        if (book.brief) { try { setActiveBrief(book.brief as unknown as BriefOut); } catch { /* ignore shape drift */ } }
+
+        if (book.stage === "enhancing" || book.stage === "pending") {
+          // Still writing in the background — show the writing UI and wait.
+          setFlowState("writing");
+          setResumeResolving(false);
+          book = await api.books.waitForGeneration(token, book.id);
+        }
+
+        if (book.stage === "failed") {
+          toast.error(book.error || "This book's generation didn't finish. Please try again.");
+          setFlowState("input");
+          setResumeResolving(false);
+          return;
+        }
+
+        setCurrentBook(book);
+        setBook(book);
+
+        const content = book.pages.filter((p) => !p.is_cover && !p.is_back_cover);
+        const fullyIllustrated = content.length > 0 && content.every((p) => p.has_image);
+        if (fullyIllustrated) {
+          // Nothing to review — this book is ready to design.
+          router.replace("/studio");
+          return; // keep the resolving spinner while we navigate away
+        }
+        if (book.illustration_started) {
+          // Pictures already started — go straight to the editor, not pages-review.
+          router.replace("/editor");
+          return;
+        }
+        setFlowState("pages");
+        setResumeResolving(false);
+      } catch (err: any) {
+        toast.error(err?.message || "Couldn't open that book.");
+        setFlowState("input");
+        setResumeResolving(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, resumeId]);
+
+  // ── Navigation guard ──────────────────────────────────────────────────────
+  // "planning" states have unsaved imagination/plan progress (nothing is saved
+  // until pages are written); "writing" means generation is running and must not
+  // be interrupted. Intercept browser unload AND in-app link clicks.
+  const guardMode: null | "planning" | "writing" =
+    flowState === "writing" ? "writing"
+    : (flowState === "enhancing" || flowState === "enhanced" || flowState === "brief") ? "planning"
+    : null;
+  useEffect(() => {
+    if (!guardMode) return;
+    const beforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    const onClickCapture = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a) return;
+      const href = a.getAttribute("href") || "";
+      if (!href || href.startsWith("#") || a.target === "_blank" || href.startsWith("http")) return;
+      e.preventDefault(); e.stopPropagation();
+      pendingHref.current = href;
+      setLeaveWarning(guardMode);
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", onClickCapture, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", onClickCapture, true);
+    };
+  }, [guardMode]);
+
 
   const briefParams = {
     raw_prompt: prompt, age_range: age, tone, safety_mode: safety,
@@ -821,6 +1063,7 @@ export default function CreatePage() {
       const result = await api.books.brainstorm(token, { age_range: age, tone, page_count: pageCount });
       setBrainstormSeeds(result.seeds);
     } catch (err: any) {
+      if (err instanceof ApiError && err.status === 402) { setLimitError(err.message); return; }
       toast.error(err.message ?? "Failed to generate ideas");
     } finally {
       setBrainstormLoading(false);
@@ -852,6 +1095,7 @@ export default function CreatePage() {
       }
       setFlowState("enhanced");
     } catch (err: any) {
+      if (err instanceof ApiError && err.status === 402) { setLimitError(err.message); return; }
       toast.error(err.message ?? "Failed to expand prompt");
       setFlowState("input");
     } finally {
@@ -867,22 +1111,13 @@ export default function CreatePage() {
     setActiveBrief(null);
     setFlowState("brief");
     try {
-      if (!draft) {
-        const resolvedAuthor = selectedProfile
-          ? (selectedProfile.author_name || selectedProfile.name)
-          : (user?.author_name || user?.username || "");
-        const saved = await api.books.createDraft(token, {
-          raw_prompt: prompt, age_range: age, tone, safety_mode: safety,
-          page_count: pageCount, model_provider: modelProvider, model_name: modelName,
-          ...(selectedProfileId ? { child_profile_id: selectedProfileId } : {}),
-          author_name: resolvedAuthor || undefined,
-        });
-        setDraft(saved);
-        setBook(saved);
-      }
+      // No book is saved during planning — the book is only created when the user
+      // commits by writing the pages. This keeps unfinished ideas out of My Books
+      // and avoids persisting work the user abandoned.
       const brief = await api.books.generateBrief(token, briefParams);
       setActiveBrief(brief);
     } catch (err: any) {
+      if (err instanceof ApiError && err.status === 402) { setLimitError(err.message); return; }
       toast.error(err.message ?? "Failed to generate brief");
       setFlowState("enhanced");
     } finally {
@@ -897,7 +1132,7 @@ export default function CreatePage() {
       const updated = await api.books.regenerateBriefField(token, { ...briefParams, current_brief: activeBrief, field: field as string });
       setActiveBrief(updated);
     } catch (err: any) {
-      toast.error(err.message ?? "Failed to regenerate");
+      toast.error(err.message ?? "Failed to improve");
     } finally {
       setRegenField(null);
     }
@@ -912,6 +1147,7 @@ export default function CreatePage() {
 
   async function handleWritePages() {
     if (!token || !activeBrief) return;
+    setShowEstimate(true);
     setFlowState("writing");
     try {
       let book: BookOut;
@@ -928,10 +1164,22 @@ export default function CreatePage() {
           author_name: resolvedAuthor || undefined,
         });
       }
+      // Generation now runs asynchronously on a worker — create/generate return
+      // instantly with stage="enhancing". Poll until the pages are written.
+      if (book.stage !== "complete") {
+        book = await api.books.waitForGeneration(token, book.id);
+      }
+      // Apply the chosen page style to every content page up front, so the reader
+      // shows the final look from the start (clear separation = 3, words = 1).
+      try {
+        const styled = await api.books.bulkPageStyle(token, book.id, { text_mode: pageMode === "words" ? 1 : 3 });
+        if (styled) book = styled;
+      } catch { /* non-fatal — mode can still be changed in Parent mode */ }
       setCurrentBook(book);
       setBook(book);
       setFlowState("pages");
     } catch (err: any) {
+      if (err instanceof ApiError && err.status === 402) { setLimitError(err.message); return; }
       toast.error(err.message ?? "Writing failed. Please try again.");
       setFlowState("brief");
     }
@@ -948,6 +1196,7 @@ export default function CreatePage() {
     customToneInput, setCustomToneInput, style, setStyle,
     pageCount, setPageCount, isCustomPageCount, setIsCustomPageCount,
     customPageCountInput, setCustomPageCountInput,
+    pageMode, setPageMode,
   };
 
   const writingMessage = useWritingMessages(activeBrief);
@@ -961,9 +1210,9 @@ export default function CreatePage() {
 
   // Signed-out visitors are redirected to sign-in (effect above) — render a
   // placeholder meanwhile so the page is never interactive without an account.
-  if (authLoading || !token) {
+  if (authLoading || !token || resumeResolving) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+      <div className="flex h-[calc(100dvh-4rem)] items-center justify-center">
         <LgSpinner />
       </div>
     );
@@ -971,7 +1220,77 @@ export default function CreatePage() {
 
   return (
     <>
-      <main className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
+      {showEstimate && (
+        <EstimatePopup title="Writing your story! ✍️✨" estimateSeconds={estimateWritingSeconds(pageCount)} onClose={() => setShowEstimate(false)} />
+      )}
+      {limitError && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" onClick={() => setLimitError(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-3xl bg-card p-6 text-center chunky-border chunky-shadow">
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-highlight chunky-border text-3xl">🔒</div>
+            <h2 className="font-display text-2xl font-black">Not enough pages left</h2>
+            <p className="mt-2 text-sm font-bold text-foreground/80">{limitError}</p>
+            <p className="mt-2 text-xs text-muted-foreground">Buy a page pack for more pages this month, upgrade your plan, or make a shorter book.</p>
+            <button
+              onClick={() => router.push("/pricing")}
+              className="mt-5 w-full rounded-full bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+            >
+              Get more pages →
+            </button>
+            <button
+              onClick={() => setLimitError(null)}
+              className="mt-2 w-full rounded-full bg-background py-2.5 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
+            >
+              Make a shorter book
+            </button>
+          </div>
+        </div>
+      )}
+      {leaveWarning && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-card p-6 text-center chunky-border chunky-shadow">
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-highlight chunky-border text-3xl">
+              {leaveWarning === "writing" ? "✍️" : "⚠️"}
+            </div>
+            {leaveWarning === "writing" ? (
+              <>
+                <h2 className="font-display text-2xl font-black">Leave while it finishes?</h2>
+                <p className="mt-2 text-sm font-bold text-foreground/80">
+                  Your pages keep writing in the background — you can safely leave.
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  These pages already count toward your usage. Your book will keep generating, and you&apos;ll find it under <span className="font-bold text-foreground/80">In Progress</span> in My Books to pick up where you left off.
+                </p>
+                <button onClick={() => setLeaveWarning(null)}
+                  className="mt-5 w-full rounded-full bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+                  Keep watching
+                </button>
+                <button
+                  onClick={() => { const href = pendingHref.current; setLeaveWarning(null); router.push(href || "/library?tab=progress"); }}
+                  className="mt-2 w-full rounded-full bg-background py-2.5 text-sm font-extrabold text-muted-foreground chunky-border hover:-translate-y-0.5 transition-transform">
+                  Leave — finish in background
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="font-display text-2xl font-black">Leave without saving?</h2>
+                <p className="mt-2 text-sm font-bold text-foreground/80">
+                  Your story idea and plan aren&apos;t saved yet. If you leave now you&apos;ll lose the imagining and planning progress and have to start over.
+                </p>
+                <button onClick={() => setLeaveWarning(null)}
+                  className="mt-5 w-full rounded-full bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+                  Stay &amp; keep going
+                </button>
+                <button
+                  onClick={() => { const href = pendingHref.current; setLeaveWarning(null); if (href) router.push(href); }}
+                  className="mt-2 w-full rounded-full bg-background py-2.5 text-sm font-extrabold text-muted-foreground chunky-border hover:-translate-y-0.5 transition-transform">
+                  Leave and lose progress
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      <main className="flex h-[calc(100dvh-4rem)] flex-col overflow-hidden">
 
         {/* ── Top bar ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between border-b-[2.5px] border-foreground bg-background px-6 py-3">
@@ -1033,7 +1352,12 @@ export default function CreatePage() {
                       {!profilesLoading && profiles.map((p) => (
                         <button
                           key={p.id}
-                          onClick={() => { setSelectedProfileId(p.id); setFlowState("input"); }}
+                          onClick={() => {
+                            setSelectedProfileId(p.id);
+                            // Auto-select the age range this child falls into.
+                            setAge(p.age <= 5 ? "3-5" : p.age <= 8 ? "6-8" : "9-11");
+                            setFlowState("input");
+                          }}
                           className="group flex flex-col items-center gap-3 rounded-3xl bg-card p-6 w-36 chunky-border chunky-shadow-sm hover:-translate-y-1.5 transition-transform focus:outline-none focus:ring-4 focus:ring-primary/30"
                         >
                           <span className="grid h-20 w-20 place-items-center rounded-2xl bg-secondary chunky-border group-hover:scale-105 transition-transform overflow-hidden">
@@ -1116,7 +1440,7 @@ export default function CreatePage() {
                     <div className="mt-6" data-tour="create-enhance">
                       <button onClick={handleExpandPrompt} disabled={prompt.trim().length < 3}
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform disabled:opacity-50 disabled:translate-y-0">
-                        <Wand2 className="h-5 w-5" strokeWidth={2.5} /> ✨ Create My Storybook →
+                        <Wand2 className="h-5 w-5" strokeWidth={2.5} /> ✨ Imagine My Story →
                       </button>
                       <p className="mt-2 text-center text-xs text-muted-foreground">We&apos;ll turn your idea into a full story concept — you can review and tweak it next.</p>
                     </div>
@@ -1216,7 +1540,7 @@ export default function CreatePage() {
                       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
                         <LgSpinner />
                         <div className="text-center">
-                          <p className="font-display text-xl font-black">Building your book…</p>
+                          <p className="font-display text-xl font-black">Crafting your storybook…</p>
                           <AnimatePresence mode="wait">
                             <motion.p
                               key={briefMessage}
@@ -1310,9 +1634,9 @@ export default function CreatePage() {
                         <div className="pt-2">
                           <button onClick={handleWritePages}
                             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-                            <FileText className="h-5 w-5" strokeWidth={2} /> Write my storybook →
+                            <FileText className="h-5 w-5" strokeWidth={2} /> Write My Storybook Pages →
                           </button>
-                          <p className="mt-2 text-center text-xs text-muted-foreground">AI writes every page — you&apos;ll review &amp; edit before anything is illustrated.</p>
+                          <p className="mt-2 text-center text-xs text-muted-foreground">AI writes every page — you&apos;ll review &amp; edit before any pictures are made.</p>
                         </div>
 
                         {/* Story settings — collapsible at the bottom */}
@@ -1356,6 +1680,7 @@ export default function CreatePage() {
                           </motion.p>
                         </AnimatePresence>
                         <p className="mt-3 font-mono text-2xl font-black tabular-nums tracking-tight">{writingTimer}</p>
+                        <p className="mt-1 text-xs font-bold text-muted-foreground">⏳ This should take {estimateLabel(estimateWritingSeconds(pageCount))}</p>
                       </div>
                       {activeBrief && (
                         <div className="rounded-2xl bg-card px-4 py-3 chunky-border text-left w-full">
@@ -1376,16 +1701,18 @@ export default function CreatePage() {
                       <div>
                         <h1 className="font-display text-3xl font-black md:text-4xl">Review your pages</h1>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          Edit or regenerate any page before illustrating. <span className="font-bold">{sortedPages.length} pages</span> generated.
+                          Edit or improve any page before adding pictures. <span className="font-bold">{sortedPages.length} pages</span> generated.
                         </p>
                       </div>
-                      <button
-                        onClick={handleWritePages}
-                        className="shrink-0 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
-                        title="Regenerate all pages"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.5} /> Rewrite all
-                      </button>
+                      {!resumeId && (
+                        <button
+                          onClick={handleWritePages}
+                          className="shrink-0 flex items-center gap-1.5 rounded-full bg-card px-3 py-2 text-xs font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
+                          title="Improve all pages"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.5} /> Rewrite all
+                        </button>
+                      )}
                     </div>
 
                     {/* Page cards */}
@@ -1405,9 +1732,9 @@ export default function CreatePage() {
                     <div className="mt-6 space-y-3">
                       <button onClick={handleApprovePages}
                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-                        <BookOpen className="h-5 w-5" strokeWidth={2} /> Looks good — go to editor →
+                        <BookOpen className="h-5 w-5" strokeWidth={2} /> Draw My Pictures →
                       </button>
-                      <p className="text-center text-xs text-muted-foreground">Next: add illustrations, narration, and export your book.</p>
+                      <p className="text-center text-xs text-muted-foreground">Next: add pictures, narration, and export your book.</p>
                     </div>
                   </motion.div>
                 )}

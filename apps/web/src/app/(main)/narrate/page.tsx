@@ -25,8 +25,12 @@ import { XsSpinner, SmSpinner, MdSpinner, LgSpinner } from "@/components/charact
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { StepBar } from "@/components/step-bar";
+import { LeaveGuard } from "@/components/leave-guard";
 import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
+import { useSubscription } from "@/lib/use-subscription";
+import { estimateLabel, estimateNarrationSeconds } from "@/lib/fun-estimate";
+import { EstimatePopup } from "@/components/estimate-popup";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { useAuthImage, bustAuthImageCache } from "@/lib/use-auth-image";
 import { motion, AnimatePresence } from "motion/react";
@@ -330,7 +334,7 @@ function PageCard({
   onGenerate: () => void; onNarrate: () => void;
   narrateStatus: "idle" | "narrating" | "done" | "error";
 }) {
-  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id, page.image_version), token, page.has_image);
   const { previewing, loading: previewLoading, togglePreview } = useAudioPreview(bookId, page.id, token);
   const [showPreview, setShowPreview] = useState(false);
   const illMsg = useCyclingMessage(ILL_MSGS, 2800);
@@ -362,7 +366,7 @@ function PageCard({
             <>
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                 {page.has_image && !blobUrl ? <MdSpinner className="opacity-60" /> : !blobUrl ? (
-                  <><ImageIcon className="h-10 w-10 opacity-30" strokeWidth={1.5} /><span className="text-xs font-bold opacity-50">{status === "error" ? "Failed" : "Not illustrated"}</span></>
+                  <><ImageIcon className="h-10 w-10 opacity-30" strokeWidth={1.5} /><span className="text-xs font-bold opacity-50">{status === "error" ? "Failed" : "No picture yet"}</span></>
                 ) : null}
               </div>
               {blobUrl && <img src={blobUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500" />}
@@ -392,7 +396,7 @@ function PageCard({
 
         <div className="flex gap-2 px-4 pb-4">
           <button onClick={onGenerate} disabled={status === "generating"} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-secondary transition-colors disabled:opacity-40">
-            {status === "generating" ? <><XsSpinner /> Generating…</> : page.has_image ? <><RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Reillustrate</> : <><Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} /> Illustrate</>}
+            {status === "generating" ? <><XsSpinner /> Generating…</> : page.has_image ? <><RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Remake picture</> : <><Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} /> Make picture</>}
           </button>
           {page.text && (
             <div className="flex gap-1.5">
@@ -496,6 +500,8 @@ export default function NarratePage() {
   const { token } = useAuth();
   const { book, mergePages, setBook } = useBook();
   const lastSaved = useRelativeTime(book?.updated_at);
+  const { sub: subInfo, loading: subLoading } = useSubscription();
+  const narrationLocked = !subLoading && subInfo !== null && !subInfo.narration;
 
   const [showExport, setShowExport] = useState(false);
   const [pageElapsed, setPageElapsed] = useState<Record<string, number>>({});
@@ -513,17 +519,32 @@ export default function NarratePage() {
 
   // Narration
   const [narratingBook, setNarratingBook] = useState(false);
+  const [showEstimate, setShowEstimate] = useState(false);
   const [narrateProgress, setNarrateProgress] = useState<{ done: number; total: number } | null>(null);
   const narrateCancelledRef = useRef(false);
   const [pageNarrateStatuses, setPageNarrateStatuses] = useState<Record<string, "idle" | "narrating" | "done" | "error">>({});
   type VoiceChoice = { type: "preset"; id: string } | { type: "clone"; profileId: string; name: string };
-  const [selectedVoice, setSelectedVoice] = useState<VoiceChoice>({ type: "preset", id: "Kore" });
-  const [availableVoices, setAvailableVoices] = useState<Array<{ id: string; description: string; is_default: boolean }>>([]);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceChoice>({ type: "preset", id: "" });
+  const [availableVoices, setAvailableVoices] = useState<Array<{ id: string; name: string; description: string; is_default: boolean }>>([]);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
+
+  // When arriving via "Give default voice", surface a guide to pick a preset voice.
+  const [showVoiceGuide, setShowVoiceGuide] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("guide") === "default") {
+      setShowVoiceGuide(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!token) return;
-    api.books.listVoices(token).then((res) => { if (res.voices?.length) setAvailableVoices(res.voices); }).catch(() => {});
+    api.books.listVoices(token).then((res) => {
+      if (res.voices?.length) {
+        setAvailableVoices(res.voices);
+        const def = res.voices.find((v) => v.is_default) ?? res.voices[0];
+        setSelectedVoice((cur) => (cur.type === "preset" && res.voices.some((v) => v.id === cur.id) ? cur : { type: "preset", id: def.id }));
+      }
+    }).catch(() => {});
     api.voices.list(token).then(setVoiceProfiles).catch(() => {});
   }, [token]);
 
@@ -562,9 +583,9 @@ export default function NarratePage() {
     if (aborted) {
       toast("Stopped illustrating.");
     } else if (failedCount > 0) {
-      toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to illustrate — click Illustrate all to retry`);
+      toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed — click Make picture to retry`);
     } else {
-      toast.success("All illustrations complete!");
+      toast.success("All pictures complete!");
     }
   }
 
@@ -587,8 +608,10 @@ export default function NarratePage() {
     const textPages = book.pages.filter((p) => p.text);
     if (textPages.length === 0) { toast("No pages with text."); return; }
     narrateCancelledRef.current = false;
+    setShowEstimate(true);
     setNarratingBook(true);
     setNarrateProgress({ done: 0, total: textPages.length });
+    timer.start();
     try {
       for (const page of textPages) {
         if (narrateCancelledRef.current) break;
@@ -603,7 +626,7 @@ export default function NarratePage() {
       }
       if (!narrateCancelledRef.current) toast.success("Narration complete!");
     } catch (err) { if (!narrateCancelledRef.current) toast.error(err instanceof Error ? err.message : "Narration failed — please try again."); }
-    finally { setNarratingBook(false); setNarrateProgress(null); }
+    finally { setNarratingBook(false); setNarrateProgress(null); timer.stop(); }
   }
 
   async function handleNarrateOne(page: PageOut) {
@@ -633,10 +656,60 @@ export default function NarratePage() {
   const textPagesList = allPages.filter((p) => p.text);
   const textCount = textPagesList.length;
   const narratedCount = allPages.filter((p) => p.has_audio).length;
+  const allNarrated = textCount > 0 && narratedCount === textCount;
+  const narrationVoices = [...new Set(allPages.filter((p) => p.has_audio && p.narration_voice).map((p) => p.narration_voice))];
+  const narratedBy = narrationVoices.length === 0 ? null : narrationVoices.length === 1 ? narrationVoices[0] : "multiple voices";
+  // While a narration run is active, show the CURRENT run's progress (0/N and up)
+  // and the live timer — never the stale counter/time from a previous run.
+  const narrateRunning = narratingBook;
+  const progressDone = narrateRunning ? (narrateProgress?.done ?? 0) : narratedCount;
+  const progressTotal = narrateRunning ? (narrateProgress?.total ?? textCount) : textCount;
+
+  // Free plan doesn't include narration — show a locked upsell instead of the
+  // voice controls so the user never starts a job that would fail.
+  if (narrationLocked) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mb-6 flex justify-center"><StepBar currentIdx={5} /></div>
+        <div className="flex items-center justify-between mb-6">
+          <Link href="/editor" className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
+            <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back to pictures
+          </Link>
+        </div>
+        <div className="rounded-3xl bg-card p-8 text-center chunky-border chunky-shadow-sm">
+          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-highlight chunky-border text-4xl">🔒</div>
+          <h1 className="font-display text-3xl font-black">Narration is a Studio feature</h1>
+          <p className="mt-2 font-bold text-foreground/80">
+            Your {subInfo?.display_name ?? "Free"} plan doesn&apos;t include AI narration.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upgrade to <span className="font-bold text-foreground">Studio</span> to add a read-aloud voice to your storybook.
+          </p>
+          <Link href="/pricing" className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+            View plans &amp; upgrade →
+          </Link>
+          <div className="mt-3">
+            <Link href="/reader" className="text-sm font-extrabold text-muted-foreground underline underline-offset-2 hover:text-foreground">
+              Skip — read my storybook
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
+      <LeaveGuard
+        active={narrateRunning}
+        title="Leave while it finishes?"
+        message="Your narration keeps recording — you can safely leave."
+        subMessage="Each page is saved as it finishes, and you'll find this book under In Progress in My Books to finish the rest where you left off."
+      />
       {showExport && <ExportModal book={book as BookOut} token={token} onClose={() => setShowExport(false)} />}
+      {showEstimate && (
+        <EstimatePopup title="Recording the narration! 🎤✨" estimateSeconds={estimateNarrationSeconds(textCount)} onClose={() => setShowEstimate(false)} />
+      )}
 
       {/* Header */}
       <div className="mb-6">
@@ -648,45 +721,58 @@ export default function NarratePage() {
           <Link href="/editor" className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
             <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back to pictures
           </Link>
-          <div className="flex items-center gap-2">
-            {illustratedCount > 0 && (
-              <Link href="/reader?from=editor" className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-                <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview
-              </Link>
-            )}
-            <Link href="/studio" className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-extrabold text-primary chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <PenLine className="h-4 w-4" strokeWidth={2.5} /> Studio mode
-            </Link>
-            <button onClick={() => setShowExport(true)} className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-extrabold text-background chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <Download className="h-4 w-4" strokeWidth={2.5} /> Export
-            </button>
-          </div>
+          {/* Read / Parent mode / Export actions removed here — the celebration card below carries them */}
         </div>
 
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-4xl font-black md:text-5xl">Add My Voice</h1>
             <p className="mt-1 text-muted-foreground">
-              {narratedCount} of {textCount} pages narrated
+              {progressDone} of {progressTotal} pages narrated
               {book.brief && <span className="ml-2 font-semibold text-foreground">· {book.brief.title}</span>}
             </p>
-            {textCount > 0 && (
+            {progressTotal > 0 && (
               <div className="mt-3 flex items-center gap-3">
                 <div className="h-2 w-48 overflow-hidden rounded-full bg-muted chunky-border">
-                  <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${(narratedCount / textCount) * 100}%` }} />
+                  <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${(progressDone / progressTotal) * 100}%` }} />
                 </div>
-                {lastSaved && <span className="text-xs font-bold text-muted-foreground">Saved {lastSaved}</span>}
+                {!narrateRunning && lastSaved && <span className="text-xs font-bold text-muted-foreground">Saved {lastSaved}</span>}
               </div>
             )}
           </div>
-          {(isRunning || timer.elapsed > 0) && (
+          {narrateRunning && (
             <div className="flex items-center gap-2 rounded-2xl bg-card px-4 py-2.5 chunky-border shrink-0">
-              <Clock className={`h-4 w-4 ${isRunning ? "text-primary animate-pulse" : "text-muted-foreground"}`} />
+              <Clock className="h-4 w-4 text-primary animate-pulse" />
               <span className="font-display text-xl font-black tabular-nums">{timer.formatted}</span>
             </div>
           )}
         </div>
       </div>
+
+      {/* Narration-complete celebration — top of stage; shown once every page is narrated */}
+      {allNarrated && !isRunning && !narratingBook && (
+        <div className="mb-6 flex flex-col items-center gap-4 rounded-3xl bg-card p-8 chunky-border text-center">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow-sm">
+            <Volume2 className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
+          </div>
+          <div>
+            <h2 className="font-display text-3xl font-black">Congratulations! 🎉</h2>
+            <p className="mt-1 text-muted-foreground text-sm">Your storybook is narrated and ready.</p>
+            {narratedBy && <p className="mt-1 text-sm font-bold text-primary/80">🎙️ Narrated by {narratedBy}</p>}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link href="/reader?from=editor" className="inline-flex animate-bounce items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
+              <Eye className="h-5 w-5" strokeWidth={2.5} /> Read my Storybook Aloud
+            </Link>
+            <Link href="/studio" className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3.5 text-base font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+              <PenLine className="h-5 w-5" strokeWidth={2.5} /> Parent mode
+            </Link>
+            <button onClick={() => setShowExport(true)} className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-extrabold text-background chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+              <Download className="h-4 w-4" strokeWidth={2.5} /> Export
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Original prompt */}
       {book.raw_prompt && (
@@ -700,6 +786,18 @@ export default function NarratePage() {
         </details>
       )}
 
+      {/* Default-voice guide — shown when arriving from "Give default voice" */}
+      {showVoiceGuide && textCount > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-2xl bg-highlight/60 px-4 py-3 chunky-border">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 chunky-border"><Volume2 className="h-4 w-4 text-primary" strokeWidth={2.5} /></div>
+          <div className="flex-1">
+            <p className="text-sm font-extrabold">Pick a voice for your storybook 🎙️</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Choose any of our default voices from the dropdown below, then tap <span className="font-bold text-foreground">Read it aloud</span> to narrate every page.</p>
+          </div>
+          <button onClick={() => setShowVoiceGuide(false)} className="rounded-full bg-card p-1.5 chunky-border hover:-translate-y-0.5 transition-transform" title="Dismiss"><X className="h-3.5 w-3.5" strokeWidth={2.5} /></button>
+        </div>
+      )}
+
       {/* Narration */}
       {textCount > 0 && (
         <div data-tour="editor-narrate" className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 chunky-border">
@@ -708,6 +806,9 @@ export default function NarratePage() {
             <div>
               <p className="text-sm font-extrabold">Audio narration</p>
               <p className="text-xs text-muted-foreground">{narratedCount} of {textCount} pages narrated</p>
+              {narratingBook
+                ? <p className="text-xs font-bold text-muted-foreground mt-0.5">⏳ This should take {estimateLabel(estimateNarrationSeconds(narrateProgress?.total ?? textCount))}</p>
+                : null}
               {(() => {
                 const voices = [...new Set(allPages.filter((p) => p.has_audio && p.narration_voice).map((p) => p.narration_voice))];
                 if (voices.length === 0) return null;
@@ -725,16 +826,23 @@ export default function NarratePage() {
                   else { const profile = voiceProfiles.find((p) => p.id === id); if (profile) setSelectedVoice({ type: "clone", profileId: id, name: profile.name }); }
                 }}
                 disabled={narratingBook}
-                className="rounded-full bg-card px-3 py-2 text-xs font-bold chunky-border disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className={`rounded-full bg-card px-3 py-2 text-xs font-bold chunky-border disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/40 ${showVoiceGuide ? "ring-2 ring-primary/60" : ""}`}
               >
-                {availableVoices.length > 0 && <optgroup label="── Preset Voices ──">{availableVoices.map((v) => <option key={v.id} value={`preset:${v.id}`}>{v.id} — {v.description}</option>)}</optgroup>}
+                {availableVoices.length > 0 && <optgroup label="── Preset Voices ──">{availableVoices.map((v) => <option key={v.id} value={`preset:${v.id}`}>{v.name} — {v.description}</option>)}</optgroup>}
                 {voiceProfiles.length > 0 && <optgroup label="── Your Voices ──">{voiceProfiles.map((p) => <option key={p.id} value={`clone:${p.id}`}>{p.name}</option>)}</optgroup>}
               </select>
             )}
             {narratingBook ? (
-              <button onClick={() => { narrateCancelledRef.current = true; }} className="inline-flex items-center gap-2 rounded-full bg-destructive px-5 py-2.5 text-sm font-extrabold text-destructive-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-                <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop{narrateProgress ? ` (${narrateProgress.done + 1}/${narrateProgress.total})` : ""}
-              </button>
+              <>
+                {/* Live elapsed timer — counts forward until narration ends */}
+                <div className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 chunky-border">
+                  <Clock className="h-4 w-4 text-primary animate-pulse" strokeWidth={2.5} />
+                  <span className="font-display text-lg font-black tabular-nums">{timer.formatted}</span>
+                </div>
+                <button onClick={() => { narrateCancelledRef.current = true; }} className="inline-flex items-center gap-2 rounded-full bg-destructive px-5 py-2.5 text-sm font-extrabold text-destructive-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+                  <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop{narrateProgress ? ` (${narrateProgress.done + 1}/${narrateProgress.total})` : ""}
+                </button>
+              </>
             ) : (
               <button onClick={handleNarrate} className="inline-flex items-center justify-center gap-2 min-w-[13.5rem] rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
                 <Mic className="h-4 w-4" strokeWidth={2.5} />{narratedCount > 0 ? " Read it aloud again" : " Read it aloud"}
@@ -761,26 +869,6 @@ export default function NarratePage() {
         ))}
       </div>
 
-      {/* Finish CTA — shown once any page is narrated */}
-      {narratedCount > 0 && (
-        <div className="mt-10 flex flex-col items-center gap-4 rounded-3xl bg-card p-8 chunky-border text-center">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow-sm">
-            <Volume2 className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h2 className="font-display text-2xl font-black">Your storybook is ready! 🎉</h2>
-            <p className="mt-1 text-muted-foreground text-sm">Read it aloud in the reader, fine-tune it in Studio, or export it to share.</p>
-          </div>
-          <div className="flex gap-3">
-            <Link href="/reader?from=editor" className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-              <Eye className="h-4 w-4" strokeWidth={2.5} /> Read my book →
-            </Link>
-            <Link href="/studio" className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <PenLine className="h-4 w-4" strokeWidth={2.5} /> Open Studio
-            </Link>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

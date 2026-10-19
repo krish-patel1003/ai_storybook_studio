@@ -24,6 +24,7 @@ _HANDLED = {
     "customer.subscription.deleted",
     "invoice.payment_succeeded",
     "invoice.payment_failed",
+    "checkout.session.completed",
 }
 
 
@@ -62,7 +63,41 @@ async def handle_webhook(request: Request, db: AsyncSession) -> dict:
     elif event["type"] == "invoice.payment_failed":
         await _handle_payment_failed(db, obj)
 
+    elif event["type"] == "checkout.session.completed":
+        await _handle_checkout_completed(db, obj)
+
     return {"status": "ok", "type": event["type"]}
+
+
+async def _handle_checkout_completed(db: AsyncSession, session: dict) -> None:
+    """Credit page-pack top-ups when a one-time (mode=payment) checkout completes.
+
+    Subscription checkouts are handled via the subscription.* events, so we only
+    act on one-time payments carrying pack metadata.
+    """
+    if session.get("mode") != "payment":
+        return
+    if session.get("payment_status") not in ("paid", None):
+        return
+    meta = session.get("metadata") or {}
+    user_id = meta.get("user_id")
+    pages = meta.get("pages")
+    if not user_id or not pages:
+        logger.warning("checkout.session.completed without pack metadata: %s", session.get("id"))
+        return
+    try:
+        await billing_service.credit_topup_pages(db, user_id, int(pages))
+        await billing_service.record_purchase(
+            db, user_id,
+            kind="topup",
+            description=f"Top-up pack — {int(pages)} pages",
+            amount_cents=int(session.get("amount_total") or 0),
+            currency=session.get("currency") or "usd",
+            pages=int(pages),
+            stripe_id=session.get("id"),
+        )
+    except Exception:
+        logger.exception("Failed to credit top-up pages for session %s", session.get("id"))
 
 
 async def _get_user_by_customer(db: AsyncSession, customer_id: str) -> User | None:
@@ -133,6 +168,21 @@ async def _handle_invoice_paid(db: AsyncSession, invoice: dict) -> None:
 
     await billing_service.reset_page_pool(db, user, period_end)
     logger.info("Page pool reset for user %s after successful payment", user.id)
+
+    # Record the payment in the user's billing history (initial + renewals).
+    tier = _tier_from_metadata(sub.get("metadata", {})) or user.subscription_tier
+    from src.billing.tiers import get_tier
+    tier_name = get_tier(tier).display_name
+    first = invoice.get("billing_reason") == "subscription_create"
+    await billing_service.record_purchase(
+        db, user.id,
+        kind="subscription",
+        description=f"{tier_name} plan{'' if first else ' — renewal'}",
+        amount_cents=int(invoice.get("amount_paid") or 0),
+        currency=invoice.get("currency") or "usd",
+        tier=tier,
+        stripe_id=invoice.get("id"),
+    )
 
 
 async def _handle_payment_failed(db: AsyncSession, invoice: dict) -> None:

@@ -12,36 +12,42 @@ _FONT_DIR = "/usr/share/fonts/truetype"
 EXPORT_FONTS: dict[str, dict] = {
     "unkempt": {
         "label": "Unkempt",
+        "weight": 400,
         "file_regular": f"{_FONT_DIR}/Unkempt-Regular.ttf",
         "file_bold":    f"{_FONT_DIR}/Unkempt-Bold.ttf",
         "css_family":   "'Unkempt', cursive",
     },
     "nunito": {
         "label": "Nunito",
+        "weight": 600,
         "file_regular": f"{_FONT_DIR}/Nunito-Regular.ttf",
         "file_bold":    f"{_FONT_DIR}/Nunito-Bold.ttf",
         "css_family":   "'Nunito', sans-serif",
     },
     "patrick-hand": {
         "label": "Patrick Hand",
+        "weight": 400,
         "file_regular": f"{_FONT_DIR}/PatrickHand-Regular.ttf",
         "file_bold":    f"{_FONT_DIR}/PatrickHand-Regular.ttf",
         "css_family":   "'Patrick Hand', cursive",
     },
     "merriweather": {
         "label": "Merriweather",
+        "weight": 700,
         "file_regular": f"{_FONT_DIR}/Merriweather-Regular.ttf",
         "file_bold":    f"{_FONT_DIR}/Merriweather-Regular.ttf",
         "css_family":   "'Merriweather', serif",
     },
     "quicksand": {
         "label": "Quicksand",
+        "weight": 600,
         "file_regular": f"{_FONT_DIR}/Quicksand-Regular.ttf",
         "file_bold":    f"{_FONT_DIR}/Quicksand-Regular.ttf",
         "css_family":   "'Quicksand', sans-serif",
     },
     "caveat": {
         "label": "Caveat",
+        "weight": 700,
         "file_regular": f"{_FONT_DIR}/Caveat-Regular.ttf",
         "file_bold":    f"{_FONT_DIR}/Caveat-Regular.ttf",
         "css_family":   "'Caveat', cursive",
@@ -50,6 +56,12 @@ EXPORT_FONTS: dict[str, dict] = {
 
 DEFAULT_EXPORT_FONT = "unkempt"
 _FONT_TITLE = f"{_FONT_DIR}/Kranky-Regular.ttf"   # cover title font
+
+
+def _font_file(font_id: str) -> str:
+    """Pick the TTF whose weight matches the reader (regular < 600 ≤ bold)."""
+    cfg = EXPORT_FONTS.get(font_id, EXPORT_FONTS[DEFAULT_EXPORT_FONT])
+    return cfg["file_bold"] if cfg.get("weight", 600) >= 600 else cfg["file_regular"]
 
 
 @dataclass
@@ -336,10 +348,12 @@ def _build_pdf_sync(
 ) -> bytes:
     from fpdf import FPDF
 
-    PAGE_W, PAGE_H = 148, 210   # A5 portrait, mm
+    # Match the online reader's page proportions (440 × 580 ≈ 0.759) so the exported
+    # pages — and their text-area percentage — look exactly like reading on the site.
+    PAGE_W, PAGE_H = 148, 195   # 148 × 195mm ≈ reader aspect
     MARGIN = 12
 
-    pdf = FPDF(orientation="P", unit="mm", format="A5")
+    pdf = FPDF(orientation="P", unit="mm", format=(PAGE_W, PAGE_H))
     pdf.set_auto_page_break(False)
     pdf.set_margins(0, 0, 0)
 
@@ -387,132 +401,35 @@ def _build_pdf_sync(
             pdf.cell(PAGE_W, 6, f"by {author_display}", align="C")
 
         else:
-            import re as _re
-            t_pos    = getattr(page, "text_position", "bottom")
-            t_align  = getattr(page, "text_align",    "center")
-            t_mode   = getattr(page, "text_mode",  None) or 1
-
-            # Per-page font/size/color (fall back to book-level font_id)
-            pg_font_id = (page.font_family or "").strip() or font_id
+            # Content page — rendered exactly like the online reader as one composited
+            # image (same layout/font/size/colour/blend), then placed full-page.
+            pg_font_id = (getattr(page, "font_family", "") or "").strip()
             if pg_font_id not in EXPORT_FONTS:
                 pg_font_id = font_id if font_id in EXPORT_FONTS else DEFAULT_EXPORT_FONT
-            bold_alias = f"Bold_{pg_font_id}"
-            body_alias = f"Body_{pg_font_id}"
-
-            DEFAULT_FONT_SIZE = 13.0
-            pg_font_size = float(page.font_size) if getattr(page, "font_size", None) else DEFAULT_FONT_SIZE
-
-            if getattr(page, "text_color", None):
-                pg_r, pg_g, pg_b = _hex_to_rgb(page.text_color)
-            else:
-                pg_r, pg_g, pg_b = 30, 28, 45  # default dark navy
-
+            t_mode = getattr(page, "text_mode", None) or 3  # default page style = clear separation
             bg_rgb = _hex_to_rgb(page.bg_color) if getattr(page, "bg_color", None) else (250, 248, 243)
-
-            _ALIGN = {"left": "L", "center": "C", "right": "R"}
-            pdf_align = _ALIGN.get(t_align, "C")
-
             pdf.set_fill_color(*bg_rgb)
             pdf.rect(0, 0, PAGE_W, PAGE_H, style="F")
 
-            if t_mode == 2:
-                # ── Stacked: image top 80%, text bottom 20% ───────────────
-                IMG_FRAC  = 0.80
-                TEXT_FRAC = 1.0 - IMG_FRAC
-                img_h_mm  = PAGE_H * IMG_FRAC
+            if page.image_bytes:
+                page_img = _render_page_image(
+                    page.image_bytes, page.text or "", t_mode,
+                    _font_file(pg_font_id),
+                    font_px=getattr(page, "font_size", None) or 14,
+                    text_hex=getattr(page, "text_color", None) or "#1a1a2e",
+                    bg_hex=getattr(page, "bg_color", None) or "#faf8f3",
+                    align=getattr(page, "text_align", "center") or "center",
+                    valign=getattr(page, "text_valign", "center") or "center",
+                    position=getattr(page, "text_position", "bottom") or "bottom",
+                    w_mm=PAGE_W, h_mm=PAGE_H,
+                )
+                pdf.image(io.BytesIO(page_img), x=0, y=0, w=PAGE_W, h=PAGE_H)
 
-                if page.image_bytes:
-                    img_bytes = _stacked_image_crop(page.image_bytes, PAGE_W, img_h_mm)
-                    pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=img_h_mm)
-
-                text_zone_top = img_h_mm
-                text_zone_h   = PAGE_H * TEXT_FRAC
-                cell_w        = PAGE_W - MARGIN * 2
-
-                if page.text:
-                    display_text = _re.sub(r'\n{2,}', '\n', page.text.strip())
-                    available    = text_zone_h - MARGIN * 1.5
-
-                    INIT_LINE_H = pg_font_size * 0.55
-                    _LINE_RATIO = INIT_LINE_H / pg_font_size
-                    font_size   = pg_font_size
-                    line_h      = INIT_LINE_H
-                    lines: list[str] = []
-
-                    for _attempt in range(200):
-                        pdf.set_font(bold_alias, "", font_size)
-                        lines   = pdf.multi_cell(cell_w, line_h, display_text,
-                                                 align=pdf_align, dry_run=True, output="LINES")
-                        block_h = len(lines) * line_h
-                        if block_h <= available or font_size <= 8.5:
-                            break
-                        font_size -= 0.5
-                        line_h    = _LINE_RATIO * font_size
-
-                    block_h    = len(lines) * line_h
-                    top_offset = max(0.0, (available - block_h) / 2)
-                    text_y     = text_zone_top + top_offset + MARGIN * 0.75
-
-                    pdf.set_text_color(pg_r, pg_g, pg_b)
-                    pdf.set_xy(MARGIN, text_y)
-                    pdf.multi_cell(cell_w, line_h, "\n".join(lines), align=pdf_align)
-
-            else:
-                # ── Overlay: full-bleed image with gradient behind text ────
-                if page.image_bytes:
-                    img_bytes = _story_page_composite(
-                        page.image_bytes, PAGE_W, PAGE_H,
-                        text_zone_frac=TEXT_ZONE_FRAC,
-                        text_position=t_pos,
-                        paper=bg_rgb,
-                    )
-                    pdf.image(io.BytesIO(img_bytes), x=0, y=0, w=PAGE_W, h=PAGE_H)
-
-                text_zone_h = PAGE_H * TEXT_ZONE_FRAC
-                if t_pos == "top":
-                    text_zone_top = 0.0
-                elif t_pos == "center":
-                    text_zone_top = (PAGE_H - text_zone_h) / 2
-                else:
-                    text_zone_top = PAGE_H - text_zone_h
-
-                if page.text:
-                    display_text = _re.sub(r'\n{2,}', '\n', page.text.strip())
-                    cell_w       = PAGE_W - MARGIN * 2
-                    available    = text_zone_h - MARGIN
-
-                    INIT_LINE_H = pg_font_size * 0.55
-                    _LINE_RATIO = INIT_LINE_H / pg_font_size
-                    font_size   = pg_font_size
-                    line_h      = INIT_LINE_H
-                    lines: list[str] = []
-
-                    for _attempt in range(200):
-                        pdf.set_font(bold_alias, "", font_size)
-                        lines   = pdf.multi_cell(cell_w, line_h, display_text,
-                                                 align=pdf_align, dry_run=True, output="LINES")
-                        block_h = len(lines) * line_h
-                        if block_h <= available or font_size <= 8.5:
-                            break
-                        font_size -= 0.5
-                        line_h    = _LINE_RATIO * font_size
-
-                    max_lines = max(1, int(available / line_h))
-                    if len(lines) > max_lines:
-                        lines = lines[:max_lines]
-                    block_h    = len(lines) * line_h
-                    top_offset = max(0.0, (available - block_h) / 2)
-                    text_y     = text_zone_top + top_offset + MARGIN * 0.5
-
-                    pdf.set_text_color(pg_r, pg_g, pg_b)
-                    pdf.set_xy(MARGIN, text_y)
-                    pdf.multi_cell(cell_w, line_h, "\n".join(lines), align=pdf_align)
-
-            # Page number
-            pdf.set_xy(0, PAGE_H - MARGIN + 2)
-            pdf.set_font(body_alias, "", 7)
-            pdf.set_text_color(160, 155, 170)
-            pdf.cell(PAGE_W, 5, str(page.order), align="C")
+            # Page number (small, bottom-right — like the reader)
+            pdf.set_xy(PAGE_W - 16, PAGE_H - MARGIN + 1)
+            pdf.set_font("StoryBody", "", 7)
+            pdf.set_text_color(150, 145, 160)
+            pdf.cell(12, 5, str(page.order), align="R")
 
     # ── Back cover ────────────────────────────────────────────────────────────
     pdf.add_page()
@@ -629,16 +546,275 @@ async def build_cover_pdf(
     return await asyncio.to_thread(_build_cover_pdf_sync, title, cover_page, author)
 
 
+# ── Cover image (PNG / JPEG) ──────────────────────────────────────────────────
+
+def _build_cover_image_sync(
+    title: str,
+    cover_page: ExportPage,
+    author: str = "",
+    fmt: str = "PNG",
+    with_text: bool = True,
+) -> bytes:
+    """Front cover as a raster image.
+
+    with_text=True  → "Standard" cover: title + author baked in (for sharing).
+    with_text=False → "Editor" cover: clean artwork only, no text, so the user
+                      can add their own title in the Amazon KDP cover editor.
+    """
+    from PIL import Image as PILImage, ImageDraw, ImageFont
+
+    W, H = 1250, 1774  # ~A5 ratio (148:210) at ~215 dpi
+
+    if cover_page.image_bytes:
+        art = _cover_composite(cover_page.image_bytes, 148, 210, dpi=220)
+        base = PILImage.open(io.BytesIO(art)).convert("RGB").resize((W, H), PILImage.LANCZOS)
+    else:
+        base = PILImage.new("RGB", (W, H), (20, 18, 40))
+
+    if not with_text:
+        # Clean artwork only — no title/author overlay.
+        buf = io.BytesIO()
+        if fmt.upper() == "JPEG":
+            base.save(buf, format="JPEG", quality=92)
+        else:
+            base.save(buf, format="PNG")
+        return buf.getvalue()
+
+    draw = ImageDraw.Draw(base)
+
+    def _load(path: str, size: int):
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            return ImageFont.load_default()
+
+    title_font = _load(_FONT_TITLE, 92)
+    author_font = _load(EXPORT_FONTS[DEFAULT_EXPORT_FONT]["file_regular"], 44)
+
+    margin = int(W * 0.09)
+    max_w = W - margin * 2
+
+    # Word-wrap the title to fit within max_w.
+    words = (title or "").split()
+    lines: list[str] = []
+    cur = ""
+    for word in words:
+        trial = f"{cur} {word}".strip()
+        if draw.textlength(trial, font=title_font) <= max_w or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+
+    line_h = int(title_font.size * 1.15)
+    author_line = f"by {author}" if author else ""
+    author_h = int(author_font.size * 1.4) if author_line else 0
+    block_h = len(lines) * line_h + author_h
+
+    # Anchor the text block in the lower third (over the dark gradient).
+    y = int(H * 0.90) - block_h
+    for ln in lines:
+        w = draw.textlength(ln, font=title_font)
+        x = (W - w) / 2
+        # soft shadow for legibility
+        draw.text((x + 2, y + 2), ln, font=title_font, fill=(0, 0, 0))
+        draw.text((x, y), ln, font=title_font, fill=(255, 255, 255))
+        y += line_h
+    if author_line:
+        y += int(author_font.size * 0.2)
+        w = draw.textlength(author_line, font=author_font)
+        draw.text(((W - w) / 2, y), author_line, font=author_font, fill=(225, 222, 235))
+
+    buf = io.BytesIO()
+    fmt = fmt.upper()
+    if fmt == "JPEG":
+        base.save(buf, format="JPEG", quality=92)
+    else:
+        base.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+async def build_cover_image(
+    title: str,
+    cover_page: ExportPage,
+    author: str = "",
+    fmt: str = "PNG",
+    with_text: bool = True,
+) -> bytes:
+    return await asyncio.to_thread(_build_cover_image_sync, title, cover_page, author, fmt, with_text)
+
+
 # ── EPUB image crop (shorter portrait — leaves room for text) ─────────────────
 
-def _epub_story_image(image_bytes: bytes, w_mm: float = 148, h_mm: float = 118, dpi: int = 150) -> bytes:
+def _epub_story_image(image_bytes: bytes, w_mm: float = 148, h_mm: float = 152, dpi: int = 200) -> bytes:
     """
-    Crop the illustration to a shorter portrait rectangle (default ~148×118 mm)
-    so that when rendered at 100% width in an EPUB it occupies roughly 55-60%
-    of a typical e-reader screen, leaving the bottom third for the story text.
+    Stacked layout image: crop the illustration to ~148×152 mm (≈72 % of the A5
+    page) so it matches the app's "picture on top, text below" layout and renders
+    large — not shrunk — on an e-reader. Higher DPI keeps it crisp on big screens.
     No gradient — clean cut.
     """
     return _cover_crop(image_bytes, w_mm, h_mm, dpi)
+
+
+def _render_page_image(
+    image_bytes: bytes,
+    text: str,
+    text_mode: int,
+    font_path: str,
+    font_px: float = 14.0,
+    text_hex: str = "#1a1a2e",
+    bg_hex: str = "#faf8f3",
+    align: str = "center",
+    valign: str = "center",
+    position: str = "bottom",
+    w_mm: float = 148,
+    h_mm: float = 195,  # ≈ reader page aspect (440:580)
+    dpi: int = 200,
+) -> bytes:
+    """Render a whole page as one image that matches the online reader as closely as
+    possible — same layout proportions, font, size, colours, alignment and blend — so
+    PDF and EPUB exports look exactly like reading the book on the site.
+
+    Modes: 1 = Words on Picture (full-bleed image + bg-toned gradient + text over it),
+    2 = Blended stacked (picture on top, soft fade into the text band), 3 = Clear
+    separation stacked (picture on top, clean edge). Returns JPEG bytes."""
+    import numpy as np
+    from PIL import Image as PILImage, ImageDraw, ImageFont
+
+    tw = int(w_mm * dpi / 25.4)
+    th = int(h_mm * dpi / 25.4)
+    bg = _hex_to_rgb(bg_hex)
+    fg = _hex_to_rgb(text_hex)
+
+    # The reader lays text out in a 440px-wide page coordinate; scale to the canvas.
+    scale = tw / 440.0
+    fpx = max(10, int(round((font_px or 14) * scale)))
+    pad_x = int(20 * scale)
+    pad_y = int(16 * scale)
+    line_ratio = 1.6  # matches the reader's line-height
+
+    def load_font(sz: int):
+        try:
+            return ImageFont.truetype(font_path, sz)
+        except Exception:
+            return ImageFont.load_default()
+
+    def crop_cover(src: "PILImage.Image", cw: int, ch: int, anchor_top: bool) -> "PILImage.Image":
+        iw, ih = src.size
+        s = max(cw / iw, ch / ih)
+        nw, nh = int(iw * s), int(ih * s)
+        r = src.resize((nw, nh), PILImage.LANCZOS)
+        left = (nw - cw) // 2
+        top = 0 if anchor_top else (nh - ch) // 2
+        return r.crop((left, top, left + cw, top + ch))
+
+    def wrap(draw, f, s: str, max_w: int):
+        lines, cur = [], ""
+        for word in (s or "").strip().split():
+            trial = f"{cur} {word}".strip()
+            if draw.textlength(trial, font=f) <= max_w or not cur:
+                cur = trial
+            else:
+                lines.append(cur); cur = word
+        if cur:
+            lines.append(cur)
+        return lines
+
+    src = PILImage.open(io.BytesIO(image_bytes)).convert("RGB") if image_bytes else None
+    has_text = bool((text or "").strip())
+
+    if text_mode == 1:
+        # ── Words on Picture — full-bleed image, gradient toward bg, text over it ──
+        canvas = crop_cover(src, tw, th, anchor_top=True) if src else PILImage.new("RGB", (tw, th), bg)
+        if has_text:
+            zone_h = int(th * 0.47)
+            band = np.zeros((th, tw, 4), dtype=np.uint8)
+            if position == "top":
+                for i in range(zone_h):
+                    a = int(min(255, (1 - i / zone_h) ** 1.1 * 255))
+                    band[i, :] = [bg[0], bg[1], bg[2], a]
+            elif position == "center":
+                cy0 = (th - zone_h) // 2
+                for i in range(zone_h):
+                    d = abs(i - zone_h / 2) / (zone_h / 2)
+                    a = int(min(255, (1 - d) * 230))
+                    band[cy0 + i, :] = [bg[0], bg[1], bg[2], a]
+            else:
+                y0 = th - zone_h
+                for i in range(zone_h):
+                    a = int(min(255, (i / zone_h) ** 1.1 * 255))
+                    band[y0 + i, :] = [bg[0], bg[1], bg[2], a]
+            overlay = PILImage.fromarray(band, "RGBA")
+            canvas = PILImage.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
+
+            draw = ImageDraw.Draw(canvas)
+            f = load_font(fpx)
+            max_w = tw - pad_x * 2
+            lines = wrap(draw, f, text, max_w)
+            line_h = int(fpx * line_ratio)
+            block_h = len(lines) * line_h
+            if position == "top":
+                y = pad_y * 1.5
+            elif position == "center":
+                y = (th - block_h) / 2
+            else:
+                y = th - block_h - pad_y * 1.5
+            for ln in lines:
+                w = draw.textlength(ln, font=f)
+                x = pad_x if align == "left" else (tw - pad_x - w) if align == "right" else (tw - w) / 2
+                draw.text((x, y), ln, font=f, fill=fg)
+                y += line_h
+        return _jpeg(canvas)
+
+    # ── Stacked (Blended=2 / Clear separation=3): picture on top, text band below ──
+    canvas = PILImage.new("RGB", (tw, th), bg)
+    img_h = int(th * 0.75)  # reader: image 75%, text band 25%
+    if src:
+        img = crop_cover(src, tw, img_h, anchor_top=False)
+        if text_mode == 2:
+            arr = np.array(img.convert("RGBA"), dtype=np.float32)
+            fade_h = int(img_h * 0.16)
+            alphas = np.linspace(1.0, 0.0, fade_h, dtype=np.float32).reshape(-1, 1)
+            arr[img_h - fade_h:, :, 3] *= alphas
+            faded = PILImage.fromarray(arr.astype(np.uint8), "RGBA")
+            bg_layer = PILImage.new("RGBA", (tw, img_h), (bg[0], bg[1], bg[2], 255))
+            img = PILImage.alpha_composite(bg_layer, faded).convert("RGB")
+        canvas.paste(img, (0, 0))
+
+    if has_text:
+        draw = ImageDraw.Draw(canvas)
+        band_top, band_h = img_h, th - img_h
+        max_w = tw - pad_x * 2
+        size = fpx
+        f = load_font(size)
+        lines = wrap(draw, f, text, max_w)
+        line_h = int(size * line_ratio)
+        while len(lines) * line_h > band_h - pad_y * 2 and size > 10:
+            size -= 1
+            f = load_font(size)
+            lines = wrap(draw, f, text, max_w)
+            line_h = int(size * line_ratio)
+        block_h = len(lines) * line_h
+        if block_h > band_h:
+            y = band_top + pad_y
+        elif valign == "top":
+            y = band_top + pad_y
+        elif valign == "bottom":
+            y = th - pad_y - block_h
+        else:
+            y = band_top + max(pad_y, (band_h - block_h) / 2)
+        for ln in lines:
+            w = draw.textlength(ln, font=f)
+            x = pad_x if align == "left" else (tw - pad_x - w) if align == "right" else (tw - w) / 2
+            draw.text((x, y), ln, font=f, fill=fg)
+            y += line_h
+    return _jpeg(canvas)
+
+
+def _jpeg(img) -> bytes:
+    buf = io.BytesIO(); img.convert("RGB").save(buf, format="JPEG", quality=90); return buf.getvalue()
 
 
 # ── EPUB ──────────────────────────────────────────────────────────────────────
@@ -699,6 +875,23 @@ body {{
   line-height: 0;
 }}
 .page-image img {{
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0;
+}}
+
+/* Words-on-Picture: full-bleed image with text already baked in */
+.page-fullimage {{
+  page-break-after: always;
+  break-after: page;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  background: #faf8f3;
+}}
+.page-fullimage img {{
   display: block;
   width: 100%;
   height: auto;
@@ -836,22 +1029,32 @@ body {{
 
     for page in content_pages:
         safe_text = html_mod.escape(page.text or "").replace("\n", "<br/>")
+        mode = getattr(page, "text_mode", None) or 2
 
         if page.image_bytes:
-            # Crop to shorter portrait (148 × 118 mm) so the image takes ~60 % of
-            # the screen and the text is immediately visible below it.
-            story_jpg = _epub_story_image(page.image_bytes)
+            # One composited page image that matches the online reader (same layout,
+            # font, size, colours, blend) — so the picture and text stay together.
+            pg_font_id = (getattr(page, "font_family", "") or "").strip() or font_id
+            pg_cfg = EXPORT_FONTS.get(pg_font_id, font_cfg)
+            page_jpg = _render_page_image(
+                page.image_bytes,
+                page.text or "",
+                mode,
+                _font_file(pg_font_id),
+                font_px=getattr(page, "font_size", None) or 14,
+                text_hex=getattr(page, "text_color", None) or "#1a1a2e",
+                bg_hex=getattr(page, "bg_color", None) or "#faf8f3",
+                align=getattr(page, "text_align", "center") or "center",
+                valign=getattr(page, "text_valign", "center") or "center",
+                position=getattr(page, "text_position", "bottom") or "bottom",
+            )
             img_filename = f"images/page_{page.order}.jpg"
             epub_img = epub.EpubImage()
             epub_img.file_name = img_filename
             epub_img.media_type = "image/jpeg"
-            epub_img.content = story_jpg
+            epub_img.content = page_jpg
             book.add_item(epub_img)
-
-            body_content = f"""<div class="page-wrap">
-  <div class="page-image"><img src="{img_filename}" alt="Page {page.order}"/></div>
-  {f'<div class="page-text"><p>{safe_text}</p></div>' if safe_text else ''}
-</div>"""
+            body_content = f"""<div class="page-fullimage"><img src="{img_filename}" alt="Page {page.order}"/></div>"""
         else:
             # Continuation / text-only page
             body_content = (

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { XsSpinner, CornerSpinner, MdSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
+import { useSubscription } from "@/lib/use-subscription";
+import NextLink from "next/link";
 import { api, type VoiceProfile } from "@/lib/api";
 import { VoiceRecorder } from "@/components/voice-recorder";
 import { toast } from "sonner";
@@ -316,6 +318,8 @@ import { useRequireAuth } from "@/lib/use-require-auth";
 export default function VoicesPage() {
   useRequireAuth();
   const { token } = useAuth();
+  const { sub: subInfo, loading: subLoading } = useSubscription();
+  const voiceLocked = !subLoading && subInfo !== null && !subInfo.narration;
   const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -336,6 +340,27 @@ export default function VoicesPage() {
 
   function handleDeleted(id: string) {
     setProfiles((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  // Voice cloning / narration is Studio-only — show a locked upsell for other tiers.
+  if (voiceLocked) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16">
+        <div className="rounded-3xl bg-card p-8 text-center chunky-border chunky-shadow-sm">
+          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-highlight chunky-border text-4xl">🔒</div>
+          <h1 className="font-display text-3xl font-black">Voice Studio is a Studio feature</h1>
+          <p className="mt-2 font-bold text-foreground/80">
+            Your {subInfo?.display_name ?? "current"} plan doesn&apos;t include voice cloning or narration.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upgrade to <span className="font-bold text-foreground">Studio</span> to record your own voice and narrate your storybooks.
+          </p>
+          <NextLink href="/pricing" className="mt-6 inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+            View plans &amp; upgrade →
+          </NextLink>
+        </div>
+      </main>
+    );
   }
 
   return (

@@ -1,0 +1,73 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "schemaVersion": 39,
+  "title": "Storybook API",
+  "tags": ["storybook"],
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "API up",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } },
+      "targets": [ { "expr": "up{job=\"storybook-api\"}", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by status",
+      "gridPos": { "h": 8, "w": 10, "x": 4, "y": 0 },
+      "targets": [ { "expr": "sum by (status) (rate(http_requests_total{job=\"storybook-api\"}[5m]))", "legendFormat": "{{status}}", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx error ratio",
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [ { "expr": "sum(rate(http_requests_total{job=\"storybook-api\",status=\"5xx\"}[5m])) / clamp_min(sum(rate(http_requests_total{job=\"storybook-api\"}[5m])), 0.001)", "legendFormat": "5xx ratio", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p50 / p95 / p99 (s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"storybook-api\"}[5m])))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"storybook-api\"}[5m])))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"storybook-api\"}[5m])))", "legendFormat": "p99", "refId": "C" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Book generation outcomes (rate/min)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(rate(storybook_generation_total{result=\"success\"}[5m])) * 60", "legendFormat": "success/min", "refId": "A" },
+        { "expr": "sum(rate(storybook_generation_total{result=\"failure\"}[5m])) * 60", "legendFormat": "failure/min", "refId": "B" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Generations in progress",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 },
+      "targets": [ { "expr": "sum(storybook_generation_in_progress)", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Pages reserved vs refunded (rate/min)",
+      "gridPos": { "h": 8, "w": 10, "x": 6, "y": 16 },
+      "targets": [
+        { "expr": "rate(storybook_pages_reserved_total[5m]) * 60", "legendFormat": "reserved/min", "refId": "A" },
+        { "expr": "rate(storybook_pages_refunded_total[5m]) * 60", "legendFormat": "refunded/min", "refId": "B" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Avatars generated (rate/min)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [ { "expr": "rate(storybook_avatars_generated_total[5m]) * 60", "legendFormat": "avatars/min", "refId": "A" } ]
+    }
+  ]
+}

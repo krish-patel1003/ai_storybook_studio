@@ -84,6 +84,7 @@ export interface PageOut {
   word_count: number | null;
   illustration_metadata: IllustrationMetadata | null;
   has_image: boolean;
+  image_version?: string | null;
   has_audio: boolean;
   narration_voice?: string | null;
   text_align: TextAlign;
@@ -97,9 +98,10 @@ export interface PageOut {
   bg_color: string | null;
 }
 
-export function pageImageUrl(bookId: string, pageId: string): string {
+export function pageImageUrl(bookId: string, pageId: string, version?: string | null): string {
   const base = process.env.NEXT_PUBLIC_API_URL ?? "";
-  return `${base}/books/${bookId}/pages/${pageId}/image`;
+  const v = version ? `?v=${version}` : "";
+  return `${base}/books/${bookId}/pages/${pageId}/image${v}`;
 }
 
 export function characterImageUrl(bookId: string, characterId: string): string {
@@ -140,6 +142,7 @@ export interface BookOut {
   updated_at: string;
   child_profile_id: string | null;
   author_name: string | null;
+  illustration_started?: boolean;
 }
 
 // ── Child Profile types ───────────────────────────────────────────────────────
@@ -178,7 +181,11 @@ export interface BookSummaryOut {
   visibility: "public" | "private";
   stage: GenerationStage;
   illustrated_page_count: number;
+  narrated_page_count: number;
+  is_fully_illustrated: boolean;
+  illustration_started?: boolean;
   cover_image_url: string | null;
+  child_profile_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -484,6 +491,50 @@ export const api = {
     get: (token: string, bookId: string) =>
       request<BookOut>(`/books/${bookId}`, { headers: authed(token) }),
 
+    // Languages the reader can translate a book into (direct translation).
+    translateLanguages: () =>
+      request<{ languages: { code: string; name: string; rtl: boolean }[] }>(`/books/translate/languages`),
+
+    // Translate a book's page text into `language` (cached server-side after first call).
+    translate: (token: string, bookId: string, language: string) =>
+      request<{ language: string; title: string; pages: Record<string, string> }>(
+        `/books/${bookId}/translate`,
+        { method: "POST", headers: authed(token), body: JSON.stringify({ language }) }
+      ),
+
+    // Poll GET /books/{id} until generation finishes. `create`/`generate` now
+    // return immediately with stage="enhancing" (the heavy work runs on a
+    // Cloud Tasks worker), so callers await this to get the finished book.
+    waitForGeneration: async (
+      token: string,
+      bookId: string,
+      opts: { intervalMs?: number; timeoutMs?: number; signal?: AbortSignal } = {}
+    ): Promise<BookOut> => {
+      const intervalMs = opts.intervalMs ?? 3000;
+      const timeoutMs = opts.timeoutMs ?? 8 * 60 * 1000;
+      const start = Date.now();
+      // Small backoff before the first poll — generation never finishes instantly.
+      while (true) {
+        if (opts.signal?.aborted) throw new ApiError("Cancelled", 0);
+        const book = await request<BookOut>(`/books/${bookId}`, { headers: authed(token) });
+        if (book.stage === "complete") return book;
+        if (book.stage === "failed") {
+          throw new ApiError(book.error || "Writing failed. Please try again.", 500);
+        }
+        if (Date.now() - start > timeoutMs) {
+          throw new ApiError("Writing is taking longer than expected — check My Books in a moment.", 504);
+        }
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+    },
+
+    saveBrief: (token: string, bookId: string, brief: BriefOut) =>
+      request<BookOut>(`/books/${bookId}/brief`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify(brief),
+      }),
+
     updatePage: (token: string, bookId: string, pageId: string, data: UpdatePageIn) =>
       request<BookOut>(`/books/${bookId}/pages/${pageId}`, {
         method: "PATCH",
@@ -504,6 +555,21 @@ export const api = {
 
     regeneratePage: (token: string, bookId: string, pageId: string) =>
       request<BookOut>(`/books/${bookId}/pages/${pageId}/regenerate`, {
+        method: "POST",
+        headers: authed(token),
+      }),
+
+    reflowPage: (token: string, bookId: string, pageId: string, maxWords: number) =>
+      request<BookOut>(`/books/${bookId}/pages/${pageId}/reflow`, {
+        method: "POST",
+        headers: authed(token),
+        body: JSON.stringify({ max_words: maxWords }),
+      }),
+
+    // Mark that the user has entered the editor / started drawing pictures, so
+    // "continue" routes to the editor instead of the pages-review step.
+    markIllustrating: (token: string, bookId: string) =>
+      request<BookOut>(`/books/${bookId}/illustrating`, {
         method: "POST",
         headers: authed(token),
       }),
@@ -574,6 +640,13 @@ export const api = {
         body: JSON.stringify({ visibility }),
       }),
 
+    updateAuthor: (token: string, bookId: string, authorName: string) =>
+      request<BookOut>(`/books/${bookId}`, {
+        method: "PATCH",
+        headers: authed(token),
+        body: JSON.stringify({ author_name: authorName }),
+      }),
+
     listExportFonts: (token: string) =>
       request<{ fonts: Array<{ id: string; label: string; is_default: boolean }> }>(
         `/books/export/fonts`,
@@ -586,8 +659,8 @@ export const api = {
     exportEpub: (token: string, bookId: string, fontId?: string): Promise<globalThis.Response> =>
       fetch(`${API_URL}/books/${bookId}/export/epub${fontId ? `?font=${fontId}` : ""}`, { headers: authed(token) }),
 
-    exportCoverPdf: (token: string, bookId: string): Promise<globalThis.Response> =>
-      fetch(`${API_URL}/books/${bookId}/export/cover-pdf`, { headers: authed(token) }),
+    exportCoverImage: (token: string, bookId: string, format: "png" | "jpeg" = "jpeg", withText = true): Promise<globalThis.Response> =>
+      fetch(`${API_URL}/books/${bookId}/export/cover-image?format=${format}&with_text=${withText}`, { headers: authed(token) }),
 
     kdp: (token: string, bookId: string) =>
       request<KDPOut>(`/books/${bookId}/kdp`, { headers: authed(token) }),
@@ -609,7 +682,7 @@ export const api = {
       request<BookOut>(`/books/public/${bookId}`),
 
     listVoices: (token: string) =>
-      request<{ voices: Array<{ id: string; description: string; is_default: boolean }> }>(
+      request<{ voices: Array<{ id: string; name: string; description: string; is_default: boolean }> }>(
         `/books/voices`,
         { headers: authed(token) },
       ),

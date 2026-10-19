@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Pencil, Baby, Check, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useSubscription } from "@/lib/use-subscription";
 import { api, type ChildProfile, type CreateProfileIn } from "@/lib/api";
+import Link from "next/link";
 import { toast } from "sonner";
 import { LgSpinner } from "@/components/character-spinner";
 import { AvatarDisplay } from "@/components/avatar-display";
@@ -163,9 +165,16 @@ function ProfileForm({
   saving: boolean;
 }) {
   const { token } = useAuth();
+  const { sub } = useSubscription();
   const [form, setForm] = useState<CreateProfileIn>(initial);
   const [aiPrompt, setAiPrompt] = useState("");
   const [generatingAvatar, setGeneratingAvatar] = useState(false);
+  // Avatar generations already used this session (on top of what the server reports),
+  // so the remaining count reflects generations made without a page reload.
+  const [avatarsMadeHere, setAvatarsMadeHere] = useState(0);
+  const avatarsLeft = sub ? Math.max(0, sub.avatars_remaining - avatarsMadeHere) : null;
+  const avatarsPerMonth = sub?.avatars_per_month ?? 0;
+  const outOfAvatars = avatarsLeft !== null && avatarsLeft <= 0;
 
   const [activeCategory, setActiveCategory] = useState<string>(() => {
     const cur = initial.avatar_emoji ?? "";
@@ -186,6 +195,7 @@ function ProfileForm({
     try {
       const { url } = await api.profiles.generateAvatar(token, aiPrompt.trim());
       setForm((f) => ({ ...f, avatar_emoji: url }));
+      setAvatarsMadeHere((n) => n + 1);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       if (!msg || msg === "Failed to fetch" || msg === "NetworkError when attempting to fetch resource.") {
@@ -268,19 +278,26 @@ function ProfileForm({
         {/* Avatar grid / AI generator */}
         {activeCategory === "__ai__" ? (
           <div className="rounded-2xl bg-background p-4 chunky-border space-y-3">
-            <p className="text-xs text-muted-foreground">Describe the avatar and AI will draw it</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">Describe the avatar and AI will draw it</p>
+              {avatarsLeft !== null && avatarsPerMonth > 0 && (
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold chunky-border ${outOfAvatars ? "bg-muted text-muted-foreground" : "bg-highlight text-foreground"}`}>
+                  {avatarsLeft} of {avatarsPerMonth} left this month
+                </span>
+              )}
+            </div>
             <div className="flex gap-2">
               <input
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleGenerateAvatar()}
+                onKeyDown={(e) => e.key === "Enter" && !outOfAvatars && handleGenerateAvatar()}
                 placeholder="e.g. a brave little fox wearing a knight helmet"
                 className="flex-1 rounded-xl bg-card px-3 py-2 text-sm font-bold chunky-border focus:outline-none focus:ring-2 focus:ring-primary/40"
-                disabled={generatingAvatar}
+                disabled={generatingAvatar || outOfAvatars}
               />
               <button
                 onClick={handleGenerateAvatar}
-                disabled={generatingAvatar || !aiPrompt.trim()}
+                disabled={generatingAvatar || !aiPrompt.trim() || outOfAvatars}
                 className="rounded-xl px-4 py-2 text-sm font-bold bg-primary text-primary-foreground chunky-border disabled:opacity-50 shrink-0"
               >
                 {generatingAvatar ? "Generating…" : "Generate"}
@@ -288,6 +305,12 @@ function ProfileForm({
             </div>
             {generatingAvatar && (
               <p className="text-xs text-muted-foreground text-center animate-pulse">Creating your avatar…</p>
+            )}
+            {outOfAvatars && !generatingAvatar && (
+              <p className="text-xs text-muted-foreground text-center">
+                You&apos;ve used all {avatarsPerMonth} AI avatar{avatarsPerMonth !== 1 ? "s" : ""} this month. It renews next billing period — or{" "}
+                <Link href="/pricing" className="font-extrabold text-primary underline">upgrade your plan</Link> for more. You can still pick a preset avatar above.
+              </p>
             )}
           </div>
         ) : (

@@ -77,6 +77,18 @@ class RecalibrateIn(BaseModel):
 
 class UpdateBookIn(BaseModel):
     visibility: str | None = Field(default=None, pattern=r"^(public|private)$")
+    author_name: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class ReflowIn(BaseModel):
+    # Target upper bound for the rewrite so the page fits its text area at the
+    # default font size without shrinking.
+    max_words: int = Field(ge=6, le=120)
+
+
+class ReflowOut(BaseModel):
+    # LLM structured-output target for the shortened page text.
+    text: str
 
 
 # ── Response schemas ──────────────────────────────────────────────────────────
@@ -131,6 +143,9 @@ class PageOut(BaseModel):
     illustration_metadata: IllustrationMetadata | None
     image_key: str | None = Field(default=None, exclude=True)
     has_image: bool = False
+    # Short, non-sensitive fingerprint of the current image key. Changes whenever
+    # the illustration is (re)generated, so the client can cache-bust the image URL.
+    image_version: str | None = None
     audio_key: str | None = Field(default=None, exclude=True)
     has_audio: bool = False
     narration_voice: str | None = None
@@ -150,6 +165,9 @@ class PageOut(BaseModel):
     def _set_flags(self) -> "PageOut":
         self.has_image = self.image_key is not None
         self.has_audio = self.audio_key is not None
+        if self.image_key:
+            import hashlib
+            self.image_version = hashlib.md5(self.image_key.encode()).hexdigest()[:10]
         return self
 
 
@@ -174,6 +192,7 @@ class BookOut(BaseModel):
     updated_at: datetime
     child_profile_id: uuid.UUID | None = None
     author_name: str | None = None
+    illustration_started: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -188,7 +207,11 @@ class BookSummaryOut(BaseModel):
     visibility: str
     stage: GenerationStage
     illustrated_page_count: int = 0
+    narrated_page_count: int = 0
+    is_fully_illustrated: bool = False
+    illustration_started: bool = False
     cover_image_url: str | None = None
+    child_profile_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -302,7 +325,7 @@ class GenerateIn(BaseModel):
 
 
 class NarrateIn(BaseModel):
-    voice_name: str = "Kore"
+    voice_name: str | None = None  # ElevenLabs preset voice_id (None → default preset)
     voice_profile_id: uuid.UUID | None = None  # User's cloned voice — overrides voice_name when set
 
 

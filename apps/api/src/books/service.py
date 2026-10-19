@@ -152,12 +152,34 @@ async def get_book(db: AsyncSession, book_id: uuid.UUID, user_id: uuid.UUID) -> 
     return book
 
 
-async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, int, str | None]]:
-    """Return (book, illustrated_page_count, cover_page_id | None) for each book."""
+async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, int, int, str | None, bool]]:
+    """Return (book, illustrated_page_count, narrated_page_count, cover_page_id | None,
+    is_fully_illustrated) for each book. `is_fully_illustrated` is True only when every
+    content page (excluding cover/back cover) has an image — i.e. the book is complete."""
     from sqlalchemy import func
     illustrated_sq = (
         select(Page.book_id, func.count(Page.id).label("cnt"))
         .where(Page.image_key.isnot(None))
+        .group_by(Page.book_id)
+        .subquery()
+    )
+    # Subquery: how many pages have narration audio (used for the Read-to-Me filter).
+    narrated_sq = (
+        select(Page.book_id, func.count(Page.id).label("cnt"))
+        .where(Page.audio_key.isnot(None))
+        .group_by(Page.book_id)
+        .subquery()
+    )
+    # Content pages (exclude cover/back cover): total and how many are illustrated.
+    content_total_sq = (
+        select(Page.book_id, func.count(Page.id).label("cnt"))
+        .where(Page.is_cover.is_(False), Page.is_back_cover.is_(False))
+        .group_by(Page.book_id)
+        .subquery()
+    )
+    content_illustrated_sq = (
+        select(Page.book_id, func.count(Page.id).label("cnt"))
+        .where(Page.is_cover.is_(False), Page.is_back_cover.is_(False), Page.image_key.isnot(None))
         .group_by(Page.book_id)
         .subquery()
     )
@@ -171,16 +193,24 @@ async def list_books(db: AsyncSession, user_id: uuid.UUID) -> list[tuple[Book, i
         select(
             Book,
             func.coalesce(illustrated_sq.c.cnt, 0).label("illustrated_count"),
+            func.coalesce(narrated_sq.c.cnt, 0).label("narrated_count"),
             cover_sq.c.cover_page_id,
+            func.coalesce(content_total_sq.c.cnt, 0).label("content_total"),
+            func.coalesce(content_illustrated_sq.c.cnt, 0).label("content_illustrated"),
         )
         .outerjoin(illustrated_sq, illustrated_sq.c.book_id == Book.id)
+        .outerjoin(narrated_sq, narrated_sq.c.book_id == Book.id)
         .outerjoin(cover_sq, cover_sq.c.book_id == Book.id)
+        .outerjoin(content_total_sq, content_total_sq.c.book_id == Book.id)
+        .outerjoin(content_illustrated_sq, content_illustrated_sq.c.book_id == Book.id)
         .where(Book.user_id == user_id)
         .order_by(Book.updated_at.desc())
     )
     result = await db.execute(stmt)
     return [
-        (row.Book, int(row.illustrated_count), str(row.cover_page_id) if row.cover_page_id else None)
+        (row.Book, int(row.illustrated_count), int(row.narrated_count),
+         str(row.cover_page_id) if row.cover_page_id else None,
+         int(row.content_total) > 0 and int(row.content_illustrated) >= int(row.content_total))
         for row in result.all()
     ]
 
@@ -212,63 +242,23 @@ async def create_draft(
     return await get_book(db, book.id, user_id)
 
 
-async def generate_from_draft(
-    db: AsyncSession,
-    book_id: uuid.UUID,
-    user_id: uuid.UUID,
-    data: GenerateIn,
-) -> Book:
-    _set_gen_context(user_id, book_id)
-    book = await get_book(db, book_id, user_id)
-    book.art_style = data.art_style
-    book.stage = GenerationStage.ENHANCING
-    await db.flush()
+# ── Record creation (fast) ─────────────────────────────────────────────────────
 
-    try:
-        cfg = ModelConfig(provider=book.model_provider, model_name=book.model_name)
-        pipeline = _pipeline(cfg)
-
-        result = await pipeline.generate(
-            raw_prompt=book.raw_prompt,
-            age_range=book.age_range,
-            tone=book.tone,
-            art_style=book.art_style,
-            safety=book.safety_mode,
-            page_count=book.page_count,
-        )
-
-        split_pages, split_beats = _split_overlong_pages(result.pages, result.beats, book.age_range)
-        await _persist_result(db, book, result.brief, result.characters, split_beats, split_pages)
-        book.stage = GenerationStage.COMPLETE
-        book.title = result.brief.title
-        await db.commit()
-        await db.refresh(book)
-
-        # Auto-generate KDP fields — don't let a failure here break book creation
-        await _try_generate_kdp(db, book)
-
-    except Exception as exc:
-        logger.exception("Generation failed for book %s", book.id)
-        try:
-            await db.rollback()
-            book.stage = GenerationStage.FAILED
-            book.error = str(exc)[:1000]
-            await db.commit()
-        except Exception:
-            pass
-        raise
-
-    return await get_book(db, book_id, user_id)
-
-
-# ── Create & generate ─────────────────────────────────────────────────────────
-
-async def create_and_generate(
+async def create_book_record(
     db: AsyncSession,
     user_id: uuid.UUID,
     data: CreateBookIn,
+    pages_charged: int = 0,
+    pages_charged_topup: int = 0,
 ) -> Book:
-    _set_gen_context(user_id)  # book_id set below after flush
+    """Create the Book row and return immediately (stage=ENHANCING).
+
+    `pages_charged` / `pages_charged_topup` are the monthly / top-up pages already
+    reserved from the user's pool at commit time (reserve-at-start); they are
+    stored so the exact split can be refunded if generation fails. The heavy
+    generation runs separately via `run_generation` (Cloud Tasks worker, or inline
+    fallback), keeping the POST /books request fast for polling.
+    """
     book = Book(
         user_id=user_id,
         title=data.raw_prompt[:60],
@@ -283,46 +273,144 @@ async def create_and_generate(
         stage=GenerationStage.ENHANCING,
         child_profile_id=data.child_profile_id,
         author_name=data.author_name,
+        pages_charged=pages_charged,
+        pages_charged_topup=pages_charged_topup,
     )
     db.add(book)
-    await db.flush()
-    _set_gen_context(user_id, book.id)  # now we have the real book ID
+    await db.commit()
+    return await get_book(db, book.id, user_id)
 
+
+async def prepare_draft_for_generation(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: GenerateIn,
+    pages_charged: int = 0,
+    pages_charged_topup: int = 0,
+) -> Book:
+    """Mark an existing draft as generating (stage=ENHANCING) and persist the
+    chosen art style, so `run_generation` can pick it up from the row.
+    `pages_charged` / `pages_charged_topup` record the reserved split (for exact refund)."""
+    book = await get_book(db, book_id, user_id)
+    book.art_style = data.art_style
+    book.stage = GenerationStage.ENHANCING
+    book.error = None
+    book.pages_charged = pages_charged
+    book.pages_charged_topup = pages_charged_topup
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+# ── Generation (heavy — runs on a worker or inline) ─────────────────────────────
+
+async def run_generation(book_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Run the full generation pipeline for an existing book row, opening its
+    OWN database session.
+
+    Designed to be called from the Cloud Tasks worker endpoint (where the
+    request session would otherwise be tied to the worker HTTP request) as well
+    as inline as a fallback. Safe to retry: it no-ops if the book is already
+    COMPLETE, and records failures on the row (stage=FAILED) rather than raising,
+    so a completed-but-failed run does not trigger a wasteful Cloud Tasks retry.
+    A retry only happens when the worker never returns (e.g. the instance died
+    mid-run), in which case the book is still ENHANCING and regenerates cleanly.
+    """
+    from src.database import async_session_maker
+
+    async with async_session_maker() as db:
+        await _generate_existing_book(db, book_id, user_id)
+
+
+async def _generate_existing_book(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> None:
+    _set_gen_context(user_id, book_id)
+    book = await get_book(db, book_id, user_id)
+
+    # Idempotency — a Cloud Tasks retry of an already-finished job is a no-op.
+    if book.stage == GenerationStage.COMPLETE:
+        logger.info("Book %s already complete — skipping generation", book_id)
+        return
+
+    from src.metrics import record_generation_started, record_generation_finished, record_pages_refunded
+    record_generation_started()
     try:
-        cfg = ModelConfig(provider=data.model_provider, model_name=data.model_name)
+        cfg = ModelConfig(provider=book.model_provider, model_name=book.model_name)
         pipeline = _pipeline(cfg)
 
         await _set_stage(db, book, GenerationStage.ENHANCING)
         result = await pipeline.generate(
-            raw_prompt=data.raw_prompt,
-            age_range=data.age_range,
-            tone=data.tone,
-            art_style=data.art_style,
-            safety=data.safety_mode,
-            page_count=data.page_count,
+            raw_prompt=book.raw_prompt,
+            age_range=book.age_range,
+            tone=book.tone,
+            art_style=book.art_style,
+            safety=book.safety_mode,
+            page_count=book.page_count,
         )
 
-        split_pages, split_beats = _split_overlong_pages(result.pages, result.beats, data.age_range)
+        split_pages, split_beats = _split_overlong_pages(result.pages, result.beats, book.age_range)
         await _persist_result(db, book, result.brief, result.characters, split_beats, split_pages)
         book.stage = GenerationStage.COMPLETE
         book.title = result.brief.title
+        # Pages were reserved up front (reserve-at-start); nothing to deduct here.
         await db.commit()
         await db.refresh(book)
+        record_generation_finished(success=True)
 
         # Auto-generate KDP fields — don't let a failure here break book creation
         await _try_generate_kdp(db, book)
 
     except Exception as exc:
-        logger.exception("Generation failed for book %s", book.id)
+        logger.exception("Generation failed for book %s", book_id)
         try:
             await db.rollback()
+            book = await get_book(db, book_id, user_id)
+            # Compensating action: refund the exact split reserved for this book,
+            # since the generation it was committed for produced no usable result.
+            refund_monthly = book.pages_charged or 0
+            refund_topup = book.pages_charged_topup or 0
             book.stage = GenerationStage.FAILED
             book.error = str(exc)[:1000]
+            book.pages_charged = 0
+            book.pages_charged_topup = 0
             await db.commit()
+            if refund_monthly or refund_topup:
+                from src.billing.guards import refund_pages
+                await refund_pages(db, user_id, refund_monthly, refund_topup)
+                record_pages_refunded(refund_monthly + refund_topup)
         except Exception:
-            pass
-        raise
+            logger.exception("Failed to record FAILED stage for book %s", book_id)
+        finally:
+            record_generation_finished(success=False)
 
+
+async def generate_from_draft(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: GenerateIn,
+) -> Book:
+    """Inline (synchronous) draft generation — used as the fallback when Cloud
+    Tasks is not enabled. Sets up the draft then runs the pipeline in-process."""
+    await prepare_draft_for_generation(db, book_id, user_id, data)
+    await _generate_existing_book(db, book_id, user_id)
+    return await get_book(db, book_id, user_id)
+
+
+# ── Create & generate ─────────────────────────────────────────────────────────
+
+async def create_and_generate(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    data: CreateBookIn,
+) -> Book:
+    """Inline (synchronous) create+generate — used as the fallback when Cloud
+    Tasks is not enabled. Creates the record then runs the pipeline in-process."""
+    book = await create_book_record(db, user_id, data)
+    await _generate_existing_book(db, book.id, user_id)
     return await get_book(db, book.id, user_id)
 
 
@@ -480,6 +568,66 @@ async def regenerate_page(
     return await get_book(db, book_id, user_id)
 
 
+async def reflow_page(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    page_id: uuid.UUID,
+    user_id: uuid.UUID,
+    max_words: int,
+) -> Book:
+    """Rewrite a page's text to be shorter (<= max_words) while preserving its
+    meaning, so it fits the text area at the default font size without shrinking.
+
+    Called automatically when the reader detects a page would overflow. The story
+    beat, characters, tone, reading level, and language are all preserved — only
+    the wording is tightened.
+    """
+    from src.generation.gemini import GeminiClient
+    from src.generation.constants import GEMINI_FLASH
+    from src.books.schemas import ReflowOut
+
+    _set_gen_context(user_id, book_id)
+    book = await get_book(db, book_id, user_id)
+    page = next((p for p in book.pages if p.id == page_id), None)
+    if page is None:
+        raise NotFoundError("Page not found")
+    if not page.text or not page.text.strip():
+        return book
+
+    max_words = max(6, min(int(max_words), 120))
+    # Already within budget — nothing to do.
+    if len(page.text.split()) <= max_words:
+        return book
+
+    system = (
+        "You tighten the wording of a single children's picture-book page so it fits a fixed "
+        "text area, WITHOUT changing the story. Preserve the same meaning, characters, events, "
+        "tone, reading level, and language as the original. Do not add or remove story content — "
+        f"only make it more concise. Use at most {max_words} words. Respond with a single flowing "
+        "paragraph of prose only: no quotation marks, no markdown, no notes or explanations."
+    )
+    prompt = (
+        f"Rewrite this picture-book page in at most {max_words} words, keeping the same meaning "
+        f"and reading level:\n\n{page.text}"
+    )
+
+    client = GeminiClient(api_key=settings.GEMINI_API_KEY)
+    result = await client.generate(
+        prompt=prompt,
+        schema=ReflowOut,
+        system=system,
+        model=GEMINI_FLASH,
+        temperature=0.4,
+    )
+    new_text = _clean_text(result.text)
+    if new_text and new_text != page.text:
+        page.text = new_text
+        page.word_count = len(new_text.split())
+        await db.commit()
+
+    return await get_book(db, book_id, user_id)
+
+
 # ── Recalibration ─────────────────────────────────────────────────────────────
 
 async def recalibrate_book(
@@ -559,6 +707,16 @@ async def generate_character_sheets(
     return await get_book(db, book_id, user_id)
 
 
+async def mark_illustration_started(db: AsyncSession, book_id: uuid.UUID, user_id: uuid.UUID) -> Book:
+    """Flag that the user has entered the editor and committed to illustration,
+    so 'continue' routes to the editor rather than the pages-review step."""
+    book = await get_book(db, book_id, user_id)
+    if not book.illustration_started:
+        book.illustration_started = True
+        await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
 async def illustrate_page(
     db: AsyncSession,
     book_id: uuid.UUID,
@@ -569,6 +727,8 @@ async def illustrate_page(
     from src.storage import minio_client
 
     book = await get_book(db, book_id, user_id)
+    if not book.illustration_started:
+        book.illustration_started = True  # safety net if the explicit mark was missed
     page = next((p for p in book.pages if p.id == page_id), None)
     if page is None:
         raise NotFoundError("Page not found")
@@ -586,11 +746,17 @@ async def illustrate_page(
             except Exception:
                 pass  # missing ref is non-fatal — fall back to text-only
 
+    # A page that already has an image is being *remade* — vary the seed so the
+    # new illustration is genuinely different (character refs keep it consistent).
+    import random as _rnd
+    reseed = _rnd.randint(1, 2**30) if page.image_key else 0
+
     pipeline = _pipeline()
     img = await pipeline.illustrate_single(
         page=page,
         visual_seed=book.visual_seed,
         character_refs=character_refs if character_refs else None,
+        reseed=reseed,
     )
 
     if page.image_key:
@@ -684,11 +850,15 @@ async def illustrate_back_cover(
             except Exception:
                 pass
 
+    import random as _rnd
+    reseed = _rnd.randint(1, 2**30) if back_cover_page.image_key else 0
+
     pipeline = _pipeline()
     img = await pipeline.illustrate_single(
         page=back_cover_page,
         visual_seed=book.visual_seed,
         character_refs=character_refs if character_refs else None,
+        reseed=reseed,
     )
 
     if back_cover_page.image_key:
@@ -711,12 +881,12 @@ async def narrate_page(
     book_id: uuid.UUID,
     page_id: uuid.UUID,
     user_id: uuid.UUID,
-    voice_name: str = "Kore",
+    voice_name: str | None = None,
     voice_profile_id: uuid.UUID | None = None,
 ) -> Book:
     _set_gen_context(user_id, book_id)
     from src.storage import minio_client
-    from src.generation.tts import synthesize, DEFAULT_VOICE
+    from src.generation.elevenlabs import synthesize as el_synthesize
 
     book = await get_book(db, book_id, user_id)
     page = next((p for p in book.pages if p.id == page_id), None)
@@ -725,20 +895,19 @@ async def narrate_page(
     if not page.text:
         raise ValueError("Page has no text yet")
 
-    # Route to ElevenLabs if a cloned voice profile is requested
+    # Route to ElevenLabs for a user's cloned voice profile…
     if voice_profile_id is not None:
         from src.voices.models import VoiceProfile
-        from src.generation.elevenlabs import synthesize as el_synthesize
         profile = await db.get(VoiceProfile, voice_profile_id)
         if profile is None or profile.user_id != user_id:
             raise NotFoundError("Voice profile not found")
         wav = await el_synthesize(page.text, profile.elevenlabs_voice_id, age_range=book.age_range)
         voice_label = profile.name
     else:
-        raw_key = f"audio/{book_id}/{page_id}.raw.pcm"
-        used_voice = voice_name or DEFAULT_VOICE
-        wav = await synthesize(page.text, voice_name=used_voice, debug_raw_key=raw_key)
-        voice_label = used_voice
+        # …or an ElevenLabs preset voice (replaces the old Gemini presets).
+        from src.generation.preset_voices import resolve_preset
+        preset_voice_id, voice_label = resolve_preset(voice_name)
+        wav = await el_synthesize(page.text, preset_voice_id, age_range=book.age_range)
 
     if page.audio_key:
         try:
@@ -756,7 +925,7 @@ async def narrate_book(
     db: AsyncSession,
     book_id: uuid.UUID,
     user_id: uuid.UUID,
-    voice_name: str = "Kore",
+    voice_name: str | None = None,
     voice_profile_id: uuid.UUID | None = None,
 ) -> Book:
     """Narrate all pages with text using the selected voice (overwrites existing audio)."""
@@ -792,6 +961,22 @@ async def update_book(
     book = await get_book(db, book_id, user_id)
     if data.visibility is not None:
         book.visibility = data.visibility
+    if data.author_name is not None:
+        book.author_name = data.author_name
+    await db.commit()
+    return await get_book(db, book_id, user_id)
+
+
+async def save_brief(
+    db: AsyncSession,
+    book_id: uuid.UUID,
+    user_id: uuid.UUID,
+    brief: dict,
+) -> Book:
+    """Persist the planning brief onto a draft so the user can resume later
+    (and we don't re-spend tokens regenerating it)."""
+    book = await get_book(db, book_id, user_id)
+    book.brief = brief
     await db.commit()
     return await get_book(db, book_id, user_id)
 
@@ -946,6 +1131,7 @@ async def _persist_result(db, book, brief, characters, beats, pages) -> None:
             text=_clean_text(gpage.text),
             word_count=len(_clean_text(gpage.text).split()),
             illustration_metadata=gpage.illustration_metadata.model_dump(),
+            text_mode=3,  # default page style = clear separation (same for all plans/users)
         ))
 
     # Auto-create back cover alongside front cover — illustrated like any regular page

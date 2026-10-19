@@ -35,10 +35,13 @@ async def get_avatar_image(key: str = Query(...)) -> Response:
 @router.post("/generate-avatar", response_model=GenerateAvatarOut)
 async def generate_avatar(
     data: GenerateAvatarIn,
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(current_user),
 ) -> GenerateAvatarOut:
-    from src.billing.guards import require_feature
-    require_feature(user, "avatars")
+    from src.billing.guards import check_avatar_quota
+    # Enforce the per-period avatar allowance (free 1 / storyteller 2 / studio 3).
+    # Quota is only consumed after a successful generation, below.
+    await check_avatar_quota(db, user)
 
     from google import genai
     from google.genai import types as gtypes
@@ -118,6 +121,15 @@ async def generate_avatar(
     from src.generation.events import log_event, set_context
     set_context(user.id)
     log_event("avatar", "gemini-3-pro-image", image_count=1)
+
+    # Record the successful generation against the user's monthly allowance.
+    from src.billing.guards import consume_avatar
+    await consume_avatar(db, user)
+    try:
+        from src.metrics import record_avatar_generated
+        record_avatar_generated()
+    except Exception:
+        pass
 
     url = f"{settings.API_URL}/profiles/avatar-image?key={key}"
     return GenerateAvatarOut(url=url)

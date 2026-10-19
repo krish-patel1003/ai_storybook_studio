@@ -7,6 +7,25 @@ import { Sparkles, Wand2, Palette, BookMarked, ArrowRight, Star, Lock, BookOpen,
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+// Mirrors the backend tiers (apps/api/src/billing/tiers.py). Keep in sync.
+const PRICING_PLANS = [
+  {
+    label: "Free", price: "$0", period: "", sub: "No credit card", popular: false,
+    href: "/auth/signup", cta: "Start free",
+    features: ["6 pages · 1 storybook", "AI writing + character design", "3 art styles · 1 voice", "Online reader & PDF download", "Public sharing link"],
+  },
+  {
+    label: "Storyteller", price: "$9.99", period: "/mo", sub: "For storytellers", popular: true,
+    href: "/pricing", cta: "Choose Storyteller",
+    features: ["Everything in Free", "24 pages/month", "1 picture remake per page", "Parent mode editing", "Pro AI model · 8 art styles"],
+  },
+  {
+    label: "Studio", price: "$15.99", period: "/mo", sub: "The full studio", popular: false,
+    href: "/pricing", cta: "Choose Studio",
+    features: ["Everything in Storyteller", "AI narration · 3 voices", "AI avatar portraits", "24 pages/month", "1 picture remake per page"],
+  },
+] as const;
+
 interface SampleBook {
   id: string;
   title: string;
@@ -36,8 +55,8 @@ const HOW_IT_WORKS = [
   },
   {
     icon: Palette, bg: "bg-secondary", fg: "text-secondary-foreground",
-    title: "2. Generate illustrations",
-    desc: "Lock character designs once. Every page gets consistent, beautiful illustrations in the art style you choose.",
+    title: "2. Generate pictures",
+    desc: "Lock character designs once. Every page gets consistent, beautiful pictures in the art style you choose.",
   },
   {
     icon: BookMarked, bg: "bg-accent", fg: "text-accent-foreground",
@@ -210,7 +229,7 @@ export default function HomePage() {
       <div className="border-y-[2.5px] border-foreground bg-foreground py-3 text-background overflow-hidden">
         <div className="flex animate-marquee-slow whitespace-nowrap gap-10 items-center">
           {[
-            "Illustrated in seconds",
+            "Pictures in seconds",
             "Consistent characters across every page",
             "Your child's name in the story",
             "Print-ready PDF",
@@ -219,7 +238,7 @@ export default function HomePage() {
             "Safe for ages 3–11",
             "No lock-in — export anytime",
           ].concat([
-            "Illustrated in seconds",
+            "Pictures in seconds",
             "Consistent characters across every page",
             "Your child's name in the story",
             "Print-ready PDF",
@@ -305,44 +324,38 @@ export default function HomePage() {
       </section>
 
       {/* ── Pricing clarity ───────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-4xl px-4 py-20 text-center">
+      <section className="mx-auto max-w-7xl px-4 py-20 text-center">
         <h2 className="font-display text-4xl font-black md:text-5xl">Simple, honest pricing</h2>
         <p className="mt-3 text-muted-foreground">No hidden fees. No watermarks. What you create is yours.</p>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
-          <div className="rounded-3xl bg-card p-8 chunky-border chunky-shadow-sm text-left">
-            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">Free</p>
-            <p className="font-display text-5xl font-black mt-1">$0</p>
-            <p className="text-sm text-muted-foreground mt-1">No credit card</p>
-            <ul className="mt-6 space-y-2.5 text-sm font-semibold">
-              {["Unlimited story creation", "AI writing + character design", "Interactive online reader", "PDF download", "Public sharing link"].map((f) => (
-                <li key={f} className="flex items-center gap-2">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground text-[10px] font-black">✓</span> {f}
-                </li>
-              ))}
-            </ul>
-            <Link href="/auth/signup" className="mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-              <Sparkles className="h-4 w-4" strokeWidth={2.5} /> Create My First Book
-            </Link>
-          </div>
-
-          <div className="rounded-3xl bg-foreground text-background p-8 chunky-border chunky-shadow text-left relative overflow-hidden">
-            <div className="absolute top-4 right-4 rounded-full bg-highlight text-foreground px-3 py-1 text-xs font-extrabold chunky-border">Coming soon</div>
-            <p className="text-xs font-extrabold uppercase tracking-wider opacity-60">Pro</p>
-            <p className="font-display text-5xl font-black mt-1">$9<span className="text-2xl font-bold opacity-60">/mo</span></p>
-            <p className="text-sm opacity-60 mt-1">Cancel anytime</p>
-            <ul className="mt-6 space-y-2.5 text-sm font-semibold">
-              {["Everything in Free", "AI narration with voice cloning", "Custom voice studio", "Bulk illustration queue", "Priority generation", "Amazon publishing assistant"].map((f) => (
-                <li key={f} className="flex items-center gap-2 opacity-80">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-background/20 text-[10px] font-black">✓</span> {f}
-                </li>
-              ))}
-            </ul>
-            <button disabled className="mt-8 flex w-full items-center justify-center rounded-full bg-background/20 py-3 text-sm font-extrabold opacity-60 chunky-border cursor-not-allowed">
-              Join waitlist
-            </button>
-          </div>
+        <div className="mt-10 grid gap-6 sm:grid-cols-3 max-w-5xl mx-auto">
+          {PRICING_PLANS.map((plan) => {
+            const highlight = plan.popular;
+            return (
+              <div key={plan.label} className={`relative flex flex-col rounded-3xl p-6 text-left chunky-border ${highlight ? "bg-foreground text-background chunky-shadow ring-2 ring-primary" : "bg-card chunky-shadow-sm"}`}>
+                {highlight && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary text-primary-foreground px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider chunky-border">Most popular</div>
+                )}
+                <p className={`text-xs font-extrabold uppercase tracking-wider ${highlight ? "opacity-60" : "text-muted-foreground"}`}>{plan.label}</p>
+                <p className="font-display text-4xl font-black mt-1">{plan.price}<span className={`text-xl font-bold ${highlight ? "opacity-60" : "text-muted-foreground"}`}>{plan.period}</span></p>
+                <p className={`text-sm mt-1 ${highlight ? "opacity-60" : "text-muted-foreground"}`}>{plan.sub}</p>
+                <ul className="mt-6 space-y-2.5 text-sm font-semibold flex-1">
+                  {plan.features.map((f) => (
+                    <li key={f} className={`flex items-start gap-2 ${highlight ? "opacity-80" : ""}`}>
+                      <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black ${highlight ? "bg-background/20" : "bg-primary text-primary-foreground"}`}>✓</span> {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link href={plan.href} className={`mt-8 flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform ${highlight ? "bg-primary text-primary-foreground chunky-shadow" : "bg-primary text-primary-foreground chunky-shadow-sm"}`}>
+                  {plan.label === "Free" && <Sparkles className="h-4 w-4" strokeWidth={2.5} />} {plan.cta}
+                </Link>
+              </div>
+            );
+          })}
         </div>
+        <p className="mt-8 text-sm font-bold">
+          <Link href="/pricing" className="text-primary hover:underline">Compare all plans &amp; features →</Link>
+        </p>
       </section>
 
       {/* ── Trust signals ─────────────────────────────────────────────────── */}
@@ -383,7 +396,7 @@ export default function HomePage() {
 
       <footer className="border-t-[2.5px] border-foreground bg-foreground py-10 text-background">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-sm md:flex-row">
-          <div className="font-display text-xl font-black">Storybook.Studio</div>
+          <div className="font-display text-xl font-black">Olivian<span className="text-primary">X</span></div>
           <div className="opacity-60 text-xs">
             Your stories are private by default. We never sell your data.
           </div>

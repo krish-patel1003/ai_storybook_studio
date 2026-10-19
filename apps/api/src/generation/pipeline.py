@@ -229,9 +229,10 @@ class StoryPipeline:
         page,
         visual_seed: int,
         character_refs: dict[str, bytes] | None = None,
+        reseed: int = 0,
     ) -> GeneratedImage:
         results = await self._image.run(
-            pages=[page], visual_seed=visual_seed, character_refs=character_refs
+            pages=[page], visual_seed=visual_seed, character_refs=character_refs, reseed=reseed
         )
         return results[0]
 

@@ -67,7 +67,7 @@ function VerifyEmailContent() {
             </div>
             <h1 className="font-display text-4xl font-black">Email verified!</h1>
             <p className="mt-3 text-muted-foreground text-lg">
-              Welcome to Storybook.Studio. You&apos;re all set — redirecting you now…
+              Welcome to OlivianX. You&apos;re all set — redirecting you now…
             </p>
             <div className="mt-6">
               <Link

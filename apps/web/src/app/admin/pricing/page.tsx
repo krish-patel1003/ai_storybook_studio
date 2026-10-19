@@ -222,7 +222,7 @@ export default function PricingAnalysis() {
               Back to Dashboard
             </Link>
             <span className="hidden sm:block font-display text-lg font-black">
-              Storybook<span className="text-primary">.</span>Studio <span className="text-muted-foreground font-normal">/ Pricing Analysis</span>
+              Olivian<span className="text-primary">X</span> <span className="text-muted-foreground font-normal">/ Pricing Analysis</span>
             </span>
           </div>
           <span className="text-xs text-muted-foreground">Updated July 2026</span>

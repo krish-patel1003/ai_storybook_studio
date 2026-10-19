@@ -252,6 +252,24 @@ async def synthesize(text: str, voice_id: str, age_range: str = "6-8") -> bytes:
     return _pcm_to_wav(pcm_bytes)
 
 
+async def list_account_voices() -> list[dict]:
+    """List the voices available on the ElevenLabs account (premade + library-added
+    + cloned). Used to discover preset voice_ids for narration."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(f"{_BASE}/voices", headers={"xi-api-key": _api_key()})
+    response.raise_for_status()
+    out = []
+    for v in response.json().get("voices", []):
+        out.append({
+            "voice_id": v.get("voice_id"),
+            "name": v.get("name"),
+            "category": v.get("category"),
+            "labels": v.get("labels", {}),
+            "preview_url": v.get("preview_url"),
+        })
+    return out
+
+
 async def delete_voice(voice_id: str) -> None:
     """
     Delete a cloned voice from ElevenLabs.

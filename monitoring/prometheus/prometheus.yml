@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    env: production
+    service: storybook-api
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # The Storybook API on Cloud Run. The bearer token in secrets/metrics_token
+  # must match the METRICS_TOKEN env var set on the Cloud Run service.
+  - job_name: storybook-api
+    scheme: https
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics_token
+    static_configs:
+      - targets: ["storybook-api-741258687011.us-central1.run.app"]
+        labels:
+          instance: storybook-api-prod
+
+  # Prometheus scrapes itself (stack health).
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

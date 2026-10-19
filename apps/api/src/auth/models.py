@@ -45,7 +45,12 @@ class User(Base):
     subscription_status: Mapped[str | None] = mapped_column(String(32), nullable=True)  # active | trialing | past_due | canceled
     subscription_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     page_pool_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # Prepaid page-pack top-ups — persist across billing cycles, consumed after the monthly pool.
+    topup_pages_remaining: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     page_pool_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # AI avatar generation — metered per billing period (free 1 / storyteller 2 / studio 3).
+    avatars_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    avatars_reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     bypass_limits: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 

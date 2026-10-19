@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Check, Copy, ExternalLink, RefreshCw, Rocket,
   BookOpen, Pencil, X, Plus, ArrowLeft,
+  Download, FileText, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { api, type KDPOut, type BookOut } from "@/lib/api";
@@ -335,6 +336,95 @@ function Skeleton() {
   );
 }
 
+// ── Export menu (download PDF / Cover JPG / Kindle EPUB) ──────────────────────
+
+const EXPORT_OPTIONS = [
+  { id: "pdf" as const, label: "Full Book PDF", icon: FileText, hint: "Print-ready, cover + all pages" },
+  { id: "epub" as const, label: "Kindle Edition (EPUB)", icon: Rocket, hint: "Reflowable e-book for KDP" },
+  { id: "cover-standard" as const, label: "Kindle Ebook Cover — Standard", icon: BookOpen, hint: "JPG with title & author baked in" },
+  { id: "cover-editor" as const, label: "Kindle Ebook Cover — Editor", icon: BookOpen, hint: "Clean PNG, no text — add your own in KDP" },
+];
+
+function ExportMenu({ book }: { book: BookOut }) {
+  const { token } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  async function download(kind: "pdf" | "epub" | "cover-standard" | "cover-editor") {
+    if (!token || busy) return;
+    setBusy(kind);
+    try {
+      const res =
+        kind === "pdf"            ? await api.books.exportPdf(token, book.id, "unkempt")
+        : kind === "cover-standard" ? await api.books.exportCoverImage(token, book.id, "jpeg", true)
+        : kind === "cover-editor"   ? await api.books.exportCoverImage(token, book.id, "png", false)
+        :                             await api.books.exportEpub(token, book.id, "unkempt");
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const ext = kind === "epub" ? "epub" : kind === "cover-standard" ? "jpg" : kind === "cover-editor" ? "png" : "pdf";
+      const suffix = kind === "cover-standard" ? "_cover" : kind === "cover-editor" ? "_cover_editor" : "";
+      const filename = `${(book.brief?.title ?? book.title).replace(/\s+/g, "_")}${suffix}.${ext}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch {
+      alert("Export failed. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-4 h-9 text-sm font-extrabold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform"
+      >
+        <Download className="h-4 w-4" strokeWidth={2.5} />
+        Export
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} strokeWidth={2.5} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-30 mt-2 w-72 rounded-2xl bg-card p-2 chunky-border chunky-shadow">
+          {EXPORT_OPTIONS.map((opt) => {
+            const Icon = opt.icon;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => download(opt.id)}
+                disabled={busy !== null}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-muted disabled:opacity-50 transition-colors"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-highlight chunky-border">
+                  {busy === opt.id ? <XsSpinner /> : <Icon className="h-4 w-4" strokeWidth={2.5} />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-extrabold leading-tight">{opt.label}</span>
+                  <span className="block text-xs font-medium text-muted-foreground leading-tight">{opt.hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Inner page (rendered once a book is chosen) ───────────────────────────────
 
 function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () => void }) {
@@ -367,7 +457,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
       const data = await api.books.kdpRegenerate(token, book.id);
       setKdp(data);
     } catch {
-      setError("Regeneration failed. Please try again.");
+      setError("Improve failed. Please try again.");
     } finally {
       setRegenerating(false);
     }
@@ -406,6 +496,7 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
         </div>
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <ExportMenu book={book} />
           <button
             onClick={onChangeBook}
             className="inline-flex items-center gap-1.5 rounded-full bg-background px-4 h-9 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform"
@@ -423,13 +514,13 @@ function KDPContent({ book, onChangeBook }: { book: BookOut; onChangeBook: () =>
           <button
             onClick={regenerate}
             disabled={regenerating || loading}
-            title="Regenerate with AI"
+            title="Improve with AI"
             className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 h-9 text-sm font-extrabold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-50"
           >
             {regenerating
               ? <XsSpinner />
               : <RefreshCw className="h-4 w-4" strokeWidth={2.5} />}
-            {regenerating ? "Regenerating…" : "Regenerate"}
+            {regenerating ? "Improving…" : "Improve"}
           </button>
         </div>
       </div>

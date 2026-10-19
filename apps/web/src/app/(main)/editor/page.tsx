@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useReducer } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   RefreshCw,
@@ -17,16 +18,19 @@ import {
   Mic,
   Expand,
   Play,
-  PenLine,
   Link2,
   Square as StopIcon,
 } from "lucide-react";
 import { XsSpinner, SmSpinner, MdSpinner, LgSpinner } from "@/components/character-spinner";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
+import { useSubscription } from "@/lib/use-subscription";
 import { StepBar } from "@/components/step-bar";
+import { LeaveGuard } from "@/components/leave-guard";
 import { api, pageImageUrl, type PageOut, type BookOut, type VoiceProfile } from "@/lib/api";
 import { useRelativeTime } from "@/lib/use-relative-time";
+import { estimateLabel, estimateIllustrationSeconds } from "@/lib/fun-estimate";
+import { EstimatePopup } from "@/components/estimate-popup";
 import { useCyclingMessage } from "@/lib/use-cycling-message";
 import { useAuthImage, bustAuthImageCache } from "@/lib/use-auth-image";
 import { motion, AnimatePresence } from "motion/react";
@@ -330,7 +334,7 @@ function PageCard({
   onGenerate: () => void; onNarrate: () => void;
   narrateStatus: "idle" | "narrating" | "done" | "error";
 }) {
-  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  const blobUrl = useAuthImage(pageImageUrl(bookId, page.id, page.image_version), token, page.has_image);
   const { previewing, loading: previewLoading, togglePreview } = useAudioPreview(bookId, page.id, token);
   const [showPreview, setShowPreview] = useState(false);
   const illMsg = useCyclingMessage(ILL_MSGS, 2800);
@@ -362,7 +366,7 @@ function PageCard({
             <>
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                 {page.has_image && !blobUrl ? <MdSpinner className="opacity-60" /> : !blobUrl ? (
-                  <><ImageIcon className="h-10 w-10 opacity-30" strokeWidth={1.5} /><span className="text-xs font-bold opacity-50">{status === "error" ? "Failed" : "Not illustrated"}</span></>
+                  <><ImageIcon className="h-10 w-10 opacity-30" strokeWidth={1.5} /><span className="text-xs font-bold opacity-50">{status === "error" ? "Failed" : "No picture yet"}</span></>
                 ) : null}
               </div>
               {blobUrl && <img src={blobUrl} alt={`Page ${page.order}`} className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500" />}
@@ -392,7 +396,7 @@ function PageCard({
 
         <div className="flex gap-2 px-4 pb-4">
           <button onClick={onGenerate} disabled={status === "generating"} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-background py-2 text-xs font-extrabold chunky-border hover:bg-secondary transition-colors disabled:opacity-40">
-            {status === "generating" ? <><XsSpinner /> Generating…</> : page.has_image ? <><RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Reillustrate</> : <><Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} /> Illustrate</>}
+            {status === "generating" ? <><XsSpinner /> Generating…</> : page.has_image ? <><RefreshCw className="h-3.5 w-3.5" strokeWidth={2.5} /> Remake picture</> : <><Sparkles className="h-3.5 w-3.5" strokeWidth={2.5} /> Make picture</>}
           </button>
           {page.text && (
             <div className="flex gap-1.5">
@@ -491,20 +495,63 @@ function ExportModal({ book, token, onClose }: { book: BookOut; token: string | 
 
 import { useRequireAuth } from "@/lib/use-require-auth";
 
+// Shown the moment every page finishes illustrating — offers the three voice paths.
+function VoicePromptModal({ onSkip, onDefault, onOwn }: { onSkip: () => void; onDefault: () => void; onOwn: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={onSkip}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-3xl bg-card p-7 chunky-border chunky-shadow text-center">
+        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow-sm">
+          <Volume2 className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
+        </div>
+        <h2 className="font-display text-2xl font-black">Congratulations! 🎉</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Your storybook is ready. Do you want to add a voice to it?</p>
+        <div className="mt-6 flex flex-col gap-2.5">
+          <button onClick={onDefault} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+            <Mic className="h-4 w-4" strokeWidth={2.5} /> Give default voice
+          </button>
+          <button onClick={onOwn} className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+            <Sparkles className="h-4 w-4" strokeWidth={2.5} /> Add your own voice
+          </button>
+          <button onClick={onSkip} className="inline-flex items-center justify-center gap-2 rounded-full bg-card px-5 py-2.5 text-sm font-extrabold text-muted-foreground chunky-border hover:-translate-y-0.5 transition-transform">
+            Skip it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EditorPage() {
   useRequireAuth();
   const { token } = useAuth();
   const { book, mergePages, setBook } = useBook();
+  const { sub: subInfo } = useSubscription();
+  const narrationAllowed = subInfo === null ? true : subInfo.narration;
   const lastSaved = useRelativeTime(book?.updated_at);
 
+  const router = useRouter();
   const [showExport, setShowExport] = useState(false);
+  const [showVoicePrompt, setShowVoicePrompt] = useState(false);
+  const [showEstimate, setShowEstimate] = useState(false);
   const [pageElapsed, setPageElapsed] = useState<Record<string, number>>({});
-  const timer = useTimer();
 
   const job = useIllJob(book?.id);
   // Treat an aborted job as no-longer-running so the UI returns to idle the
   // instant Stop is clicked, even while the last in-flight requests settle.
   const isRunning = !!job && !job.aborted && job.done < job.total;
+
+  // Live elapsed derived from the job's start time (module-level, survives leaving
+  // and returning), so the timer is always accurate — not reset to 0 on remount.
+  const [, tickElapsed] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => tickElapsed(), 1000);
+    return () => clearInterval(id);
+  }, [isRunning]);
+  const jobElapsedSec = job ? Math.max(0, Math.floor((Date.now() - job.started) / 1000)) : 0;
+  const jobElapsedFmt = jobElapsedSec >= 60
+    ? `${Math.floor(jobElapsedSec / 60)}m ${(jobElapsedSec % 60).toString().padStart(2, "0")}s`
+    : `${jobElapsedSec}s`;
 
   const pageStatuses: Record<string, PageIllStatus> = {};
   if (job) { for (const [id, s] of Object.entries(job.pageStatuses)) { pageStatuses[id] = s; } }
@@ -517,15 +564,34 @@ export default function EditorPage() {
   const narrateCancelledRef = useRef(false);
   const [pageNarrateStatuses, setPageNarrateStatuses] = useState<Record<string, "idle" | "narrating" | "done" | "error">>({});
   type VoiceChoice = { type: "preset"; id: string } | { type: "clone"; profileId: string; name: string };
-  const [selectedVoice, setSelectedVoice] = useState<VoiceChoice>({ type: "preset", id: "Kore" });
-  const [availableVoices, setAvailableVoices] = useState<Array<{ id: string; description: string; is_default: boolean }>>([]);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceChoice>({ type: "preset", id: "" });
+  const [availableVoices, setAvailableVoices] = useState<Array<{ id: string; name: string; description: string; is_default: boolean }>>([]);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
 
   useEffect(() => {
     if (!token) return;
-    api.books.listVoices(token).then((res) => { if (res.voices?.length) setAvailableVoices(res.voices); }).catch(() => {});
+    api.books.listVoices(token).then((res) => {
+      if (res.voices?.length) {
+        setAvailableVoices(res.voices);
+        const def = res.voices.find((v) => v.is_default) ?? res.voices[0];
+        setSelectedVoice((cur) => (cur.type === "preset" && res.voices.some((v) => v.id === cur.id) ? cur : { type: "preset", id: def.id }));
+      }
+    }).catch(() => {});
     api.voices.list(token).then(setVoiceProfiles).catch(() => {});
   }, [token]);
+
+  // Pictures start automatically on entering the stage — no button needed. Runs once
+  // per visit; if every page already has a picture, or a run is active, it stays idle.
+  const [autoStarted, setAutoStarted] = useState(false);
+  useEffect(() => {
+    if (autoStarted || !token || !book) return;
+    const total = book.pages.length;
+    const illustrated = book.pages.filter((p) => p.has_image).length;
+    if (total === 0 || illustrated === total || isRunning) return;
+    setAutoStarted(true);
+    handleIllustrate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStarted, token, book?.id, isRunning]);
 
   // Per-page timers
   const pageTimerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -551,20 +617,22 @@ export default function EditorPage() {
 
   async function handleIllustrate() {
     if (!token || !book || isRunning) return;
-    timer.start();
+    setShowEstimate(true);
+    // Mark that pictures have started so "continue" routes here (not to review).
+    api.books.markIllustrating(token, book.id).catch(() => {});
     const { failedCount, aborted } = await startIllJob(
       token,
       book,
       (page) => mergePages([page]),
       reconcileBook,
     );
-    timer.stop();
     if (aborted) {
       toast("Stopped illustrating.");
     } else if (failedCount > 0) {
-      toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to illustrate — click Illustrate all to retry`);
+      toast.error(`${failedCount} page${failedCount > 1 ? "s" : ""} failed — click Make the pictures to retry`);
     } else {
-      toast.success("All illustrations complete!");
+      toast.success("All pictures complete!");
+      setShowVoicePrompt(true);
     }
   }
 
@@ -630,10 +698,30 @@ export default function EditorPage() {
   const illustratedCount = allPages.filter((p) => p.has_image).length;
   const totalCount = allPages.length;
   const allDone = illustratedCount === totalCount && totalCount > 0;
+  // While a run is active the counter/bar reflect the CURRENT job (0/N and up),
+  // not the stale ground-truth from a previous completed run.
+  const progressDone = isRunning ? (job?.done ?? 0) : illustratedCount;
+  const progressTotal = isRunning ? (job?.total ?? totalCount) : totalCount;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-10">
+      <LeaveGuard
+        active={isRunning || !!job?.sheetsGenerating}
+        title="Leave while it finishes?"
+        message="Your pictures keep being made — you can safely leave."
+        subMessage="Each page is saved as it finishes, and you'll find this book under In Progress in My Books to finish the rest where you left off."
+      />
       {showExport && <ExportModal book={book as BookOut} token={token} onClose={() => setShowExport(false)} />}
+      {showEstimate && (
+        <EstimatePopup title="Drawing your pictures! 🎨✨" estimateSeconds={estimateIllustrationSeconds(totalCount)} onClose={() => setShowEstimate(false)} />
+      )}
+      {showVoicePrompt && (
+        <VoicePromptModal
+          onSkip={() => setShowVoicePrompt(false)}
+          onDefault={() => router.push("/narrate?guide=default")}
+          onOwn={() => router.push("/voices")}
+        />
+      )}
 
       {/* Header */}
       <div className="mb-6">
@@ -645,45 +733,63 @@ export default function EditorPage() {
           <Link href="/create" className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
             <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Back
           </Link>
-          <div className="flex items-center gap-2">
-            {illustratedCount > 0 && (
-              <Link href="/reader?from=editor" className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-                <Eye className="h-4 w-4" strokeWidth={2.5} /> Preview
-              </Link>
-            )}
-            <Link href="/studio" className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-extrabold text-primary chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <PenLine className="h-4 w-4" strokeWidth={2.5} /> Studio mode
-            </Link>
-            <button onClick={() => setShowExport(true)} className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-extrabold text-background chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <Download className="h-4 w-4" strokeWidth={2.5} /> Export
-            </button>
-          </div>
+          {/* Read / Parent mode / Export actions removed here — the finished-book card below carries Read my Storybook */}
         </div>
 
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-4xl font-black md:text-5xl">Pictures</h1>
             <p className="mt-1 text-muted-foreground">
-              {illustratedCount} of {totalCount} pages illustrated
+              {progressDone} of {progressTotal} pages illustrated
               {book.brief && <span className="ml-2 font-semibold text-foreground">· {book.brief.title}</span>}
             </p>
-            {totalCount > 0 && (
+            {progressTotal > 0 && (
               <div className="mt-3 flex items-center gap-3">
                 <div className="h-2 w-48 overflow-hidden rounded-full bg-muted chunky-border">
-                  <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${(illustratedCount / totalCount) * 100}%` }} />
+                  <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${(progressDone / progressTotal) * 100}%` }} />
                 </div>
-                {lastSaved && <span className="text-xs font-bold text-muted-foreground">Saved {lastSaved}</span>}
+                {!isRunning && lastSaved && <span className="text-xs font-bold text-muted-foreground">Saved {lastSaved}</span>}
               </div>
             )}
           </div>
-          {(isRunning || timer.elapsed > 0) && (
+          {isRunning && (
             <div className="flex items-center gap-2 rounded-2xl bg-card px-4 py-2.5 chunky-border shrink-0">
-              <Clock className={`h-4 w-4 ${isRunning ? "text-primary animate-pulse" : "text-muted-foreground"}`} />
-              <span className="font-display text-xl font-black tabular-nums">{timer.formatted}</span>
+              <Clock className="h-4 w-4 text-primary animate-pulse" />
+              <span className="font-display text-xl font-black tabular-nums">{jobElapsedFmt}</span>
             </div>
           )}
         </div>
       </div>
+
+      {/* Finished-book celebration — top of stage; only when every page is done, hidden while a remake runs */}
+      {allDone && !isRunning && (
+        <div className="mb-6 flex flex-col items-center gap-4 rounded-3xl bg-card p-8 chunky-border text-center">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow-sm">
+            <BookOpen className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
+          </div>
+          <div>
+            <h2 className="font-display text-3xl font-black">Congratulations! 🎉</h2>
+            <p className="mt-1 text-muted-foreground text-sm">Your storybook is ready.</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link href="/reader?from=editor" className="inline-flex animate-bounce items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-base font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
+              <Eye className="h-5 w-5" strokeWidth={2.5} /> Read my Storybook
+            </Link>
+            {narrationAllowed ? (
+              <Link href="/narrate" className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3.5 text-base font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+                <Mic className="h-5 w-5" strokeWidth={2.5} /> Add Voice →
+              </Link>
+            ) : (
+              <Link href="/pricing" title="Narration is a Studio feature" className="inline-flex items-center gap-2 rounded-full bg-muted px-6 py-3.5 text-base font-extrabold text-muted-foreground chunky-border hover:-translate-y-0.5 transition-transform">
+                🔒 Add Voice <span className="text-xs font-black">(Studio)</span>
+              </Link>
+            )}
+            <button onClick={handleIllustrate} className="inline-flex items-center gap-2 rounded-full bg-card px-5 py-3 text-sm font-extrabold chunky-border hover:-translate-y-0.5 transition-transform">
+              <Sparkles className="h-4 w-4" strokeWidth={2.5} /> Remake pictures
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Original prompt */}
       {book.raw_prompt && (
@@ -697,44 +803,42 @@ export default function EditorPage() {
         </details>
       )}
 
-      {/* Illustrate CTA */}
-      <div data-tour="editor-illustrate" className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card p-4 chunky-border">
-        <div className="flex-1 min-w-0">
-          {job?.sheetsGenerating ? (
-            <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Generating character sheets for consistency…</p></div>
-          ) : isRunning ? (
-            <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Creating {job?.done ?? 0} of {job?.total ?? totalCount} pages… <span className="ml-1.5 font-semibold text-muted-foreground text-xs">You can switch tabs — it keeps going.</span></p></div>
-          ) : allDone ? (
-            <p className="text-sm font-extrabold text-primary">✓ All pages illustrated</p>
-          ) : (
-            <div>
-              <p className="text-sm font-extrabold">Illustrate your book</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image) ? "Character sheets will be auto-generated for visual consistency." : "All pages illustrated in parallel — you can switch tabs freely."}
-              </p>
+      {/* Picture generation status — pictures start automatically; this bar shows progress + Stop
+          while generating, and a Continue button only if a run was interrupted. */}
+      {(isRunning || job?.sheetsGenerating) ? (
+        <div data-tour="editor-illustrate" className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card p-4 chunky-border">
+          <div className="flex-1 min-w-0">
+            {job?.sheetsGenerating ? (
+              <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Generating character sheets for consistency…</p></div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-2"><SmSpinner /><p className="text-sm font-extrabold">Drawing {job?.done ?? 0} of {job?.total ?? totalCount} pictures… <span className="ml-1.5 font-semibold text-muted-foreground text-xs">You can switch tabs — it keeps going.</span></p></div>
+                <p className="text-xs font-bold text-muted-foreground mt-1 ml-7">⏳ This should take {estimateLabel(estimateIllustrationSeconds(job?.total ?? totalCount))}</p>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Live elapsed timer — counts forward until generation ends */}
+            <div className="flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 chunky-border">
+              <Clock className="h-4 w-4 text-primary animate-pulse" strokeWidth={2.5} />
+              <span className="font-display text-lg font-black tabular-nums">{jobElapsedFmt}</span>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {isRunning && (
             <button onClick={() => stopIllJob(book.id)} className="inline-flex items-center gap-2 rounded-full bg-destructive px-5 py-2.5 text-sm font-extrabold text-destructive-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop
+              <StopIcon className="h-4 w-4" strokeWidth={3} /> Stop{isRunning ? ` (${job?.done ?? illustratedCount}/${job?.total ?? totalCount})` : ""}
             </button>
-          )}
-          <button onClick={handleIllustrate} disabled={isRunning} className="inline-flex items-center justify-center gap-2 min-w-[13.5rem] rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0">
-            {isRunning ? <><XsSpinner /> Making pictures…</> : allDone ? <><Sparkles className="h-4 w-4" strokeWidth={3} /> Remake all pictures</> : <><Sparkles className="h-4 w-4" strokeWidth={3} /> Make the pictures</>}
+          </div>
+        </div>
+      ) : autoStarted && !allDone && totalCount > 0 ? (
+        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card p-4 chunky-border">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-extrabold">Picture generation paused</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{illustratedCount} of {totalCount} pages have pictures — continue to finish the rest.</p>
+          </div>
+          <button onClick={handleIllustrate} className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
+            <Sparkles className="h-4 w-4" strokeWidth={3} /> Continue pictures
           </button>
         </div>
-      </div>
-
-      {/* Character sheets note */}
-      {book.characters.length > 0 && book.characters.every((c) => !c.has_reference_image) && !isRunning && illustratedCount === 0 && (
-        <div className="mb-4 flex items-center gap-3 rounded-2xl bg-highlight/60 px-4 py-3 chunky-border text-sm">
-          <Sparkles className="h-4 w-4 shrink-0" strokeWidth={2.5} />
-          <span className="font-bold">Character sheets will be auto-generated</span>
-          <span className="text-muted-foreground">when you hit Illustrate — for visual consistency.</span>
-        </div>
-      )}
+      ) : null}
 
       {/* Page grid */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -753,26 +857,6 @@ export default function EditorPage() {
         ))}
       </div>
 
-      {/* Next-step CTA — shown once any page is illustrated */}
-      {illustratedCount > 0 && (
-        <div className="mt-10 flex flex-col items-center gap-4 rounded-3xl bg-card p-8 chunky-border text-center">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary chunky-border chunky-shadow-sm">
-            <Mic className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h2 className="font-display text-2xl font-black">Pictures done — now add your voice!</h2>
-            <p className="mt-1 text-muted-foreground text-sm">Narrate your storybook so it can be read aloud. You can fine-tune pages in Studio too.</p>
-          </div>
-          <div className="flex gap-3">
-            <Link href="/narrate" className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow hover:-translate-y-0.5 transition-transform">
-              <Mic className="h-4 w-4" strokeWidth={2.5} /> Add My Voice →
-            </Link>
-            <Link href="/studio" className="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-extrabold text-accent-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform">
-              <PenLine className="h-4 w-4" strokeWidth={2.5} /> Open Studio
-            </Link>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

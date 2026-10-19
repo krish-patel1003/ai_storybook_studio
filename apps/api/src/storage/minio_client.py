@@ -124,7 +124,11 @@ def voice_sample_key(user_id: str, profile_id: str) -> str:
 
 
 def upload_image(book_id: str, page_id: str, data: bytes, mime_type: str = "image/png") -> str:
-    key = object_key(book_id, page_id)
+    # Unique key per (re)generation so the stored image_key — and therefore the
+    # client-side image_version cache-buster — changes every time the picture is
+    # remade. The caller deletes the previous key first, so nothing is orphaned.
+    import uuid
+    key = f"{book_id}/{page_id}-{uuid.uuid4().hex[:10]}.png"
     return upload(key, data, mime_type)
 
 

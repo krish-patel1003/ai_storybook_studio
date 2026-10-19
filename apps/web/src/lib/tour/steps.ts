@@ -3,11 +3,19 @@ import type { DriveStep } from "driver.js";
 /**
  * Per-route tour steps. Each entry targets a real element via a
  * `data-tour="…"` attribute so the tour is decoupled from styling/markup.
- * A step with no `element` renders a centered popover (good for intros).
+ * A step with no `element` renders a centered popover (good for intros and for
+ * pages that don't need a specific element highlighted).
  *
- * The tour is "chained": the user walks one page, performs the action the
- * final step describes, and the next page auto-runs its own steps while a tour
- * session is active.
+ * Two ways these run (see OnboardingProvider):
+ *  1. Chained onboarding tour — the welcome modal's "Take the tour" walks the
+ *     core creative journey: /create → /editor → /narrate → /studio → /reader.
+ *  2. Per-page contextual tours — the FIRST time a signed-in user lands on any
+ *     route below, its steps auto-run once (tracked per device), so every part
+ *     of the app introduces itself. Re-openable from the "?" Help button.
+ *
+ * Premium note: narration, Parent mode (advanced design), and Voice Studio are
+ * on paid plans. Their steps stay visible to everyone but say so plainly, so a
+ * free user knows what's included before hitting the paywall.
  */
 export const TOUR_STEPS: Record<string, DriveStep[]> = {
   "/create": [
@@ -52,7 +60,7 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "4. Art style",
         description:
-          "Pick how your illustrations look — watercolor, crayon, flat, or papercut. Scroll for more options.",
+          "Pick how your pictures look — watercolor, crayon, flat, or papercut. Scroll for more options.",
         side: "left",
       },
     },
@@ -61,7 +69,7 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "5. Page count",
         description:
-          "Choose how long the book is — pick a preset or enter a custom number. Shorter books are quicker to generate; longer ones tell a fuller story.",
+          "Choose how long the book is — pick a preset or enter a custom number. Each written page uses one page from your monthly plan; the cover and back cover are free.",
         side: "left",
       },
     },
@@ -70,7 +78,7 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "6. Generate your story",
         description:
-          "When you're happy, click here. We'll expand your idea into a title, characters, and a page-by-page outline you can review before illustrating.",
+          "When you're happy, click here. We'll imagine your idea, plan the book, and write the pages — you review and approve each stage before moving on.",
         side: "top",
       },
     },
@@ -79,7 +87,8 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
     {
       popover: {
         title: "Draw your pictures 🎨",
-        description: "This is where your storybook gets its illustrations.",
+        description:
+          "This is where your storybook gets its pictures. Your characters are kept looking the same on every page.",
       },
     },
     {
@@ -87,7 +96,7 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "Make every picture",
         description:
-          "One click illustrates the whole book — cover included — keeping your characters consistent. You can remake any single page too.",
+          "One click makes pictures for the whole book — cover and back cover included. Not happy with a page? Remake just that one; your plan allows a set number of remakes per page.",
       },
     },
   ],
@@ -95,7 +104,8 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
     {
       popover: {
         title: "Add your voice 🎤",
-        description: "The last step — narrate your storybook so it can be read aloud.",
+        description:
+          "Narrate your storybook so it can be read aloud with word-by-word highlighting. ✨ Narration is included on the Studio plan.",
       },
     },
     {
@@ -103,7 +113,7 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "Narrate the book",
         description:
-          "Pick a voice and narrate the whole book, so it can be read aloud in the reader with word-by-word highlighting.",
+          "Pick a built-in voice — or your own cloned voice from Voice Studio — and narrate the whole book in one click.",
       },
     },
   ],
@@ -113,7 +123,7 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "Design your pages 🖌️",
         description:
-          "This is a live, print-accurate preview of the current page. Everything you change on the sides updates here instantly. Use the arrows to move between pages.",
+          "This is Parent mode — a live, print-accurate preview of the current page. Everything you change on the sides updates here instantly. ✨ Parent mode is included on the Storyteller and Studio plans.",
         side: "left",
       },
     },
@@ -159,7 +169,43 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "Read your book 📖",
         description:
-          "Flip through your finished storybook. Turn on narration to have it read aloud. Share it or export a PDF when you're happy.",
+          "Flip through your finished storybook. Turn on narration to have it read aloud. Share a reading link or export a PDF whenever you're happy.",
+      },
+    },
+  ],
+  "/library": [
+    {
+      popover: {
+        title: "My Library 📚",
+        description:
+          "Every book you make lives here. Open one to keep working on it, read it, or publish it.",
+      },
+    },
+    {
+      element: '[data-tour="library-tabs"]',
+      popover: {
+        title: "Find books fast",
+        description:
+          "Switch between all your books, ones set up to Read Myself or Read to Me, and In Progress — books you started but haven't finished illustrating yet.",
+        side: "bottom",
+      },
+    },
+    {
+      element: '[data-tour="library-filter"]',
+      popover: {
+        title: "Filter by child",
+        description:
+          "Made books for more than one child? Filter the shelf to just one child's stories.",
+        side: "left",
+      },
+    },
+  ],
+  "/profiles": [
+    {
+      popover: {
+        title: "Child profiles 👶",
+        description:
+          "Set up a profile for each child — a name, an avatar, an age and interests. When you create a book you can pick a profile so the story is tailored to them, and the author name is filled in automatically.",
       },
     },
   ],
@@ -168,7 +214,7 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "Voice Studio 🎤",
         description:
-          "Record or clone your own voice here, then choose it when you narrate a book — so the story can be read aloud in your voice.",
+          "Record or clone your own voice here, then choose it when you narrate a book — so the story can be read aloud in your voice. ✨ Voice Studio is part of the Studio plan.",
       },
     },
   ],
@@ -177,7 +223,61 @@ export const TOUR_STEPS: Record<string, DriveStep[]> = {
       popover: {
         title: "Publish 📖",
         description:
-          "When your book is ready, export a print-ready PDF or prepare it for Amazon KDP — title, description, and cover all set up for you.",
+          "When your book is ready, prepare it for Amazon KDP — we draft the title, description, keywords and categories for you, and set up both cover formats KDP needs.",
+      },
+    },
+  ],
+  "/export": [
+    {
+      popover: {
+        title: "Export & download 📄",
+        description:
+          "Download a print-ready Full Book PDF, an EPUB, or a Kindle cover — Standard (with your title and author) or Editor (a clean, textless image for the KDP cover tool).",
+      },
+    },
+  ],
+  "/canvas": [
+    {
+      popover: {
+        title: "Fine-tune the text box ✍️",
+        description:
+          "Drag to place the text exactly where you want it on a page and resize the box. Great for getting the words to sit just right over the picture.",
+      },
+    },
+  ],
+  "/pricing": [
+    {
+      popover: {
+        title: "Plans & pages 💛",
+        description:
+          "You have a pool of pages each month. Writing a page uses one; covers are free. Here's how the plans compare.",
+      },
+    },
+    {
+      element: '[data-tour="pricing-plans"]',
+      popover: {
+        title: "Choose a plan",
+        description:
+          "Free lets you try it out. Storyteller adds Parent mode and more pages. Studio adds AI narration, your own cloned voices, and avatars.",
+        side: "top",
+      },
+    },
+    {
+      element: '[data-tour="pricing-topups"]',
+      popover: {
+        title: "Need more pages?",
+        description:
+          "Buy a prepaid page pack any time. Top-up pages never expire and are used after your monthly pool runs out — no need to change plans.",
+        side: "top",
+      },
+    },
+  ],
+  "/account": [
+    {
+      popover: {
+        title: "Your account 👤",
+        description:
+          "See your plan, how many pages you've used this period (including any top-ups), and manage or change your subscription here.",
       },
     },
   ],

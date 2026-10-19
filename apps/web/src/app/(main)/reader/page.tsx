@@ -3,21 +3,33 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import React, { forwardRef, useRef, useState, useEffect, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type, BookOpen, Download } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { ChevronLeft, ChevronRight, ArrowLeft, ImageIcon, Volume2, VolumeX, Pause, Play, Type, BookOpen, Download, Languages } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useBook } from "@/lib/book-store";
 import { api, pageImageUrl } from "@/lib/api";
-import type { PageOut } from "@/lib/api";
+import type { PageOut, BookOut } from "@/lib/api";
 import { toast } from "sonner";
 import { READER_FONTS, type FontId } from "@/lib/fonts";
 import { useAuthImage } from "@/lib/use-auth-image";
+import { LgSpinner, SmSpinner } from "@/components/character-spinner";
 import type { HTMLFlipBookRef, HTMLFlipBookProps } from "react-pageflip";
 
 const HTMLFlipBook = dynamic<HTMLFlipBookProps>(
   () => import("react-pageflip"),
   { ssr: false }
 ) as React.ForwardRefExoticComponent<HTMLFlipBookProps & React.RefAttributes<HTMLFlipBookRef>>;
+
+// ── Reader languages (direct translation) ─────────────────────────────────────
+// "en" is the original; the rest are translated on demand via the API and cached.
+const READER_LANGUAGES = [
+  { code: "en", name: "English", native: "English", rtl: false },
+  { code: "es", name: "Spanish", native: "Español", rtl: false },
+  { code: "fr", name: "French",  native: "Français", rtl: false },
+  { code: "de", name: "German",  native: "Deutsch", rtl: false },
+  { code: "hi", name: "Hindi",   native: "हिन्दी", rtl: false },
+  { code: "ar", name: "Arabic",  native: "العربية", rtl: true },
+] as const;
 
 // ── Font size options ─────────────────────────────────────────────────────────
 
@@ -78,7 +90,7 @@ const CoverPage = forwardRef<
   HTMLDivElement,
   { page: PageOut; bookId: string; token: string | null; author: string; fontStack: string }
 >(({ page, bookId, token, author, fontStack }, ref) => {
-  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id, page.image_version), token, page.has_image);
 
   return (
     <div ref={ref} className="relative overflow-hidden select-none bg-foreground" style={{ height: "100%" }}>
@@ -144,7 +156,8 @@ const WordHighlight = forwardRef<HTMLParagraphElement, {
   narrationTime: NarrationTime;
   style: React.CSSProperties;
   className?: string;
-}>(({ text, narrationTime, style, className }, ref) => {
+  rtl?: boolean;
+}>(({ text, narrationTime, style, className, rtl = false }, ref) => {
   const words = text.split(/(\s+)/);
   const wordCount = words.filter(w => !/^\s+$/.test(w)).length;
   const currentWordIndex = narrationTime
@@ -153,7 +166,7 @@ const WordHighlight = forwardRef<HTMLParagraphElement, {
 
   let wIdx = 0;
   return (
-    <p ref={ref} style={style} className={className}>
+    <p ref={ref} dir={rtl ? "rtl" : undefined} style={style} className={className}>
       {words.map((chunk, i) => {
         if (/^\s+$/.test(chunk)) return chunk;
         const idx = wIdx++;
@@ -175,9 +188,9 @@ WordHighlight.displayName = "WordHighlight";
 
 const StoryPage = forwardRef<
   HTMLDivElement,
-  { page: PageOut; bookId: string; token: string | null; fontStack: string; fontSize: number; fontWeight: number; narrationTime?: NarrationTime }
->(({ page, bookId, token, fontStack, fontSize, fontWeight, narrationTime = null }, ref) => {
-  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  { page: PageOut; bookId: string; token: string | null; fontStack: string; fontSize: number; fontWeight: number; narrationTime?: NarrationTime; onReflow?: (page: PageOut) => void; rtl?: boolean }
+>(({ page, bookId, token, fontStack, fontSize, fontWeight, narrationTime = null, onReflow, rtl = false }, ref) => {
+  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id, page.image_version), token, page.has_image);
   const textRef = useRef<HTMLParagraphElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textZoneRef = useRef<HTMLDivElement>(null);
@@ -187,6 +200,10 @@ const StoryPage = forwardRef<
   // When the text is longer than the band it overflows; keep it top-anchored
   // then (so the start isn't clipped) — otherwise use the chosen vertical align.
   const [textOverflows, setTextOverflows] = useState(false);
+  // At the default size we don't shrink — instead we rewrite the page shorter so
+  // it fits (see the stacked effect below). These guard against duplicate/looping calls.
+  const reflowingRef = useRef(false);
+  const reflowCountRef = useRef(0);
 
   // Per-page style overrides saved from studio take precedence over reader-level controls.
   // "unkempt" is treated as unset — it was the old hardcoded default, not a deliberate choice.
@@ -228,18 +245,52 @@ const StoryPage = forwardRef<
     return () => ro.disconnect();
   }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize]);
 
-  // Stacked mode: shrink the font (down to a floor) so the text always fits the
-  // fixed band WITH its padding intact — i.e. the bottom margin is never broken.
+  // Default size (14px, unset): keep the font fixed and, if the text would overflow
+  // the band, automatically rewrite the page shorter so it fits — no shrinking. The
+  // rewrite is persisted, so it happens once and is invisible to the reader.
+  // Custom size: fall back to shrinking (down to a floor) so the margin never breaks.
+  const isDefaultSize = rawFontSize == null || rawFontSize === 14;
   useEffect(() => {
-    if (page.text_mode === 1) return; // stacked only (null or 2)
+    if (page.text_mode === 1) return; // stacked only (null or 2/3)
     const p = textRef.current;
     const zone = textZoneRef.current;
     if (!p || !zone) return;
     const basePx = rawFontSize ?? (effectiveFontSize * 16);
+
+    async function reflowToFit(avail: number) {
+      if (!token || !onReflow || reflowingRef.current || reflowCountRef.current >= 4) return;
+      const el = textRef.current;
+      if (!el) return;
+      const words = (page.text ?? "").trim().split(/\s+/).filter(Boolean).length;
+      if (words <= 8) return; // already as short as it usefully gets
+      // Estimate a word budget that fits, scaling by the height ratio with a margin.
+      const ratio = avail / Math.max(1, el.scrollHeight);
+      let target = Math.floor(words * ratio * 0.9);
+      if (target >= words) target = words - 3;
+      target = Math.max(6, target);
+      reflowingRef.current = true;
+      reflowCountRef.current += 1;
+      try {
+        const updated = await api.books.reflowPage(token, bookId, page.id, target);
+        const fresh = updated.pages.find((pp) => pp.id === page.id);
+        if (fresh) onReflow(fresh); // updates the store → this effect re-runs on new text
+      } catch { /* non-fatal: leave the page as-is */ }
+      finally { reflowingRef.current = false; }
+    }
+
     const fit = () => {
       const avail = zone.clientHeight - 32; // minus the 16px top/bottom padding
       if (avail <= 0 || !page.text) return;
       p.style.fontSize = `${basePx}px`;
+
+      if (isDefaultSize) {
+        // Never shrink — rewrite instead if it doesn't fit at the default size.
+        if (p.scrollHeight > avail) reflowToFit(avail);
+        setTextOverflows(false);
+        return;
+      }
+
+      // Custom size: shrink to a floor so the margin is preserved.
       let px = basePx;
       const minPx = 9;
       while (p.scrollHeight > avail && px > minPx) {
@@ -253,7 +304,7 @@ const StoryPage = forwardRef<
     const ro = new ResizeObserver(fit);
     ro.observe(zone);
     return () => ro.disconnect();
-  }, [page.text, page.text_mode, effectiveFontStack, effectiveFontSize, rawFontSize]);
+  }, [page.text, page.text_mode, page.id, bookId, token, onReflow, effectiveFontStack, effectiveFontSize, rawFontSize, isDefaultSize]);
 
   const textZone     = "38%";
   const gradientZone = "47%";
@@ -279,25 +330,29 @@ const StoryPage = forwardRef<
       <div ref={ref} className="relative overflow-hidden select-none"
         style={{ height: "100%", background: effectiveBgColor }}>
 
-        {/* Image — top 72% of the page */}
-        <div style={{ position: "absolute", top: imgTop, bottom: imgBottom, left: 0, right: 0, overflow: "hidden" }}>
+        {/* Image zone. object-cover fills the area edge-to-edge with no margins;
+            center positioning crops evenly from top and bottom (least detail lost). */}
+        <div style={{ position: "absolute", top: imgTop, bottom: imgBottom, left: 0, right: 0, overflow: "hidden", background: effectiveBgColor }}>
           {imgUrl ? (
             <img src={imgUrl} alt={`Page ${page.order}`}
               className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
-              style={{ objectPosition: "center top" }} draggable={false} />
+              style={{ objectPosition: "center" }} draggable={false} />
           ) : (
             <div className="absolute inset-0 bg-muted flex items-center justify-center">
               <ImageIcon className="h-12 w-12 text-muted-foreground/20" strokeWidth={1} />
             </div>
           )}
-          {/* Gradient blending into the text area — a tight, well-blended seam */}
-          <div style={{
-            position: "absolute", left: 0, right: 0, height: "20%",
-            [isTextBottom ? "bottom" : "top"]: 0,
-            background: isTextBottom
-              ? `linear-gradient(to bottom, transparent, ${effectiveBgColor})`
-              : `linear-gradient(to top, transparent, ${effectiveBgColor})`,
-          }} />
+          {/* Gradient blending into the text area — only for explicit "Blended"
+              (mode 2). Clear separation (mode 3) and the default (null) omit it. */}
+          {page.text_mode === 2 && (
+            <div style={{
+              position: "absolute", left: 0, right: 0, height: "20%",
+              [isTextBottom ? "bottom" : "top"]: 0,
+              background: isTextBottom
+                ? `linear-gradient(to bottom, transparent, ${effectiveBgColor})`
+                : `linear-gradient(to top, transparent, ${effectiveBgColor})`,
+            }} />
+          )}
         </div>
 
         {/* Text — dynamic-height band, anchored to the bottom of the page */}
@@ -316,6 +371,7 @@ const StoryPage = forwardRef<
               ref={textRef}
               text={page.text}
               narrationTime={narrationTime}
+              rtl={rtl}
               style={{
                 margin: 0, width: "100%", maxHeight: "100%", overflow: "hidden",
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
@@ -387,6 +443,7 @@ const StoryPage = forwardRef<
                 ref={textRef}
                 text={page.text}
                 narrationTime={narrationTime}
+              rtl={rtl}
                 className="text-foreground w-full"
                 style={{ fontFamily: effectiveFontStack, fontSize: `${effectiveFontSize}rem`, fontWeight: effectiveFontWeight, lineHeight: 1.85, textAlign: tAlign, margin: 0, ...(effectiveTextColor ? { color: effectiveTextColor } : {}) }}
               />
@@ -433,7 +490,7 @@ const BackCoverPage = forwardRef<
   HTMLDivElement,
   { page: PageOut; bookId: string; token: string | null; title: string }
 >(({ page, bookId, token, title }, ref) => {
-  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id), token, page.has_image);
+  const imgUrl = useAuthImage(pageImageUrl(bookId, page.id, page.image_version), token, page.has_image);
   return (
     <div ref={ref} className="relative overflow-hidden select-none" style={{ height: "100%", background: "#1a1a2e" }}>
       {imgUrl && (
@@ -451,7 +508,7 @@ const BackCoverPage = forwardRef<
         <p className="font-display text-2xl font-black text-white tracking-wide" style={{ textShadow: "0 2px 12px rgba(0,0,0,0.7)" }}>The End</p>
         <p className="text-xs font-bold text-white/60 max-w-[160px] leading-relaxed" style={{ textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}>{title}</p>
       </div>
-      <p className="absolute bottom-2 right-3 text-[10px] font-bold text-white/20 tracking-widest uppercase select-none">AI Storybook Studio</p>
+      <p className="absolute bottom-2 right-3 text-[10px] font-bold text-white/20 tracking-widest uppercase select-none">OlivianX</p>
     </div>
   );
 });
@@ -730,26 +787,119 @@ function usePageAudio(
 
 import { Suspense } from "react";
 
+// ── Export modal (full functionality — same options as Parent mode) ────────────
+function ExportModal({ book, token, fontFamily, onClose }: { book: BookOut; token: string; fontFamily: string; onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
+
+  async function dl(type: "pdf" | "epub" | "cover") {
+    setLoading(true);
+    try {
+      const res = type === "pdf"   ? await api.books.exportPdf(token, book.id, fontFamily)
+                : type === "cover" ? await api.books.exportCoverImage(token, book.id, "png")
+                :                    await api.books.exportEpub(token, book.id, fontFamily);
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const name = (book.brief?.title ?? book.title).replace(/\s+/g, "_");
+      const ext  = type === "epub" ? "epub" : type === "cover" ? "png" : "pdf";
+      const suf  = type === "cover" ? "_cover" : "";
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${name}${suf}.${ext}`;
+      a.click();
+    } catch { toast.error("Export failed"); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-3xl bg-card p-6 chunky-border chunky-shadow" onClick={e => e.stopPropagation()}>
+        <h2 className="font-display text-2xl font-black mb-4">Export</h2>
+        <div className="space-y-2">
+          {[
+            { id: "pdf"  as const, label: "Full Book PDF",  desc: "Print-ready A5 with all pages" },
+            { id: "cover"as const, label: "Cover Image (PNG)", desc: "Front cover as an image" },
+            { id: "epub" as const, label: "Amazon Kindle",   desc: "Reflowable e-book" },
+          ].map(opt => (
+            <button key={opt.id} onClick={() => dl(opt.id)} disabled={loading}
+              className="flex w-full items-center gap-3 rounded-2xl bg-background px-4 py-3 chunky-border hover:bg-muted transition-colors disabled:opacity-50 text-left">
+              <Download className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.5} />
+              <div>
+                <p className="text-sm font-extrabold">{opt.label}</p>
+                <p className="text-xs text-muted-foreground">{opt.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        {loading && <p className="mt-3 text-center text-xs text-muted-foreground font-bold">Generating…</p>}
+      </div>
+    </div>
+  );
+}
+
 function ReaderInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { token, user } = useAuth();
-  const { book } = useBook();
+  const { book, hydrated, setBook, mergePages } = useBook();
+  const [loadingLast, setLoadingLast] = useState(false);
 
   // Resolve where the back button should go
   const fromParam = searchParams.get("from");
-  const validFrom = fromParam === "editor" || fromParam === "library" || fromParam === "studio";
   const backHref = fromParam === "editor" ? "/editor" : fromParam === "studio" ? "/studio" : "/library";
-  const backLabel = fromParam === "editor" ? "Editor" : fromParam === "studio" ? "Studio" : "Library";
+  const backLabel = fromParam === "editor" ? "Editor" : fromParam === "studio" ? "Parent mode" : "Library";
   const bookRef = useRef<HTMLFlipBookRef>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [font, setFont] = useReaderFont();
   const [fontSizeId, setFontSizeId] = useReaderFontSize();
-  const [exporting, setExporting] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
+  // ── Reader translation (direct translation toggle) ──
+  const [lang, setLang] = useState("en");
+  const [translations, setTranslations] = useState<Record<string, string> | null>(null);
+  const [translatedTitle, setTranslatedTitle] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const currentLang = READER_LANGUAGES.find((l) => l.code === lang) ?? READER_LANGUAGES[0];
+  const translationActive = lang !== "en";
+  const isRtl = currentLang.rtl;
+
+  async function changeLanguage(code: string) {
+    if (code === lang) return;
+    if (code === "en") { setLang("en"); setTranslations(null); setTranslatedTitle(null); return; }
+    if (!book || !token) return;
+    setTranslating(true);
+    try {
+      const res = await api.books.translate(token, book.id, code);
+      setTranslations(res.pages);
+      setTranslatedTitle(res.title);
+      setLang(code);
+    } catch (err: any) {
+      toast.error(err?.message || "Couldn't translate this book. Please try again.");
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  // No book in the store (e.g. opened /reader directly) → open the last-edited book.
   useEffect(() => {
-    if (book === null) router.replace("/library");
-  }, [book, router]);
+    if (!hydrated || book || !token || loadingLast) return;
+    let cancelled = false;
+    setLoadingLast(true);
+    (async () => {
+      try {
+        const list = await api.books.list(token);
+        const last = list
+          .filter((b) => b.stage !== "pending")
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0];
+        if (!last) return; // no readable books → fall through to empty state
+        const full = await api.books.get(token, last.id);
+        if (!cancelled) setBook(full);
+      } catch {
+        /* leave empty state to offer the library */
+      } finally {
+        if (!cancelled) setLoadingLast(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [hydrated, book, token, loadingLast, setBook]);
 
   const pages = book ? [...book.pages].sort((a, b) => a.order - b.order) : [];
   const totalPages = pages.length;
@@ -766,16 +916,26 @@ function ReaderInner() {
   const fontSize   = FONT_SIZES.find((s) => s.id === fontSizeId)?.rem ?? 1.8;
   const penName = book?.author_name || user?.username || "";
 
-  // Opened directly (not via editor Preview or library) → show empty state
-  if (!validFrom || !book) {
+  // No book yet: while hydrating or fetching the last-edited book, show a loader.
+  if (!book && (!hydrated || loadingLast)) {
     return (
-      <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-6 px-6 text-center">
+      <main className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center gap-4 px-6 text-center">
+        <LgSpinner />
+        <p className="text-sm font-bold text-muted-foreground">Opening your last book…</p>
+      </main>
+    );
+  }
+
+  // Genuinely no readable book (new user with none) → offer the library.
+  if (!book) {
+    return (
+      <main className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center gap-6 px-6 text-center">
         <div className="grid h-20 w-20 place-items-center rounded-3xl bg-card chunky-border chunky-shadow">
           <BookOpen className="h-9 w-9 text-muted-foreground" strokeWidth={1.5} />
         </div>
         <div>
-          <h1 className="font-display text-3xl font-black">No book selected</h1>
-          <p className="mt-2 text-muted-foreground">Head to your library to pick a book to read.</p>
+          <h1 className="font-display text-3xl font-black">No book yet</h1>
+          <p className="mt-2 text-muted-foreground">Create a storybook, then come back to read it here.</p>
         </div>
         <Link
           href="/library"
@@ -787,32 +947,15 @@ function ReaderInner() {
     );
   }
 
-  async function handleExport() {
-    if (!token || !book) return;
-    setExporting(true);
-    try {
-      const res = await api.books.exportPdf(token, book.id, font);
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${(book.brief?.title ?? book.title).replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error("Export failed. Please try again.");
-    } finally {
-      setExporting(false);
-    }
-  }
-
   function goNext() { bookRef.current?.pageFlip().flipNext(); }
   function goPrev() { bookRef.current?.pageFlip().flipPrev(); }
 
   return (
-    <main className="flex h-[calc(100vh-4rem)] flex-col bg-background overflow-hidden">
+    <main className="flex h-[calc(100dvh-4rem)] flex-col bg-background overflow-hidden">
       <audio ref={audioRef} />
+      {showExport && token && book && (
+        <ExportModal book={book} token={token} fontFamily={font} onClose={() => setShowExport(false)} />
+      )}
 
       {/* Title bar */}
       <div className="flex shrink-0 items-center justify-between border-b-[2px] border-foreground/20 px-5 py-2.5">
@@ -824,12 +967,30 @@ function ReaderInner() {
             <ArrowLeft className="h-4 w-4" strokeWidth={3} />
             {backLabel}
           </Link>
-          <span className="font-display text-base font-black md:text-lg">
-            {book.brief?.title ?? book.title}
+          <span className="font-display text-base font-black md:text-lg" dir={isRtl ? "rtl" : undefined}>
+            {translationActive && translatedTitle ? translatedTitle : (book.brief?.title ?? book.title)}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {bookHasAnyAudio && narrationVoiceLabel && (
+          {/* Language toggle — read the book in another language (direct translation) */}
+          <label
+            title="Read in another language"
+            className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1.5 chunky-border transition-transform hover:-translate-y-0.5"
+          >
+            <Languages className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+            <select
+              value={lang}
+              onChange={(e) => changeLanguage(e.target.value)}
+              disabled={translating}
+              className="max-w-[92px] cursor-pointer bg-transparent text-xs font-extrabold outline-none disabled:opacity-50"
+            >
+              {READER_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.native}</option>
+              ))}
+            </select>
+            {translating && <SmSpinner />}
+          </label>
+          {bookHasAnyAudio && !translationActive && narrationVoiceLabel && (
             <span
               title="Narration voice"
               className="hidden sm:inline-flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-xs font-bold chunky-border"
@@ -837,7 +998,7 @@ function ReaderInner() {
               🎙️ {narrationVoiceLabel}
             </span>
           )}
-          {bookHasAnyAudio && (
+          {bookHasAnyAudio && !translationActive && (
             <button
               onClick={toggleMute}
               title={muted ? "Unmute narration" : "Mute narration"}
@@ -849,13 +1010,12 @@ function ReaderInner() {
             </button>
           )}
           <button
-            onClick={handleExport}
-            disabled={exporting}
-            title="Download PDF"
-            className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0"
+            onClick={() => setShowExport(true)}
+            title="Export"
+            className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-extrabold chunky-border transition-transform hover:-translate-y-0.5"
           >
             <Download className="h-3.5 w-3.5" strokeWidth={2.5} />
-            {exporting ? "Exporting…" : "PDF"}
+            Export
           </button>
           <span className="text-sm font-bold text-muted-foreground">
             {currentPage === 0 ? "Cover"
@@ -886,16 +1046,25 @@ function ReaderInner() {
           className="book-shadow"
           onFlip={(e: { data: number }) => setCurrentPage(e.data)}
         >
-          {pages.map((page) =>
-            page.is_cover ? (
-              <CoverPage key={page.id} page={page} bookId={book.id} token={token} author={penName} fontStack={fontStack} />
+          {pages.map((page) => {
+            // When a translation is active, swap the page text for the translated
+            // copy (falling back to the original) so all existing layout/overflow
+            // logic keeps working. Narration highlighting is disabled since the
+            // audio is in the original language.
+            const display = translationActive && translations
+              ? { ...page, text: translations[page.id] ?? page.text }
+              : page;
+            return page.is_cover ? (
+              <CoverPage key={page.id} page={display} bookId={book.id} token={token} author={penName} fontStack={fontStack} />
             ) : page.is_back_cover ? (
-              <BackCoverPage key={page.id} page={page} bookId={book.id} token={token} title={book.brief?.title ?? book.title} />
+              <BackCoverPage key={page.id} page={display} bookId={book.id} token={token} title={translationActive && translatedTitle ? translatedTitle : (book.brief?.title ?? book.title)} />
             ) : (
-              <StoryPage key={page.id} page={page} bookId={book.id} token={token} fontStack={fontStack} fontSize={fontSize} fontWeight={fontWeight}
-                narrationTime={narrationPos?.pageId === page.id ? { currentTime: narrationPos.currentTime, duration: narrationPos.duration } : null} />
-            )
-          )}
+              <StoryPage key={page.id} page={display} bookId={book.id} token={token} fontStack={fontStack} fontSize={fontSize} fontWeight={fontWeight}
+                rtl={isRtl}
+                onReflow={(p) => mergePages([p])}
+                narrationTime={!translationActive && narrationPos?.pageId === page.id ? { currentTime: narrationPos.currentTime, duration: narrationPos.duration } : null} />
+            );
+          })}
         </HTMLFlipBook>
       </div>
 
@@ -911,7 +1080,7 @@ function ReaderInner() {
           </button>
 
           <div className="flex items-center gap-3">
-            {hasAudio && !muted && (
+            {hasAudio && !muted && !translationActive && (
               <button
                 onClick={togglePlay}
                 className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground chunky-border chunky-shadow-sm transition-transform hover:-translate-y-0.5"

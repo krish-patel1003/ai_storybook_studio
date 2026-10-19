@@ -6,8 +6,8 @@ import { Check, ChevronRight } from "lucide-react";
 // (Draw My Pictures) is the editor, and step 5 (Add My Voice) is the narrate page.
 export const CREATE_STEPS = [
   { id: "input",    label: "💡 My Idea"          },
-  { id: "concept",  label: "🌟 Make My Story"    },
-  { id: "brief",    label: "📋 Plan My Story"    },
+  { id: "concept",  label: "🌟 Imagine My Story" },
+  { id: "brief",    label: "📋 Plan My Book"     },
   { id: "review",   label: "📖 Write My Pages"   },
   { id: "pictures", label: "🎨 Draw My Pictures" },
   { id: "voice",    label: "🎤 Add My Voice"     },

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   User, Mail, BookOpen, LogOut, Shield, Pencil, Check, X,
-  Zap, Crown, Star, Layers, ArrowUpRight, RefreshCw,
+  Zap, Crown, Star, Layers, ArrowUpRight, RefreshCw, Plus, Receipt,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
@@ -31,6 +31,24 @@ interface TierOut {
   is_current: boolean;
 }
 
+interface PackOut {
+  name: string;
+  display_name: string;
+  pages: number;
+  price_usd: number;
+}
+
+interface Purchase {
+  id: string;
+  created_at: string;
+  kind: "subscription" | "topup" | string;
+  description: string;
+  amount_cents: number;
+  currency: string;
+  tier: string | null;
+  pages: number | null;
+}
+
 interface SubscriptionOut {
   tier: string;
   display_name: string;
@@ -38,22 +56,23 @@ interface SubscriptionOut {
   page_pool_total: number;
   page_pool_used: number;
   page_pool_remaining: number;
+  topup_pages_remaining: number;
   period_end: string | null;
   publishable_key: string;
   tiers: TierOut[];
+  packs: PackOut[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const TIER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  free:    { bg: "bg-slate-500",  text: "text-slate-600",  border: "border-slate-300" },
-  starter: { bg: "bg-blue-500",   text: "text-blue-600",   border: "border-blue-300" },
-  family:  { bg: "bg-purple-500", text: "text-purple-600", border: "border-purple-300" },
-  creator: { bg: "bg-amber-500",  text: "text-amber-600",  border: "border-amber-300" },
+  free:        { bg: "bg-slate-500",  text: "text-slate-600",  border: "border-slate-300" },
+  storyteller: { bg: "bg-blue-500",   text: "text-blue-600",   border: "border-blue-300" },
+  studio:      { bg: "bg-purple-500", text: "text-purple-600", border: "border-purple-300" },
 };
 
 const TIER_ICONS: Record<string, React.ElementType> = {
-  free: Star, starter: Zap, family: Layers, creator: Crown,
+  free: Star, storyteller: Zap, studio: Crown,
 };
 
 function tierLabel(tier: TierOut) {
@@ -70,8 +89,10 @@ function SubscriptionSection({ token }: { token: string }) {
   const searchParams = useSearchParams();
   const [sub, setSub] = useState<SubscriptionOut | null>(null);
   const [loading, setLoading] = useState(true);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [buyingPack, setBuyingPack] = useState<string | null>(null);
 
   useEffect(() => {
     const outcome = searchParams.get("checkout");
@@ -80,6 +101,12 @@ function SubscriptionSection({ token }: { token: string }) {
       toast.success(`Welcome to ${tier.charAt(0).toUpperCase() + tier.slice(1)}! Your plan is now active.`);
     } else if (outcome === "canceled") {
       toast.info("Checkout canceled — you can upgrade any time.");
+    }
+    const topup = searchParams.get("topup");
+    if (topup === "success") {
+      toast.success("Pages added! Your top-up pages are ready to use. 🎉");
+    } else if (topup === "canceled") {
+      toast.info("Top-up canceled — no charge was made.");
     }
   }, [searchParams]);
 
@@ -91,6 +118,12 @@ function SubscriptionSection({ token }: { token: string }) {
       .then((r) => (r.ok ? r.json() : null))
       .then(setSub)
       .finally(() => setLoading(false));
+    fetch(`${API}/billing/purchases`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setPurchases(Array.isArray(data) ? data : []))
+      .catch(() => {});
   }, [token]);
 
   async function handleUpgrade(tierName: string) {
@@ -109,6 +142,25 @@ function SubscriptionSection({ token }: { token: string }) {
       toast.error(err instanceof Error ? err.message : "Could not start checkout — please try again.");
     } finally {
       setCheckingOut(null);
+    }
+  }
+
+  async function handleTopup(pack: string) {
+    if (!token) return;
+    setBuyingPack(pack);
+    try {
+      const res = await fetch(`${API}/billing/topup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ pack }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Could not start checkout");
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not start checkout — please try again.");
+    } finally {
+      setBuyingPack(null);
     }
   }
 
@@ -146,7 +198,13 @@ function SubscriptionSection({ token }: { token: string }) {
 
   const colors = TIER_COLORS[sub.tier] ?? TIER_COLORS.free;
   const TierIcon = TIER_ICONS[sub.tier] ?? Star;
-  const poolPct = Math.min(100, Math.round((sub.page_pool_used / sub.page_pool_total) * 100));
+  // Unified view: monthly allowance + any prepaid top-ups = total capacity this cycle.
+  // The bar reflects usage against that total, so it never looks "full" while top-up
+  // pages remain, and the label stays a single clean number no matter how many packs.
+  const poolCapacity = sub.page_pool_total + sub.topup_pages_remaining;
+  const poolRemaining = sub.page_pool_remaining;
+  const poolUsed = Math.max(0, poolCapacity - poolRemaining);
+  const poolPct = poolCapacity > 0 ? Math.min(100, Math.round((poolUsed / poolCapacity) * 100)) : 100;
   const isPaid = sub.tier !== "free";
 
   return (
@@ -188,22 +246,27 @@ function SubscriptionSection({ token }: { token: string }) {
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-extrabold">Page pool</p>
             <p className="text-sm font-bold">
-              <span className={poolPct >= 90 ? "text-destructive" : colors.text}>
-                {sub.page_pool_used}
+              <span className={poolRemaining <= 0 ? "text-destructive" : colors.text}>
+                {poolRemaining}
               </span>
-              <span className="text-muted-foreground"> / {sub.page_pool_total} pages</span>
+              <span className="text-muted-foreground"> {poolRemaining === 1 ? "page" : "pages"} left</span>
             </p>
           </div>
           <div className="h-2.5 rounded-full bg-muted overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${
-                poolPct >= 90 ? "bg-destructive" : poolPct >= 70 ? "bg-amber-500" : colors.bg
+                poolRemaining <= 0 ? "bg-destructive" : poolPct >= 80 ? "bg-amber-500" : colors.bg
               }`}
               style={{ width: `${poolPct}%` }}
             />
           </div>
           <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
-            <span>{sub.page_pool_remaining} pages remaining</span>
+            <span>
+              {poolUsed} of {poolCapacity} used
+              {sub.topup_pages_remaining > 0 && (
+                <span className="font-bold text-accent-foreground"> · {sub.topup_pages_remaining} from top-ups</span>
+              )}
+            </span>
             {sub.period_end && <span>Resets {fmtDate(sub.period_end)}</span>}
           </div>
         </div>
@@ -214,6 +277,66 @@ function SubscriptionSection({ token }: { token: string }) {
           </p>
         )}
       </div>
+
+      {/* Top-up page packs */}
+      {sub.packs && sub.packs.length > 0 && (
+        <div className="rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <Plus className="h-4 w-4 text-primary" strokeWidth={2.5} />
+            <p className="font-display text-base font-black">Need more pages?</p>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Buy a prepaid page pack. Top-up pages never expire and are used after your monthly pool runs out.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {sub.packs.map((pack) => (
+              <div key={pack.name} className="rounded-2xl bg-background p-4 chunky-border text-center">
+                <p className="font-display text-lg font-black">{pack.pages} pages</p>
+                <p className="text-xs font-bold text-muted-foreground mb-1">{pack.display_name}</p>
+                <p className="text-sm font-extrabold mb-3">${pack.price_usd.toFixed(2)}</p>
+                <button
+                  onClick={() => handleTopup(pack.name)}
+                  disabled={!!buyingPack}
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-full bg-primary text-primary-foreground py-2 text-xs font-extrabold chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
+                >
+                  {buyingPack === pack.name ? <XsSpinner /> : <Plus className="h-3.5 w-3.5" strokeWidth={3} />}
+                  {buyingPack === pack.name ? "Redirecting…" : "Buy pack"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Billing history */}
+      {purchases.length > 0 && (
+        <div className="rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Receipt className="h-4 w-4 text-primary" strokeWidth={2.5} />
+            <p className="font-display text-base font-black">Billing history</p>
+          </div>
+          <ul className="divide-y-2 divide-foreground/5">
+            {purchases.map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-extrabold">
+                    {p.description}
+                    <span className={`ml-2 rounded-full px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase tracking-wide ${p.kind === "topup" ? "bg-highlight text-foreground" : "bg-primary/15 text-primary"}`}>
+                      {p.kind === "topup" ? "Top-up" : "Plan"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(p.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                  </p>
+                </div>
+                <span className="shrink-0 font-display text-sm font-black tabular-nums">
+                  {p.amount_cents > 0 ? `${p.currency === "usd" ? "$" : ""}${(p.amount_cents / 100).toFixed(2)}${p.currency !== "usd" ? " " + p.currency.toUpperCase() : ""}` : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Tier cards */}
       <div>
@@ -247,7 +370,7 @@ function SubscriptionSection({ token }: { token: string }) {
                 <p className="font-display text-xl font-black mb-1">{tierLabel(tier)}</p>
 
                 <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
-                  <p>{tier.page_pool} pages/mo · max {tier.hard_max_per_book}/book</p>
+                  <p>{tier.page_pool} pages/month</p>
                   <p>{tier.books_per_month ?? "Unlimited"} books · {tier.art_style_count} styles</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
                     {tier.narration && <span className="rounded-full bg-green-100 text-green-700 px-1.5 py-0.5 font-bold">Narration</span>}

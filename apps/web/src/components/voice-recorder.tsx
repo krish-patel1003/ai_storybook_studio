@@ -4,21 +4,52 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Mic, Square, RotateCcw, Check } from "lucide-react";
 
 // ── Sample script shown to the user while recording ──────────────────────────
+// A corpus of short, varied children's-story paragraphs. The displayed script is
+// assembled to roughly fill the duration the user picks (cycling the corpus for
+// the longest options), so there's always enough — and enough variety — to read.
 
-export const RECORDING_SCRIPT = `Once upon a time, in a little house at the edge of a great forest, there lived a young girl named Mara. Every morning, she would wake up before the sun and run to the window to watch the deer drink from the stream below.
+const SCRIPT_CORPUS: string[] = [
+  `Once upon a time, in a little house at the edge of a great forest, there lived a young girl named Mara. Every morning, she would wake up before the sun and run to the window to watch the deer drink from the stream below.`,
+  `One Tuesday — she remembered it was Tuesday because she'd had porridge for breakfast — she spotted something unusual. A small fox with a bright orange tail was sitting at the edge of the water, looking up at her window with curious, golden eyes.`,
+  `"Hello there," she whispered, so as not to frighten it. The fox tilted its head. Then it did something extraordinary: it sat down, wrapped its tail neatly around its paws, and waited.`,
+  `Mara ran downstairs, grabbed a piece of bread from the kitchen table, and slipped out the back door. The morning air was cold and sweet. She held out her hand — slowly, slowly — until she felt the warmth of the fox's nose against her palm.`,
+  `"Would you like to be friends?" she asked softly. The fox blinked once, as if to say, "Yes, of course." And so the summer began.`,
+  `They explored the whole forest together — the mossy hollow where the owls slept, the tall grass that whispered secrets when the wind blew, and the little waterfall that sparkled like a thousand tiny stars.`,
+  `"Look! Look up there!" Mara cried one afternoon, pointing at a kite tangled high in the branches of the oldest oak. "However will we reach it?" But the fox was clever. He darted up the trunk, light as a leaf, and with a flick of his paw the kite tumbled free.`,
+  `Down, down it floated, and Mara caught it, laughing so hard that she tumbled backwards into the soft, warm grass. Above them a family of swallows swooped and dived, as if they were playing the very same game.`,
+  `In the village below, the baker was pulling warm loaves from the oven, the blacksmith's hammer rang like a bell, and old Mrs Pepper was watering the geraniums on her windowsill. "Good morning!" she called to everyone who passed. "Isn't it a perfectly splendid day?"`,
+  `When the afternoon grew hot, Mara and the fox rested beneath a willow tree by the river. She told him stories — of pirate ships and faraway lands, of dragons who were really quite shy, and of a moon made entirely of cheese. The fox listened to every word, his ears twitching at the exciting parts.`,
+  `Autumn came, and the leaves turned the colour of fire. Winter followed, soft and white, and they left little footprints — two feet and four paws — all across the snow. And when spring returned at last, the stream filled up again, and the deer came back to drink.`,
+  `That night, as the moon rose round and silver over the trees, Mara sat by her window and smiled. Some friendships, she thought, are made in an instant — and last a whole lifetime. And from that day on, they were the very best of friends. The end.`,
+];
 
-One Tuesday — she remembered it was Tuesday because she'd had porridge for breakfast — she spotted something unusual. A small fox with a bright orange tail was sitting at the edge of the water, looking up at her window with curious, golden eyes.
+// ~130 words per minute is a comfortable read-aloud pace for story text.
+const WORDS_PER_MINUTE = 130;
 
-"Hello there," she whispered, so as not to frighten it.
+function buildScript(minutes: number): string {
+  const targetWords = Math.round(minutes * WORDS_PER_MINUTE);
+  const paras: string[] = [];
+  let count = 0;
+  let i = 0;
+  // Always include at least one paragraph; cycle the corpus for longer durations.
+  do {
+    const p = SCRIPT_CORPUS[i % SCRIPT_CORPUS.length];
+    paras.push(p);
+    count += p.trim().split(/\s+/).length;
+    i += 1;
+  } while (count < targetWords && i < 400);
+  return paras.join("\n\n");
+}
 
-The fox tilted its head. Then it did something extraordinary: it sat down, wrapped its tail neatly around its paws, and waited.
+// Backwards-compatible default (≈2 minutes of text).
+export const RECORDING_SCRIPT = buildScript(2);
 
-Mara ran downstairs, grabbed a piece of bread from the kitchen table, and slipped out the back door. The morning air was cold and sweet. She held out her hand — slowly, slowly — until she felt the warmth of the fox's nose against her palm.
+// Duration options the user can pick — controls both the script length and the
+// recording target. 1 min is the floor, 15 min the ceiling.
+const DURATION_OPTIONS = [1, 2, 5, 10, 15] as const;
 
-From that day on, they were the very best of friends.`;
-
-const MIN_SECONDS = 30;
-const TARGET_SECONDS = 60;
+const MIN_SECONDS = 60;   // minimum before the user can stop (1 minute)
+const MAX_SECONDS = 900;  // hard cap — auto-stop at 15 minutes
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,10 +70,17 @@ type Phase = "idle" | "recording" | "review";
 
 export function VoiceRecorder({ onComplete, onCancel }: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
+  // How long the user wants to record — drives the script length and the target.
+  const [targetMinutes, setTargetMinutes] = useState<number>(2);
+  const targetSeconds = Math.min(MAX_SECONDS, Math.max(MIN_SECONDS, targetMinutes * 60));
+  const script = buildScript(targetMinutes);
   const [elapsed, setElapsed] = useState(0);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Object URL for the recorded blob, kept in state so the <audio> element
+  // receives its `src` declaratively once it mounts in the review phase.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -61,6 +99,12 @@ export function VoiceRecorder({ onComplete, onCancel }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Hard cap — automatically stop the recording at the 15-minute limit.
+  useEffect(() => {
+    if (phase === "recording" && elapsed >= MAX_SECONDS) stopRecording();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elapsed, phase]);
 
   function stopEverything() {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -137,10 +181,13 @@ export function VoiceRecorder({ onComplete, onCancel }: Props) {
         });
         setBlob(finalBlob);
 
-        // Create URL for playback
+        // Create a fresh object URL and pass it to the <audio> via state. Setting
+        // audioRef.current.src here would be too early — the audio element only
+        // mounts once we switch to the review phase, so the src must be declarative.
         if (audioBlobUrlRef.current) URL.revokeObjectURL(audioBlobUrlRef.current);
-        audioBlobUrlRef.current = URL.createObjectURL(finalBlob);
-        if (audioRef.current) audioRef.current.src = audioBlobUrlRef.current;
+        const url = URL.createObjectURL(finalBlob);
+        audioBlobUrlRef.current = url;
+        setPreviewUrl(url);
 
         setPhase("review");
       };
@@ -178,24 +225,22 @@ export function VoiceRecorder({ onComplete, onCancel }: Props) {
     setBlob(null);
     setElapsed(0);
     setPhase("idle");
+    if (audioRef.current) audioRef.current.pause();
     if (audioBlobUrlRef.current) URL.revokeObjectURL(audioBlobUrlRef.current);
     audioBlobUrlRef.current = null;
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-    }
+    setPreviewUrl(null);
     setPlaying(false);
   }
 
   function handlePlayPause() {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !previewUrl) return;
     if (playing) {
       audio.pause();
       setPlaying(false);
     } else {
-      audio.play();
-      setPlaying(true);
+      audio.currentTime = audio.currentTime >= (audio.duration || Infinity) ? 0 : audio.currentTime;
+      audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
     }
   }
 
@@ -204,20 +249,39 @@ export function VoiceRecorder({ onComplete, onCancel }: Props) {
   }
 
   // Progress indicator
-  const pct = Math.min((elapsed / TARGET_SECONDS) * 100, 100);
+  const pct = Math.min((elapsed / targetSeconds) * 100, 100);
   const reachedMin = elapsed >= MIN_SECONDS;
-  const reachedTarget = elapsed >= TARGET_SECONDS;
+  const reachedTarget = elapsed >= targetSeconds;
 
   return (
     <div className="space-y-5">
       {/* Script panel */}
       {phase !== "review" && (
         <div className="rounded-2xl bg-background p-4 chunky-border">
-          <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground mb-2">
-            Read this aloud
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
+              Read this aloud
+            </p>
+            {/* Duration picker — changes how much text is shown and the target length */}
+            <label className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground">
+              <span className="hidden sm:inline">Length</span>
+              <select
+                value={targetMinutes}
+                onChange={(e) => setTargetMinutes(Number(e.target.value))}
+                className="rounded-lg bg-card px-2 py-1 text-xs font-extrabold text-foreground chunky-border outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {DURATION_OPTIONS.map((m) => (
+                  <option key={m} value={m}>{m} min{m === 2 ? " (recommended)" : ""}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="max-h-72 overflow-y-auto text-sm leading-loose whitespace-pre-line text-foreground/90">
+            {script}
           </p>
-          <p className="text-sm leading-loose whitespace-pre-line text-foreground/90">
-            {RECORDING_SCRIPT}
+          <p className="mt-3 text-xs text-muted-foreground">
+            ~2 minutes is plenty for a great clone — longer can help a little. Read at a natural, relaxed pace,
+            the way you&apos;d read a bedtime story.
           </p>
         </div>
       )}
@@ -249,6 +313,7 @@ export function VoiceRecorder({ onComplete, onCancel }: Props) {
           </p>
           <audio
             ref={audioRef}
+            src={previewUrl ?? undefined}
             onEnded={() => setPlaying(false)}
             className="hidden"
           />
@@ -287,10 +352,10 @@ export function VoiceRecorder({ onComplete, onCancel }: Props) {
               }`}
             >
               {reachedTarget
-                ? "✓ Great length!"
+                ? "✓ Great length — stop any time (max 15 min)"
                 : reachedMin
-                ? "Good — keep reading for better quality"
-                : `Keep reading — ${MIN_SECONDS - elapsed}s more`}
+                ? "Good — keep reading for a better clone"
+                : `Keep reading — ${MIN_SECONDS - elapsed}s more (1 min minimum)`}
             </span>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-muted chunky-border">
@@ -302,7 +367,7 @@ export function VoiceRecorder({ onComplete, onCancel }: Props) {
             />
           </div>
           <p className="text-xs text-muted-foreground text-center">
-            Aim for ~60 seconds — the more you read, the better the clone sounds
+            Aiming for about {targetMinutes} minute{targetMinutes === 1 ? "" : "s"} — stop any time after 1 minute (up to 15).
           </p>
         </div>
       )}

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.dependencies import current_user
 from src.auth.models import User
 from src.billing import service as billing_service
-from src.billing.tiers import TIERS, TIER_ORDER, get_tier
+from src.billing.tiers import TIERS, TIER_ORDER, get_tier, PAGE_PACKS, PACK_ORDER
 from src.config import settings
 from src.database import get_db
 
@@ -36,7 +36,17 @@ class TierOut(BaseModel):
     commercial_license: bool
     voice_count: int
     art_style_count: int
+    parent_mode: bool = False
+    remakes_per_page: int = 0
+    avatars_per_month: int = 0
     is_current: bool = False
+
+
+class PackOut(BaseModel):
+    name: str
+    display_name: str
+    pages: int
+    price_usd: float
 
 
 class SubscriptionOut(BaseModel):
@@ -46,13 +56,22 @@ class SubscriptionOut(BaseModel):
     page_pool_total: int
     page_pool_used: int
     page_pool_remaining: int
+    topup_pages_remaining: int = 0
+    avatars_per_month: int = 0
+    avatars_used: int = 0
+    avatars_remaining: int = 0
     period_end: str | None
     publishable_key: str
     tiers: list[TierOut]
+    packs: list[PackOut] = []
 
 
 class CheckoutIn(BaseModel):
     tier: str
+
+
+class TopupIn(BaseModel):
+    pack: str
 
 
 class CheckoutOut(BaseModel):
@@ -64,6 +83,45 @@ class PortalOut(BaseModel):
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+class PurchaseOut(BaseModel):
+    id: str
+    created_at: str
+    kind: str
+    description: str
+    amount_cents: int
+    currency: str
+    tier: str | None = None
+    pages: int | None = None
+
+
+@router.get("/purchases", response_model=list[PurchaseOut])
+async def list_purchases(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user),
+) -> list[PurchaseOut]:
+    """Billing history — subscriptions and top-ups the user has paid for."""
+    from sqlalchemy import select
+    from src.billing.models import Purchase
+    rows = (
+        await db.execute(
+            select(Purchase).where(Purchase.user_id == user.id).order_by(Purchase.created_at.desc()).limit(100)
+        )
+    ).scalars().all()
+    return [
+        PurchaseOut(
+            id=str(p.id),
+            created_at=p.created_at.isoformat() if p.created_at else "",
+            kind=p.kind,
+            description=p.description,
+            amount_cents=p.amount_cents,
+            currency=p.currency,
+            tier=p.tier,
+            pages=p.pages,
+        )
+        for p in rows
+    ]
+
 
 @router.get("/subscription", response_model=SubscriptionOut)
 async def get_subscription(
@@ -79,7 +137,15 @@ async def get_subscription(
         )
         for t in TIER_ORDER
     ]
-    remaining = max(0, tier_cfg.page_pool - user.page_pool_used)
+    topup = getattr(user, "topup_pages_remaining", 0) or 0
+    remaining = max(0, tier_cfg.page_pool - user.page_pool_used) + topup
+    from src.billing.guards import _avatar_status
+    avatar_limit, avatar_used = _avatar_status(user)
+    avatar_remaining = max(0, avatar_limit - avatar_used)
+    packs = [
+        PackOut(name=p, display_name=PAGE_PACKS[p].display_name, pages=PAGE_PACKS[p].pages, price_usd=PAGE_PACKS[p].price_usd)
+        for p in PACK_ORDER
+    ]
 
     return SubscriptionOut(
         tier=user.subscription_tier,
@@ -88,9 +154,14 @@ async def get_subscription(
         page_pool_total=tier_cfg.page_pool,
         page_pool_used=user.page_pool_used,
         page_pool_remaining=remaining,
+        topup_pages_remaining=topup,
+        avatars_per_month=avatar_limit,
+        avatars_used=avatar_used,
+        avatars_remaining=avatar_remaining,
         period_end=user.subscription_period_end.isoformat() if user.subscription_period_end else None,
         publishable_key=settings.STRIPE_PUBLISHABLE_KEY,
         tiers=tier_list,
+        packs=packs,
     )
 
 
@@ -104,8 +175,8 @@ async def create_checkout(
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Billing is not yet configured.")
 
-    if data.tier not in ("starter", "family", "creator"):
-        raise HTTPException(status_code=400, detail="Invalid tier. Choose starter, family, or creator.")
+    if data.tier not in ("storyteller", "studio"):
+        raise HTTPException(status_code=400, detail="Invalid tier. Choose storyteller or studio.")
 
     try:
         url = await billing_service.create_checkout_session(
@@ -118,6 +189,30 @@ async def create_checkout(
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
+    return CheckoutOut(url=url)
+
+
+@router.post("/topup", response_model=CheckoutOut)
+async def create_topup(
+    data: TopupIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user),
+) -> CheckoutOut:
+    """Create a one-time Stripe Checkout session to buy a prepaid page pack."""
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Billing is not yet configured.")
+    if data.pack not in PAGE_PACKS:
+        raise HTTPException(status_code=400, detail=f"Invalid pack. Choose {', '.join(PACK_ORDER)}.")
+    try:
+        url = await billing_service.create_pack_checkout_session(
+            db=db,
+            user=user,
+            pack=data.pack,
+            success_url=f"{settings.FRONTEND_URL}/account?topup=success&pack={data.pack}",
+            cancel_url=f"{settings.FRONTEND_URL}/account?topup=canceled",
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     return CheckoutOut(url=url)
 
 

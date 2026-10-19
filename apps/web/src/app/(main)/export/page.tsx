@@ -33,13 +33,22 @@ const formats = [
     cta: "Download PDF",
   },
   {
-    id: "cover-pdf",
-    title: "Cover PDF",
-    desc: "Single-page cover — required when uploading to Amazon for publishing.",
+    id: "cover-standard",
+    title: "Kindle Ebook Cover — Standard",
+    desc: "JPG with your title & author baked in — ready to share or upload.",
     icon: FileText,
     bg: "bg-highlight",
     fg: "text-foreground",
-    cta: "Download Cover PDF",
+    cta: "Download Standard Cover",
+  },
+  {
+    id: "cover-editor",
+    title: "Kindle Ebook Cover — Editor",
+    desc: "Clean PNG artwork with no text — add your own title in the Amazon KDP editor.",
+    icon: FileText,
+    bg: "bg-highlight",
+    fg: "text-foreground",
+    cta: "Download Editor Cover",
   },
   {
     id: "epub",
@@ -85,15 +94,16 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
     setLoading(true);
     try {
       const res =
-        picked === "pdf"        ? await api.books.exportPdf(token, book.id, fontId)
-        : picked === "cover-pdf" ? await api.books.exportCoverPdf(token, book.id)
-        :                          await api.books.exportEpub(token, book.id, fontId);
+        picked === "pdf"             ? await api.books.exportPdf(token, book.id, fontId)
+        : picked === "cover-standard" ? await api.books.exportCoverImage(token, book.id, "jpeg", true)
+        : picked === "cover-editor"   ? await api.books.exportCoverImage(token, book.id, "png", false)
+        :                               await api.books.exportEpub(token, book.id, fontId);
 
       if (!res.ok) throw new Error("Export failed");
 
       const blob = await res.blob();
-      const ext      = picked === "epub" ? "epub" : "pdf";
-      const suffix   = picked === "cover-pdf" ? "_cover" : "";
+      const ext      = picked === "epub" ? "epub" : picked === "cover-standard" ? "jpg" : picked === "cover-editor" ? "png" : "pdf";
+      const suffix   = picked === "cover-standard" ? "_cover" : picked === "cover-editor" ? "_cover_editor" : "";
       const filename = `${(book.brief?.title ?? book.title).replace(/\s+/g, "_")}${suffix}.${ext}`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -157,8 +167,8 @@ function ExportPanel({ book, onChangeBook }: { book: BookOut; onChangeBook: () =
           })}
         </div>
 
-        {/* Font picker — only for full PDF/EPUB (cover-pdf uses a fixed font) */}
-        {picked !== "link" && picked !== "cover-pdf" && (
+        {/* Font picker — only for full PDF/EPUB (covers use a fixed font / no text) */}
+        {picked !== "link" && picked !== "cover-standard" && picked !== "cover-editor" && (
           <div className="mt-6 rounded-3xl bg-card p-5 chunky-border chunky-shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <Type className="h-4 w-4 text-primary" strokeWidth={2.5} />

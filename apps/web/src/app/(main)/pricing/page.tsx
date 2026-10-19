@@ -24,96 +24,86 @@ const TIERS = [
     borderColor: "border-slate-300",
     ringColor: "ring-slate-300",
     Icon: Star,
-    headline: "Start creating",
-    sub: "24 pages/month to explore storybook creation",
-    pages: 24,
-    maxPerBook: 8,
-    books: 3,
+    headline: "Try it out",
+    sub: "6 pages to create your first storybook",
+    pages: 6,
+    maxPerBook: 6,
+    books: 1,
     narration: false,
-    avatars: false,
+    avatars: 1,
     proModel: false,
+    parentMode: false,
+    remakes: 0,
     commercial: false,
     voices: 1,
     artStyles: 3,
     cta: "Get started free",
   },
   {
-    name: "starter",
-    label: "Starter",
+    name: "storyteller",
+    label: "Storyteller",
     price: 9.99,
     color: "bg-blue-500",
     textColor: "text-blue-600",
     borderColor: "border-blue-300",
     ringColor: "ring-blue-400",
     Icon: Zap,
-    headline: "Perfect for families",
-    sub: "100 pages, narration & pro AI model",
-    pages: 100,
-    maxPerBook: 15,
-    books: 10,
-    narration: true,
-    avatars: false,
+    headline: "For storytellers",
+    sub: "24 pages, remakes & parent mode editing",
+    pages: 24,
+    maxPerBook: 12,
+    books: null,
+    narration: false,
+    avatars: 2,
     proModel: true,
+    parentMode: true,
+    remakes: 1,
     commercial: false,
-    voices: 3,
+    voices: 1,
     artStyles: 8,
     cta: "Start for $9.99/mo",
     popular: true,
   },
   {
-    name: "family",
-    label: "Family",
-    price: 17.99,
+    name: "studio",
+    label: "Studio",
+    price: 15.99,
     color: "bg-purple-500",
     textColor: "text-purple-600",
     borderColor: "border-purple-300",
     ringColor: "ring-purple-400",
-    Icon: Layers,
-    headline: "For active creators",
-    sub: "250 pages, avatars & longer books",
-    pages: 250,
-    maxPerBook: 25,
-    books: 20,
-    narration: true,
-    avatars: true,
-    proModel: true,
-    commercial: false,
-    voices: 5,
-    artStyles: 8,
-    cta: "Start for $17.99/mo",
-  },
-  {
-    name: "creator",
-    label: "Creator",
-    price: 34.99,
-    color: "bg-amber-500",
-    textColor: "text-amber-600",
-    borderColor: "border-amber-300",
-    ringColor: "ring-amber-400",
     Icon: Crown,
-    headline: "Publish professionally",
-    sub: "600 pages, commercial license & priority",
-    pages: 600,
-    maxPerBook: 40,
+    headline: "The full studio",
+    sub: "Everything in Storyteller + narration & avatars",
+    pages: 24,
+    maxPerBook: 12,
     books: null,
     narration: true,
-    avatars: true,
+    avatars: 3,
     proModel: true,
-    commercial: true,
-    voices: 5,
+    parentMode: true,
+    remakes: 1,
+    commercial: false,
+    voices: 3,
     artStyles: 8,
-    cta: "Start for $34.99/mo",
+    cta: "Start for $15.99/mo",
   },
+] as const;
+
+const TOPUP_PACKS = [
+  { name: "mini",  label: "Mini Pack",  pages: 10, price: 4.99 },
+  { name: "value", label: "Value Pack", pages: 25, price: 9.99 },
+  { name: "bulk",  label: "Bulk Pack",  pages: 60, price: 19.99 },
 ] as const;
 
 const FEATURES = [
   { icon: BookOpen, label: "Pages/month", key: "pages" as const, format: (v: number) => `${v} pages` },
-  { icon: BookOpen, label: "Max pages/book", key: "maxPerBook" as const, format: (v: number) => `${v} pages` },
   { icon: FileText, label: "Books/month", key: "books" as const, format: (v: number | null) => v ? `${v} books` : "Unlimited" },
+  { icon: Palette, label: "Picture remakes", key: "remakes" as const, format: (v: number) => v ? `${v} per page` : false },
+  { icon: User, label: "Parent mode editing", key: "parentMode" as const, format: (v: boolean) => v },
   { icon: Mic, label: "AI narration", key: "narration" as const, format: (v: boolean) => v },
-  { icon: User, label: "AI avatars", key: "avatars" as const, format: (v: boolean) => v },
+  { icon: User, label: "AI avatars", key: "avatars" as const, format: (v: number) => v ? `${v}/month` : false },
   { icon: Star, label: "Pro AI model", key: "proModel" as const, format: (v: boolean) => v },
-  { icon: Globe, label: "Commercial license", key: "commercial" as const, format: (v: boolean) => v },
   { icon: Headphones, label: "Voice options", key: "voices" as const, format: (v: number) => `${v} voices` },
   { icon: Palette, label: "Art styles", key: "artStyles" as const, format: (v: number) => `${v} styles` },
 ] as const;
@@ -159,11 +149,21 @@ function TierCard({ tier, onUpgrade, checkingOut }: {
         </li>
         <li className="flex items-center gap-2 text-sm font-bold">
           <Check className={`h-4 w-4 ${tier.textColor} shrink-0`} strokeWidth={3} />
-          Up to {tier.maxPerBook} pages/book
+          {tier.books ? `${tier.books} book${tier.books > 1 ? "s" : ""}/month` : "Unlimited books"}
         </li>
-        <li className="flex items-center gap-2 text-sm font-bold">
-          <Check className={`h-4 w-4 ${tier.textColor} shrink-0`} strokeWidth={3} />
-          {tier.books ? `${tier.books} books/month` : "Unlimited books"}
+        <li className={`flex items-center gap-2 text-sm font-bold ${!tier.remakes ? "opacity-40" : ""}`}>
+          {tier.remakes
+            ? <Check className={`h-4 w-4 ${tier.textColor} shrink-0`} strokeWidth={3} />
+            : <X className="h-4 w-4 shrink-0" strokeWidth={3} />
+          }
+          {tier.remakes ? `${tier.remakes} picture remake/page` : "No picture remakes"}
+        </li>
+        <li className={`flex items-center gap-2 text-sm font-bold ${!tier.parentMode ? "opacity-40" : ""}`}>
+          {tier.parentMode
+            ? <Check className={`h-4 w-4 ${tier.textColor} shrink-0`} strokeWidth={3} />
+            : <X className="h-4 w-4 shrink-0" strokeWidth={3} />
+          }
+          Parent mode editing
         </li>
         <li className={`flex items-center gap-2 text-sm font-bold ${!tier.narration ? "opacity-40" : ""}`}>
           {tier.narration
@@ -177,7 +177,7 @@ function TierCard({ tier, onUpgrade, checkingOut }: {
             ? <Check className={`h-4 w-4 ${tier.textColor} shrink-0`} strokeWidth={3} />
             : <X className="h-4 w-4 shrink-0" strokeWidth={3} />
           }
-          AI avatar portraits
+          {tier.avatars ? `${tier.avatars} AI avatar${tier.avatars !== 1 ? "s" : ""}/month` : "AI avatar portraits"}
         </li>
         {tier.proModel && (
           <li className="flex items-center gap-2 text-sm font-bold">
@@ -241,11 +241,11 @@ const FAQ = [
   },
   {
     q: "Is there a free trial?",
-    a: "The Free plan gives you 10 pages permanently — no credit card needed. That's enough to create a 6-page illustrated book and see exactly how it works.",
+    a: "The Free plan lets you create one 6-page illustrated storybook permanently — no credit card needed — so you can see exactly how it works before upgrading.",
   },
   {
-    q: "What is a commercial license?",
-    a: "Creator plan holders can sell or publish their storybooks commercially — on Amazon KDP, Etsy, or anywhere else. Lower tiers are for personal use only.",
+    q: "What is parent mode?",
+    a: "Parent mode is advanced editing — custom page layouts, fonts, colours and the author name. It's included on the Storyteller and Studio plans. Studio also adds AI narration.",
   },
 ];
 
@@ -300,6 +300,28 @@ export default function PricingPage() {
     }
   }
 
+  async function handleBuyPack(packName: string) {
+    if (!token) {
+      router.push(`/auth/signin?next=/pricing`);
+      return;
+    }
+    setCheckingOut(`pack:${packName}`);
+    try {
+      const res = await fetch(`${API}/billing/topup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ pack: packName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Checkout failed");
+      window.location.href = data.url;
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not start checkout");
+    } finally {
+      setCheckingOut(null);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-4 pb-24">
       {/* Hero */}
@@ -319,10 +341,42 @@ export default function PricingPage() {
       </div>
 
       {/* Tier cards */}
-      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <div data-tour="pricing-plans" className="grid gap-6 sm:grid-cols-3 max-w-5xl mx-auto">
         {TIERS.map((tier) => (
           <TierCard key={tier.name} tier={tier} onUpgrade={handleUpgrade} checkingOut={checkingOut} />
         ))}
+      </div>
+
+      {/* Top-up page packs */}
+      <div className="mt-16 max-w-5xl mx-auto">
+        <div className="text-center mb-6">
+          <h2 className="font-display text-2xl font-black">Need more pages?</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Buy a prepaid page pack any time — top-up pages never expire and are used after your monthly pool runs out.
+          </p>
+        </div>
+        <div data-tour="pricing-topups" className="grid gap-4 sm:grid-cols-3">
+          {TOPUP_PACKS.map((pack) => (
+            <div key={pack.name} className="flex flex-col rounded-3xl bg-card p-6 text-center chunky-border chunky-shadow-sm">
+              <p className="font-display text-3xl font-black">{pack.pages}</p>
+              <p className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground mb-3">pages · {pack.label}</p>
+              <p className="font-display text-xl font-black mb-1">${pack.price.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mb-4">${(pack.price / pack.pages).toFixed(2)} / page</p>
+              <button
+                onClick={() => handleBuyPack(pack.name)}
+                disabled={!!checkingOut}
+                className="mt-auto flex items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-extrabold text-primary-foreground chunky-border chunky-shadow-sm hover:-translate-y-0.5 transition-transform disabled:opacity-60 disabled:translate-y-0"
+              >
+                {checkingOut === `pack:${pack.name}` ? <XsSpinner /> : null}
+                {checkingOut === `pack:${pack.name}` ? "Redirecting…" : "Buy pack"}
+                {checkingOut !== `pack:${pack.name}` && <ArrowRight className="h-4 w-4" strokeWidth={3} />}
+              </button>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Top-up pages are added instantly after checkout — or manage them from your <Link href="/account" className="underline underline-offset-2 font-bold">account page</Link>.
+        </p>
       </div>
 
       {/* Feature comparison table */}
@@ -411,12 +465,12 @@ export default function PricingPage() {
             Get started free
           </Link>
           <button
-            onClick={() => handleUpgrade("starter")}
+            onClick={() => handleUpgrade("storyteller")}
             disabled={!!checkingOut}
             className="flex items-center gap-2 rounded-2xl bg-blue-500 px-6 py-3 font-extrabold text-white chunky-border hover:-translate-y-0.5 transition-transform disabled:opacity-60"
           >
-            {checkingOut === "starter" ? <XsSpinner /> : <Zap className="h-5 w-5" strokeWidth={2.5} />}
-            Start Starter — $9.99/mo
+            {checkingOut === "storyteller" ? <XsSpinner /> : <Zap className="h-5 w-5" strokeWidth={2.5} />}
+            Start Storyteller — $9.99/mo
           </button>
         </div>
       </div>
